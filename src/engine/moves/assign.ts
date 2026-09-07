@@ -1,7 +1,7 @@
 import type { Attribute, Weapon } from '../types';
 import type { FeatureVector } from '../analyze/features';
 import { mulberry32, type Rng } from '../rng';
-import { attrMove, movesByTag, type MoveId, type UnlockTag } from './data';
+import { attrMove, getMove, moveCategory, movesByTag, type MoveCategory3, type MoveId, type UnlockTag } from './data';
 
 export interface AssignInput {
   features: FeatureVector;
@@ -100,6 +100,9 @@ export function assignMoves(input: AssignInput, seed: number): MoveId[] {
     else take('u_detox');
   }
 
+  // 4.5) 力／技／速さ の三すくみカテゴリを最低1つずつ持たせる（速さが 0 になりやすいので）
+  ensureCategorySpread(chosen, input, take);
+
   // 5) targetCount に満たなければ、特徴タグ→共通の順で埋める
   for (const tag of tags) {
     if (chosen.length >= targetCount) break;
@@ -116,4 +119,45 @@ export function assignMoves(input: AssignInput, seed: number): MoveId[] {
 
 function hasCureEffect(id: MoveId): boolean {
   return ['ca_breath', 'ca_song', 'water_wash', 'fire_dry', 'u_detox', 'u_endure', 'ca_heal'].includes(id);
+}
+
+/** 力／技／速さ を最低1つずつ。足りないカテゴリに、属性技・共通技から補う。 */
+function ensureCategorySpread(
+  chosen: MoveId[],
+  input: AssignInput,
+  take: (id: MoveId) => void,
+): void {
+  const counts = () => {
+    const c: Record<MoveCategory3, number> = { power: 0, tech: 0, speed: 0 };
+    for (const id of chosen) {
+      try {
+        c[moveCategory(getMove(id))] += 1;
+      } catch {
+        /* ignore */
+      }
+    }
+    return c;
+  };
+  // カテゴリごとの補充候補（前が優先）。属性で色が出るように a1 系を先に。
+  const fill: Record<MoveCategory3, MoveId[]> = {
+    speed: [attrMove(input.attribute, 1), 'sm_dart', 'ta_stretch', 'c_scratch', 'sw_rapid'],
+    power: ['c_bite', 'c_tackle', 'pl_simple', 'c_gamble'],
+    tech: ['c_guard', 'c_focus', 'u_detox'],
+  };
+  for (let pass = 0; pass < 3; pass++) {
+    const c = counts();
+    for (const cat of ['speed', 'tech', 'power'] as MoveCategory3[]) {
+      if (c[cat] > 0) continue;
+      for (const id of fill[cat]) {
+        if (chosen.includes(id)) continue;
+        try {
+          if (moveCategory(getMove(id)) !== cat) continue;
+        } catch {
+          continue;
+        }
+        take(id);
+        break;
+      }
+    }
+  }
 }

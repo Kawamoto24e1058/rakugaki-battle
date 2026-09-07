@@ -14,9 +14,11 @@
 import type { Attribute, Character, StatusKind, Stats } from '../types';
 import { affinityMultiplier, affinityLabel } from '../attributes';
 import { STATUS_META, type ActiveStatus } from '../status';
-import { getMove, type MoveDef, type MoveId } from '../moves';
+import { getMove, moveCategory, type MoveDef, type MoveId } from '../moves';
 import { koseiOrDefault, type Kosei } from '../personalities';
 import { mulberry32, type Rng } from '../rng';
+
+export { moveCategory } from '../moves';
 
 export type Side = 0 | 1;
 
@@ -48,29 +50,17 @@ export const STANCE_BEATS: Record<TriStance, TriStance> = {
 const SUDDEN_DEATH_TURN = 12;
 const KONSHIN_HP_PCT = 0.35;
 const CLASH_WIN_MULT = 1.3;
-const CLASH_LOSE_MULT = 0.55;
+const CLASH_LOSE_MULT = 0.62;
 /** 速さで力を「中断」したときの、力側のさらなる減衰（振りかぶりを潰す）。 */
-const INTERRUPT_MULT = 0.55;
+const INTERRUPT_MULT = 0.82;
 /** 力で技を「ぶち抜いた」ときの、技側の状態異常成功率の低下。 */
 const OVERPOWER_STATUS_MULT = 0.5;
+/** 技で速さを「見切った」ときのカウンターの基礎ダメージ（防御無視・回避不可）。 */
+const COUNTER_BASE = 8;
 const PER_HIT_CAP_PCT = 0.55;
 
 // ---------- わざのカテゴリ分け（力／技／速さ）----------
-
-/**
- * わざを 力／技／速さ に振り分ける。
- * - 力：重い一撃（威力大）、貫通、反動
- * - 速さ：先制わざ、ごく軽い一撃
- * - 技：補助、状態異常わざ、ぼうぎょ無視の搦め手、デバフ、ドレイン
- */
-export function moveCategory(m: MoveDef): TriStance {
-  if (m.category === 'support') return 'tech';
-  if (m.power >= 30) return 'power';
-  if (m.first) return 'speed';
-  if (m.status || m.debuff || m.drain || m.pierce) return 'tech';
-  if (m.power <= 15) return 'speed';
-  return 'power';
-}
+// moveCategory 本体は moves/data.ts（上で re-export）。
 
 /** どのキャラも各カテゴリに1つは持てるよう保証する基本技。 */
 const BASIC: Record<TriStance, MoveDef> = {
@@ -428,6 +418,14 @@ function act(
   const move = pickMove(c, stance);
   if (move.cooldown > 0 && !move.id.startsWith('basic_')) c.cooldowns[move.id] = move.cooldown + 1;
   log.push({ t: 'act', side, stance, moveName: move.name });
+
+  // 技で速さを「見切った」→ 補助わざでも当たるカウンター（防御無視・回避不可）
+  if (stance === 'tech' && result === 'win' && foeStance === 'speed') {
+    const foe = state.combatants[(1 - side) as Side];
+    const dmg = Math.max(1, Math.round(COUNTER_BASE + effStat(c, 'heart') / 3));
+    foe.hp = Math.max(0, foe.hp - dmg);
+    log.push({ t: 'damage', side: (1 - side) as Side, amount: dmg, hpAfter: foe.hp, tag: 'カウンター' });
+  }
 
   if (move.category === 'support') {
     applySupport(state, side, move, log);

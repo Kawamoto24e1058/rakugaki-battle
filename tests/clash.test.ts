@@ -29,13 +29,15 @@ function scriptToEnd(state: ClashState, s0: ClashStance, s1: ClashStance): Clash
 
 describe('力・技・速さ 三すくみ（プロトタイプ）', () => {
   it('わざのカテゴリ分け：属性3段は力、先制わざは速さ、補助は技', () => {
-    expect(moveCategory(getMove('fire_a3'))).toBe('power');
-    expect(moveCategory(getMove('sw_great'))).toBe('power');
-    expect(moveCategory(getMove('ta_stretch'))).toBe('speed'); // first
-    expect(moveCategory(getMove('sm_jab'))).toBe('speed'); // power 12
-    expect(moveCategory(getMove('c_guard'))).toBe('tech'); // support
-    expect(moveCategory(getMove('ey_glare'))).toBe('tech'); // debuff support
-    expect(moveCategory(getMove('u_poison_needle'))).toBe('tech'); // status attack
+    expect(moveCategory(getMove('fire_a3'))).toBe('power'); // 威力38
+    expect(moveCategory(getMove('sw_great'))).toBe('power'); // 威力46
+    expect(moveCategory(getMove('fire_a1'))).toBe('speed'); // 威力14の弱い属性技
+    expect(moveCategory(getMove('ta_stretch'))).toBe('speed'); // 先制
+    expect(moveCategory(getMove('sm_jab'))).toBe('speed'); // 威力12
+    expect(moveCategory(getMove('c_guard'))).toBe('tech'); // 補助
+    expect(moveCategory(getMove('ey_glare'))).toBe('tech'); // デバフ補助
+    expect(moveCategory(getMove('ey_see'))).toBe('tech'); // 貫通（みやぶり 威力22）
+    expect(moveCategory(getMove('fire_a2'))).toBe('tech'); // 威力24＋状態異常
   });
 
   it('全わざがいずれかのカテゴリに入る', () => {

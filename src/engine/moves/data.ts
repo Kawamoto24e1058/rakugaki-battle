@@ -249,6 +249,29 @@ export function moveStars(m: MoveDef): 1 | 2 | 3 {
   return mid ? 2 : 1;
 }
 
+/** 三すくみのカテゴリ。力＝重い一撃／技＝搦め手・補助／速さ＝軽い・先制。 */
+export type MoveCategory3 = 'power' | 'tech' | 'speed';
+
+/**
+ * わざを 力／技／速さ に振り分ける（Phase 17 三すくみ）。
+ * - 補助 → 技
+ * - 先制わざ → 速さ
+ * - 威力30以上 → 力
+ * - 威力14以下 → 速さ（軽いジャブ。弱い属性技a1もここ）
+ * - 状態異常／デバフ／ドレイン／貫通 → 技
+ * - 威力18以下 → 速さ（軽い攻撃）
+ * - それ以外 → 力
+ */
+export function moveCategory(m: MoveDef): MoveCategory3 {
+  if (m.category === 'support') return 'tech';
+  if (m.first) return 'speed';
+  if (m.power >= 30) return 'power';
+  if (m.power <= 14) return 'speed';
+  if (m.status || m.debuff || m.drain || m.pierce) return 'tech';
+  if (m.power <= 18) return 'speed';
+  return 'power';
+}
+
 /** 補助わざを「何をする技か」の一言に。リール表示用。 */
 export function supportKindWord(m: MoveDef): string {
   if (m.cures) return 'かいふく';
