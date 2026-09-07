@@ -4,6 +4,9 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 // https://vite.dev/config/
 export default defineConfig({
+  // 5173 は別プロジェクト（ローグライクカード対戦）が使うので、専用ポートに固定。
+  server: { port: 5273, strictPort: true },
+  preview: { port: 5273, strictPort: true },
   plugins: [
     react(),
     VitePWA({
