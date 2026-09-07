@@ -15,7 +15,7 @@
 
 ```bash
 npm install
-npm run dev      # 開発サーバー（空きポートを自動選択、5173+）
+npm run dev      # 開発サーバー（http://localhost:5273 固定。5173 は別プロジェクト用）
 npm run build    # 本番ビルド（tsc + vite build、dist/ に PWA 出力）
 npm run preview  # ビルド結果をローカル配信
 npx vitest       # エンジンのテスト（解析・バトル・相性）
