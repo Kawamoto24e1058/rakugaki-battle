@@ -1,8 +1,64 @@
 import { useEffect, useRef, useState } from 'react';
 import { useGame } from '../store/gameStore';
-import { analyzeSource, type AnalysisOverrides } from '../engine/analyze';
+import {
+  analyzeImageData,
+  aiFeaturesToCharacter,
+  aiToFeatureVector,
+  coerceAiFeatures,
+  type AnalysisOverrides,
+  type AnalyzeResult,
+} from '../engine/analyze';
+import { hashBytes } from '../engine/rng';
 import type { Attribute, Weapon } from '../engine/types';
 import { ATTRIBUTE_META } from '../engine/attributes';
+
+/** 画像を最大 640px の JPEG に。ImageData（フォールバック解析＋シード用）と base64 を返す。 */
+function prepareImage(img: HTMLImageElement): { imageData: ImageData; base64: string; mediaType: string } {
+  const srcW = img.naturalWidth || img.width;
+  const srcH = img.naturalHeight || img.height;
+  const scale = Math.min(1, 640 / Math.max(srcW, srcH));
+  const w = Math.max(1, Math.round(srcW * scale));
+  const h = Math.max(1, Math.round(srcH * scale));
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, w, h);
+  ctx.drawImage(img, 0, 0, w, h);
+  const imageData = ctx.getImageData(0, 0, w, h);
+  const base64 = canvas.toDataURL('image/jpeg', 0.82).split(',')[1] ?? '';
+  return { imageData, base64, mediaType: 'image/jpeg' };
+}
+
+/** まず AI Vision で解析、ダメ（キー無し・ネット断・エラー）ならローカルのピクセル解析にフォールバック。 */
+async function analyzeWithAI(
+  img: HTMLImageElement,
+  overrides: AnalysisOverrides,
+): Promise<{ result: AnalyzeResult; via: 'ai' | 'local' }> {
+  const { imageData, base64, mediaType } = prepareImage(img);
+  const seed = hashBytes(imageData.data);
+  try {
+    const resp = await fetch('/api/analyze', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        imageBase64: base64,
+        mediaType,
+        hints: { attribute: overrides.attribute ?? 'auto', weapon: overrides.weapon ?? 'auto' },
+      }),
+    });
+    const j = (await resp.json()) as { ok?: boolean; ai?: unknown };
+    const ai = j.ok ? coerceAiFeatures(j.ai) : null;
+    if (ai) {
+      const character = aiFeaturesToCharacter(ai, seed);
+      return { result: { character, features: aiToFeatureVector(ai), seed }, via: 'ai' };
+    }
+  } catch {
+    /* ネット断など → フォールバック */
+  }
+  return { result: analyzeImageData(imageData, overrides), via: 'local' };
+}
 
 type Stage = 'camera' | 'preview';
 
@@ -91,7 +147,7 @@ export function CaptureScene() {
       const overrides: AnalysisOverrides = {};
       if (attr !== 'auto') overrides.attribute = attr;
       if (weapon !== 'auto') overrides.weapon = weapon;
-      const result = analyzeSource(img, overrides);
+      const { result } = await analyzeWithAI(img, overrides);
       setCaptured({ character: result.character, imageUrl, analysis: result });
     } catch {
       setCameraError('うまく よみとれませんでした。もういちど とってみてね。');
@@ -181,7 +237,7 @@ export function CaptureScene() {
               とりなおす
             </button>
             <button className="crayon-btn primary big" onClick={confirm} disabled={busy}>
-              {busy ? 'かいせきちゅう…' : 'これで けってい！'}
+              {busy ? 'AIが かいせきちゅう…' : 'これで けってい！'}
             </button>
           </div>
         </>

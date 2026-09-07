@@ -5,21 +5,30 @@
 
 設計ノート: https://claude.ai/code/artifact/7f3c4c10-9108-4d6a-888b-02bf1c82f8fa
 
-> **大改修中（2026-09-07 設計確定・実装は次フェーズ）**
-> - 解析を **AIバックエンド**（Rails API + SvelteKit へ移行）に。数値化ロジック（`src/engine/`）は TS のまま残す
-> - バトルを **わざリール → 「力/技/速さ」三すくみ** に刷新（`わざリール`・`ルーレット構え` は廃止）
->
-> 下記「バトル」章は**新設計**。現行の動くコードはまだ旧わざリール方式。詳細はメモリ Phase 17。
+> **大改修中（2026-09〜）**
+> - バトルを **わざリール → 「力/技/速さ」三すくみ** に刷新済み（`わざリール`・`ルーレット構え`・`こんしん` は廃止）
+> - 解析を **AI Vision（Claude）** に。実装済み：Vite の `/api/analyze` ミドルウェア（`server/`）。
+>   キー未設定・ネット断のときは**ローカルのピクセル解析にフォールバック**
+> - まだ React + Vite。SvelteKit + Rails への移行は次フェーズ（`/api/analyze` の中身＝`server/` はそのまま移せる）
 
 ## 開発
 
 ```bash
 npm install
+cp .env.example .env.local   # ANTHROPIC_API_KEY を入れると AI 解析が有効に（省略時はピクセル解析）
 npm run dev      # 開発サーバー（http://localhost:5273 固定。5173 は別プロジェクト用）
 npm run build    # 本番ビルド（tsc + vite build、dist/ に PWA 出力）
-npm run preview  # ビルド結果をローカル配信
-npx vitest       # エンジンのテスト（解析・バトル・相性）
+npm run preview  # ビルド結果をローカル配信（/api/analyze も動く）
+npx vitest       # エンジンのテスト（解析・バトル・AI変換・相性）
 ```
+
+### AI 解析（画像 → ステータス）
+
+- 撮影/選択した画像を `/api/analyze` に送る → **Claude が「絵の特徴」を構造化 JSON で返す**（数値は返さない）
+  → 既存の `featuresToCharacter`（ピクセル解析と同じ下流）がキャラに変換
+- `ANTHROPIC_API_KEY` 未設定・API エラー・ネット断 → **`analyzeImageData`（ピクセル解析）にフォールバック**
+- `ANTHROPIC_API_KEY=mock`（または `RAKUGAKI_AI_MOCK=1`）で、画像を見ずに擬似特徴を返す（通しの動作確認用）
+- モデルは `RAKUGAKI_AI_MODEL`（省略時 `claude-sonnet-5`）
 
 ## 構成
 

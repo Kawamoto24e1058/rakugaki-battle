@@ -7,6 +7,14 @@ export { extractFeatures } from './features';
 export type { FeatureVector } from './features';
 export { featuresToCharacter, archetypeLabel } from './toCharacter';
 export type { AnalysisOverrides } from './toCharacter';
+export {
+  aiFeaturesToCharacter,
+  aiToFeatureVector,
+  coerceAiFeatures,
+  AI_ATTRIBUTES,
+  AI_WEAPONS,
+  type AiFeatures,
+} from './aiFeatures';
 
 export interface AnalyzeResult {
   character: Character;
