@@ -4,6 +4,7 @@ export function TitleScene() {
   const startSolo = useGame((s) => s.startSolo);
   const startVersus = useGame((s) => s.startVersus);
   const openZukan = useGame((s) => s.openZukan);
+  const openClashProto = useGame((s) => s.openClashProto);
   const zukanCount = useGame((s) => s.zukan.length);
 
   return (
@@ -28,6 +29,13 @@ export function TitleScene() {
         </button>
         <button className="crayon-btn" onClick={openZukan}>
           ずかんを みる（{zukanCount}）
+        </button>
+        <button
+          className="crayon-btn"
+          style={{ fontSize: '0.85rem', opacity: 0.75, borderStyle: 'dashed' }}
+          onClick={openClashProto}
+        >
+          ⚙ 力/技/速さ プロト（開発）
         </button>
       </div>
     </div>
