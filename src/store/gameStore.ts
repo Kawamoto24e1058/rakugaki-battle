@@ -49,6 +49,7 @@ interface GameState {
   startVersus: () => void;
   openZukan: () => void;
   openClashProto: () => void;
+  devQuickBattle: (mode: Mode) => void;
   setCaptured: (slot: CapturedSlot) => void;
   confirmReveal: () => void;
   chooseCpu: (character: Character) => void;
@@ -87,6 +88,18 @@ export const useGame = create<GameState>((set, get) => ({
 
   openZukan: () => set({ screen: 'zukan', zukan: loadZukan() }),
   openClashProto: () => set({ screen: 'clash-proto' }),
+
+  devQuickBattle: (mode) => {
+    const roster = get().cpuRoster;
+    const [a, b] = [roster[0], roster[3]];
+    set({
+      mode,
+      player: { character: a, imageUrl: null, analysis: { character: a } as unknown as AnalyzeResult },
+      opponent: { character: b, imageUrl: null, isCpu: mode === 'solo' },
+      runWins: 0,
+      screen: 'battle',
+    });
+  },
 
   setCaptured: (slot) => set({ player: slot, screen: 'reveal' }),
 

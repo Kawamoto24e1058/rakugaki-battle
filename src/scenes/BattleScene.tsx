@@ -1,118 +1,71 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { motion } from 'framer-motion';
 import { useGame } from '../store/gameStore';
 import {
-  createBattleState,
-  resolveTurn,
-  cpuStance,
+  createClashState,
+  resolveClashTurn,
+  cpuClashStance,
   koseiReady,
-  rouletteReady,
-  getKosei,
-  buildReel,
+  konshinReady,
+  moveCategory,
   archetypeLabel,
+  getKosei,
   mulberry32,
-  type BattleState,
-  type BattleEvent,
-  type Kime,
-  type SegKind,
+  STANCE_JP,
+  STANCE_COLOR,
+  STANCE_BEATS,
+  type ClashState,
+  type ClashEvent,
+  type ClashStance,
+  type ClashCombatant,
+  type TriStance,
   type Side,
-  type Stance,
-  type RouletteOutcome,
 } from '../engine';
 import { STATUS_META } from '../engine/status';
-import { ATTRIBUTE_META } from '../engine/attributes';
-import type { Stats } from '../engine/types';
+import { getMove } from '../engine/moves';
+import type { Character } from '../engine/types';
 import { CharacterSprite, AttributeBadge } from '../components/bits';
 
-type Stage = 'spin' | 'playing' | 'over';
+const TRI: TriStance[] = ['power', 'tech', 'speed'];
+const ICON: Record<ClashStance, string> = { power: '👊', tech: '✨', speed: '💨', kosei: '★', konshin: '🔥' };
+const BTN_COLOR: Record<ClashStance, string> = {
+  power: STANCE_COLOR.power,
+  tech: STANCE_COLOR.tech,
+  speed: STANCE_COLOR.speed,
+  kosei: 'var(--crayon-purple)',
+  konshin: '#c98a00',
+};
+
+function catCounts(c: Character): Record<TriStance, number> {
+  const out: Record<TriStance, number> = { power: 0, tech: 0, speed: 0 };
+  for (const id of c.moveIds) {
+    try {
+      out[moveCategory(getMove(id))] += 1;
+    } catch {
+      /* ignore */
+    }
+  }
+  return out;
+}
 
 interface Floating {
   id: number;
   side: Side;
   text: string;
-  kind: 'dmg' | 'heal' | 'info' | 'big';
+  kind: 'dmg' | 'heal' | 'info';
 }
-interface ResultCard {
-  side: Side;
-  moveName: string;
-  attribute: string | null;
-  kime: Kime | null;
-  segKind: SegKind;
-  affinity: string | null;
-  statusJp: string | null;
-  amount: number;
-  note: string;
-}
-interface StatusChip {
-  jp: string;
-  turnsLeft: number;
-  good: boolean;
+interface View {
+  hp: [number, number];
+  statuses: [{ jp: string; good: boolean }[], { jp: string; good: boolean }[]];
+  banner: string;
+  acting: Side | null;
+  shake: Side | null;
+  floats: Floating[];
 }
 
-const CAT_COLOR: Record<string, string> = {
-  physical: '#ef8a6b',
-  attr: '#f2c14e',
-  guard: '#6ba8dd',
-  heal: '#5cc47f',
-  ska: '#c9c3b6',
-  ultra: '#a274f0',
-};
-const CAT_ICON: Record<string, string> = {
-  physical: '👊',
-  attr: '✦',
-  guard: '🛡',
-  heal: '＋',
-  ska: '✕',
-  ultra: '★',
-};
+type Phase = 'choose-p1' | 'handoff' | 'choose-p2' | 'playing' | 'over';
 
-const ROULETTE_COLOR: Record<RouletteOutcome, string> = {
-  activate: 'var(--crayon-yellow)',
-  restore: 'var(--crayon-green)',
-  miss: '#9fb0c0',
-};
-const ROULETTE_LABEL: Record<RouletteOutcome, string> = {
-  activate: '当たり！',
-  restore: '回復！',
-  miss: 'ハズレ…',
-};
-
-const MINI_STATS: [keyof Stats, string, number][] = [
-  ['atk', 'こうげき', 62],
-  ['def', 'ぼうぎょ', 62],
-  ['spd', 'すばやさ', 62],
-  ['luck', 'きゅうしょ', 40],
-  ['heart', 'こんじょう', 40],
-];
-
-/** 押した側の行動が先に見えるようイベント再生順を並べ替える（エンジンの処理順＝バランスは不変）。 */
-function reorderForPresser(events: BattleEvent[], presser: Side): BattleEvent[] {
-  const isTail = (e: BattleEvent) =>
-    e.t === 'status-tick' || e.t === 'status-end' || e.t === 'turn-start' || e.t === 'battle-end';
-  let tailStart = events.findIndex(isTail);
-  if (tailStart < 0) tailStart = events.length;
-  const action = events.slice(0, tailStart);
-  const tail = events.slice(tailStart);
-
-  const segs: { actor: Side; events: BattleEvent[] }[] = [];
-  for (const e of action) {
-    const side =
-      'side' in e && typeof (e as { side?: number }).side === 'number'
-        ? ((e as { side: number }).side as Side)
-        : null;
-    const startsSeg =
-      e.t === 'ring-spin' || e.t === 'skip' || e.t === 'roulette' || e.t === 'kosei' || e.t === 'move';
-    if (startsSeg && side !== null && (segs.length === 0 || segs[segs.length - 1].actor !== side)) {
-      segs.push({ actor: side, events: [e] });
-    } else if (segs.length === 0) {
-      segs.push({ actor: side ?? presser, events: [e] });
-    } else {
-      segs[segs.length - 1].events.push(e);
-    }
-  }
-  if (segs.length === 2 && segs[0].actor !== presser) segs.reverse();
-  return [...segs.flatMap((s) => s.events), ...tail];
-}
+let floatSeq = 0;
 
 export function BattleScene() {
   const player = useGame((s) => s.player)!;
@@ -124,925 +77,423 @@ export function BattleScene() {
     () => (player.character.seed ^ opponent.character.seed ^ Date.now()) >>> 0,
     [player, opponent],
   );
-  const [state, setState] = useState<BattleState>(() =>
-    createBattleState(player.character, opponent.character, seed),
+  const [state, setState] = useState<ClashState>(() =>
+    createClashState(player.character, opponent.character, seed),
   );
-  const [stage, setStage] = useState<Stage>('spin');
-  const [reelPhase, setReelPhase] = useState<'menu' | 'reeling'>('menu');
-  const [displayHp, setDisplayHp] = useState<[number, number]>([
-    player.character.baseStats.hp,
-    opponent.character.baseStats.hp,
-  ]);
-  const [shake, setShake] = useState<Side | null>(null);
-  const [acting, setActing] = useState<Side | null>(null);
-  const [rouletteSide, setRouletteSide] = useState<Side | null>(null);
-  const [rouletteOutcome, setRouletteOutcome] = useState<RouletteOutcome | null>(null);
-  const [koseiSide, setKoseiSide] = useState<Side | null>(null);
-  const [clash, setClash] = useState<string | null>(null);
-  const [floats, setFloats] = useState<Floating[]>([]);
-  const [banner, setBanner] = useState('せめる・ルーレット・こせい！');
-  const [resultCard, setResultCard] = useState<ResultCard | null>(null);
-  const [ring, setRing] = useState<{ side: Side; landedIndex: number | null }>({ side: 0, landedIndex: null });
-  const floatId = useRef(0);
+  const chars: [Character, Character] = [player.character, opponent.character];
+  const names: [string, string] = [chars[0].name, chars[1].name];
+  const maxHp: [number, number] = [chars[0].baseStats.hp, chars[1].baseStats.hp];
+  const images: [string | null, string | null] = [player.imageUrl, opponent.imageUrl];
 
-  const names: [string, string] = [player.character.name, opponent.character.name];
-  const maxHp: [number, number] = [player.character.baseStats.hp, opponent.character.baseStats.hp];
-  const chars = [player.character, opponent.character];
-
-  const presser: Side = mode === 'versus' ? ((state.turn % 2 === 1 ? 0 : 1) as Side) : 0;
-  const foe: Side = (1 - presser) as Side;
-  const kosei = getKosei(chars[presser].koseiId);
-  const koseiCombatant = state.combatants[presser];
-  const koseiOk = koseiReady(koseiCombatant);
-  const rouletteOk = rouletteReady(koseiCombatant);
-  // 回数制は常に「のこり◯回」を出す。クールダウン制は使えない間だけ「あと◯ターン」。
-  const koseiWait =
-    kosei.limit.kind === 'count'
-      ? `のこり${koseiCombatant.koseiUses}回`
-      : koseiCombatant.koseiCd > 0
-        ? `あと${koseiCombatant.koseiCd}ターン`
-        : '';
-
-  const pushFloat = useCallback((side: Side, text: string, kind: Floating['kind']) => {
-    const id = floatId.current++;
-    setFloats((f) => [...f, { id, side, text, kind }]);
-    window.setTimeout(() => setFloats((f) => f.filter((x) => x.id !== id)), 1300);
-  }, []);
-
-  const playEvents = useCallback(
-    (events: BattleEvent[], finalState: BattleState) => {
-      setStage('playing');
-      let i = 0;
-      let koseiActor: Side | null = null;
-      let rouletteActor: Side | null = null;
-      const setHp = (side: Side, hp: number) =>
-        setDisplayHp((cur) => {
-          const n = [...cur] as [number, number];
-          n[side] = hp;
-          return n;
-        });
-
-      const nextPresser: Side =
-        mode === 'versus' ? ((finalState.turn % 2 === 1 ? 0 : 1) as Side) : 0;
-
-      const step = () => {
-        if (i >= events.length) {
-          setDisplayHp([finalState.combatants[0].hp, finalState.combatants[1].hp]);
-          setState(finalState);
-          setActing(null);
-          setRouletteSide(null);
-          setRouletteOutcome(null);
-          setKoseiSide(null);
-          if (finalState.phase === 'done') setStage('over');
-          else {
-            setRing({ side: nextPresser, landedIndex: null });
-            setReelPhase('menu');
-            setStage('spin');
-          }
-          return;
-        }
-        const ev = events[i++];
-        let delay = 300;
-        switch (ev.t) {
-          case 'turn-start':
-            setBanner(`ターン ${ev.turn}`);
-            setResultCard(null);
-            setActing(null);
-            setRouletteSide(null);
-            setRouletteOutcome(null);
-            setKoseiSide(null);
-            break;
-          case 'roulette': {
-            rouletteActor = ev.side;
-            setRouletteSide(ev.side);
-            setRouletteOutcome(ev.outcome);
-            setKoseiSide(null);
-            setActing(null);
-            setBanner(`${names[ev.side]} の ルーレット … ${ROULETTE_LABEL[ev.outcome]}`);
-            delay = ev.outcome === 'activate' ? 420 : 620;
-            break;
-          }
-          case 'kosei': {
-            const fromRoulette = rouletteActor === ev.side;
-            koseiActor = ev.side;
-            setKoseiSide(ev.side);
-            setRouletteSide(null);
-            setRouletteOutcome(null);
-            setActing(null);
-            setBanner(
-              `${names[ev.side]} こせい「${ev.name}」！` +
-                (ev.free ? (fromRoulette ? '（ルーレット！）' : '（7コマ！）') : ''),
-            );
-            delay = 440;
-            break;
-          }
-          case 'ring-spin':
-            setActing(null);
-            setRouletteSide(null);
-            setRouletteOutcome(null);
-            rouletteActor = null;
-            setKoseiSide(null);
-            koseiActor = null;
-            setResultCard(null);
-            setRing({ side: ev.side, landedIndex: null });
-            window.setTimeout(() => {
-              setRing({ side: ev.side, landedIndex: ev.index });
-              window.setTimeout(step, 1150);
-            }, ev.side === presser ? 150 : 500);
-            return;
-          case 'ultra-fail':
-            setBanner(`${names[ev.side]} こせい しっぱい…！`);
-            pushFloat(ev.side, 'しっぱい！', 'info');
-            delay = 420;
-            break;
-          case 'move':
-            if (rouletteActor === ev.side) {
-              // ルーレットの結果バナーは roulette イベントで表示済み。
-            } else if (koseiActor === ev.side) {
-              // こせい技名は kosei イベントで表示済み。紫グロー継続。
-            } else {
-              setBanner(`${names[ev.side]} の 「${ev.moveName}」！`);
-              setActing(ev.side);
-            }
-            delay = 340;
-            break;
-          case 'skip':
-            pushFloat(ev.side, ev.reason === 'shock' ? 'しびれて うごけない' : 'こんらん！', 'info');
-            break;
-          case 'result':
-            setResultCard({
-              side: ev.side,
-              moveName: ev.moveName,
-              attribute: ev.attribute,
-              kime: ev.kime,
-              segKind: ev.segKind,
-              affinity: ev.affinity,
-              statusJp: ev.statusJp,
-              amount: ev.amount,
-              note: ev.note,
-            });
-            window.setTimeout(() => {
-              setResultCard(null);
-              setActing(null);
-              step();
-            }, ev.amount > 0 ? 950 : 620);
-            return;
-          case 'damage':
-            setHp(ev.side, ev.hpAfter);
-            setShake(ev.side);
-            if (ev.comeback) setClash('こんじょう！');
-            else setClash(ev.affinity === 'こうかばつぐん' ? 'ばつぐん！' : ev.combo ? 'ずどん！' : null);
-            window.setTimeout(() => setShake(null), 260);
-            window.setTimeout(() => setClash(null), 480);
-            if (ev.comeback) pushFloat((1 - ev.side) as Side, 'こんじょう！', 'info');
-            pushFloat(
-              ev.side,
-              `${ev.amount}`,
-              ev.affinity === 'こうかばつぐん' || ev.comeback || ev.amount >= 34 ? 'big' : 'dmg',
-            );
-            delay = 380;
-            break;
-          case 'dodge':
-            pushFloat(ev.side, 'かわした！', 'info');
-            break;
-          case 'heal':
-            setHp(ev.side, ev.hpAfter);
-            pushFloat(ev.side, `＋${ev.amount}`, 'heal');
-            break;
-          case 'reflect':
-            setHp(ev.side, ev.hpAfter);
-            pushFloat(ev.side, `はんげき ${ev.amount}`, 'dmg');
-            break;
-          case 'status-apply':
-            pushFloat(ev.side, `${STATUS_META[ev.status].jp}！`, 'info');
-            break;
-          case 'status-resist':
-            pushFloat(ev.side, 'きかない！', 'info');
-            break;
-          case 'status-cure':
-            pushFloat(ev.side, 'スッキリ！', 'heal');
-            break;
-          case 'status-tick':
-            setHp(ev.side, ev.hpAfter);
-            pushFloat(ev.side, `${ev.amount}`, 'dmg');
-            break;
-          case 'status-end':
-            delay = 100;
-            break;
-          case 'faint':
-            pushFloat(ev.side, 'たおれた…', 'info');
-            break;
-          case 'battle-end':
-            setBanner(ev.winner === 'draw' ? 'あいこ！' : `${names[ev.winner]} の かち！`);
-            break;
-        }
-        window.setTimeout(step, delay);
-      };
-      step();
-    },
-    [names, pushFloat, mode, presser],
-  );
-
-  const runTurn = useCallback(
-    (myStance: Stance) => {
-      const stances: [Stance, Stance] = ['attack', 'attack'];
-      stances[presser] = myStance;
-      if (mode === 'solo') {
-        const rng = mulberry32((state.seed + state.turn * 2654435761) >>> 0);
-        stances[foe] = cpuStance(state, foe, rng);
-      }
-      const nextState = resolveTurn(state, stances);
-      const fresh = nextState.log.slice(state.log.length);
-      playEvents(reorderForPresser(fresh, presser), nextState);
-    },
-    [state, playEvents, presser, foe, mode],
-  );
-
-  const chooseAttack = useCallback(() => {
-    if (stage !== 'spin' || reelPhase !== 'menu') return;
-    setReelPhase('reeling');
-  }, [stage, reelPhase]);
-  const stopReel = useCallback(() => {
-    if (stage !== 'spin' || reelPhase !== 'reeling') return;
-    runTurn('attack');
-  }, [stage, reelPhase, runTurn]);
+  const [phase, setPhase] = useState<Phase>(mode === 'versus' ? 'choose-p1' : 'playing');
+  const [p1Pick, setP1Pick] = useState<ClashStance | null>(null);
+  const [lastPair, setLastPair] = useState<[ClashStance, ClashStance] | null>(null);
+  const [view, setView] = useState<View>({
+    hp: [maxHp[0], maxHp[1]],
+    statuses: [[], []],
+    banner: 'ちからだめし！ 力 / 技 / 速さ を えらぶ',
+    acting: null,
+    shake: null,
+    floats: [],
+  });
+  const timers = useRef<number[]>([]);
 
   useEffect(() => {
-    if (stage !== 'over') return;
-    const t = window.setTimeout(() => finishBattle(state.winner === 0), 1600);
-    return () => window.clearTimeout(t);
-  }, [stage, state.winner, finishBattle]);
+    const t = timers.current;
+    return () => t.forEach(clearTimeout);
+  }, []);
 
-  const chipsFor = (s: Side): StatusChip[] =>
-    state.combatants[s].statuses.map((x) => ({
-      jp: STATUS_META[x.kind].jp,
-      turnsLeft: x.turnsLeft,
-      good: STATUS_META[x.kind].kind === 'buff',
+  useEffect(() => {
+    if (phase !== 'over') return;
+    const t = window.setTimeout(() => finishBattle(state.winner === 0), 1700);
+    return () => clearTimeout(t);
+  }, [phase, state.winner, finishBattle]);
+
+  const me = state.combatants[0];
+  const canKosei = koseiReady(me);
+  const canKonshin = konshinReady(me);
+
+  function statusView(side: Side, st: ClashState) {
+    return st.combatants[side].statuses.map((s) => ({
+      jp: STATUS_META[s.kind].jp,
+      good: STATUS_META[s.kind].kind === 'buff',
     }));
+  }
 
-  const hpPct = (s: Side) => displayHp[s] / maxHp[s];
-  const pinch: [boolean, boolean] = [hpPct(0) <= 0.3 && displayHp[0] > 0, hpPct(1) <= 0.3 && displayHp[1] > 0];
-  const anyPinch = (pinch[0] || pinch[1]) && stage !== 'over';
-  const foeLow = hpPct(foe) <= 0.2 && displayHp[foe] > 0;
+  function submit(myStance: ClashStance, foeStance: ClashStance) {
+    setLastPair([myStance, foeStance]);
+    const next = resolveClashTurn(state, [myStance, foeStance]);
+    const events = next.log.slice(state.log.length);
+    setPhase('playing');
+    play(events, next);
+  }
 
-  // リールを見せる場面か（ルーレット/こせいの間は隠す）
-  const showReel =
-    (stage === 'spin' && rouletteSide == null && koseiSide == null) ||
-    (stage === 'playing' && rouletteSide == null && koseiSide == null);
-  const reelSpinning = stage === 'spin' ? reelPhase === 'reeling' : ring.landedIndex == null;
+  function pickSolo(stance: ClashStance) {
+    if (phase !== 'playing' || state.done) return;
+    const rng = mulberry32((state.seed + state.turn * 2654435761) >>> 0);
+    submit(stance, cpuClashStance(state, 1, rng));
+  }
+  function pickP1(stance: ClashStance) {
+    setP1Pick(stance);
+    setPhase('handoff');
+  }
+  function pickP2(stance: ClashStance) {
+    if (!p1Pick) return;
+    submit(p1Pick, stance);
+    setP1Pick(null);
+  }
+
+  function play(events: ClashEvent[], next: ClashState) {
+    timers.current.forEach(clearTimeout);
+    timers.current = [];
+    let t = 0;
+    const v: View = {
+      hp: [...view.hp] as [number, number],
+      statuses: [[], []],
+      banner: view.banner,
+      acting: null,
+      shake: null,
+      floats: [],
+    };
+    const commit = () => {
+      const snap: View = { ...v, hp: [...v.hp] as [number, number], floats: [...v.floats] };
+      timers.current.push(window.setTimeout(() => setView(snap), t));
+    };
+    const step = (fn: () => void, gap: number) => {
+      timers.current.push(window.setTimeout(fn, t));
+      t += gap;
+    };
+    const addFloat = (side: Side, text: string, kind: Floating['kind']) => {
+      const id = ++floatSeq;
+      v.floats = [...v.floats, { id, side, text, kind }];
+      timers.current.push(
+        window.setTimeout(
+          () => setView((prev) => ({ ...prev, floats: prev.floats.filter((f) => f.id !== id) })),
+          t + 1100,
+        ),
+      );
+    };
+
+    for (const ev of events) {
+      switch (ev.t) {
+        case 'reveal':
+          step(() => {
+            v.banner = `${names[0]}「${STANCE_JP[ev.stances[0]]}」 × ${names[1]}「${STANCE_JP[ev.stances[1]]}」 せーの！`;
+            commit();
+          }, 600);
+          break;
+        case 'clash':
+          step(() => {
+            v.banner = ev.winner === null ? '五分！' : `${names[ev.winner]} ${ev.note}`;
+            commit();
+          }, 620);
+          break;
+        case 'act':
+          step(() => {
+            v.acting = ev.side;
+            v.banner = `${names[ev.side]} → ${ev.moveName}`;
+            commit();
+          }, 420);
+          step(() => {
+            v.acting = null;
+            commit();
+          }, 90);
+          break;
+        case 'damage':
+          step(() => {
+            v.hp[ev.side] = ev.hpAfter;
+            v.shake = ev.side;
+            addFloat(ev.side, `-${ev.amount}${ev.tag ? ` ${ev.tag}` : ''}`, 'dmg');
+            commit();
+          }, 200);
+          step(() => {
+            v.shake = null;
+            commit();
+          }, 340);
+          break;
+        case 'heal':
+          step(() => {
+            v.hp[ev.side] = ev.hpAfter;
+            addFloat(ev.side, `+${ev.amount}`, 'heal');
+            commit();
+          }, 420);
+          break;
+        case 'consolation':
+          step(() => {
+            v.hp[ev.side] = Math.min(maxHp[ev.side], v.hp[ev.side] + ev.amount);
+            addFloat(ev.side, `立て直し +${ev.amount}`, 'heal');
+            commit();
+          }, 360);
+          break;
+        case 'status-apply':
+          step(() => {
+            v.banner = `${names[ev.side]} は ${STATUS_META[ev.kind].jp}！`;
+            commit();
+          }, 400);
+          break;
+        case 'status-resist':
+          step(() => {
+            v.banner = `${names[ev.side]} は こうかなし`;
+            commit();
+          }, 280);
+          break;
+        case 'status-tick':
+          step(() => {
+            v.hp[ev.side] = ev.hpAfter;
+            addFloat(ev.side, `${STATUS_META[ev.kind].jp} -${ev.amount}`, 'dmg');
+            commit();
+          }, 420);
+          break;
+        case 'sudden-death':
+          step(() => {
+            v.banner = `サドンデス！ ${names[ev.leader]}（リード）が おおきく けずられる`;
+            commit();
+          }, 560);
+          break;
+        case 'end':
+          step(() => {
+            v.banner = ev.winner === 'draw' ? 'ひきわけ！' : `${names[ev.winner]} の かち！`;
+            commit();
+          }, 360);
+          break;
+        default:
+          break;
+      }
+    }
+
+    step(() => {
+      setState(next);
+      setView({
+        hp: [next.combatants[0].hp, next.combatants[1].hp],
+        statuses: [statusView(0, next), statusView(1, next)],
+        banner: next.done
+          ? next.winner === 'draw'
+            ? 'ひきわけ'
+            : `${names[next.winner as Side]} の かち！`
+          : mode === 'versus'
+            ? `ターン ${next.turn}：P1 が えらぶ`
+            : `ターン ${next.turn}：力 / 技 / 速さ を えらぶ`,
+        acting: null,
+        shake: null,
+        floats: [],
+      });
+      setPhase(next.done ? 'over' : mode === 'versus' ? 'choose-p1' : 'playing');
+    }, 0);
+  }
+
+  const pinch = view.hp.some((h, i) => h > 0 && h / maxHp[i] <= 0.3);
 
   return (
-    <div
-      className="scene"
-      style={{ gap: '0.45rem', padding: '0.55rem 0.5rem 0.7rem', justifyContent: 'flex-start', position: 'relative' }}
-    >
-      {anyPinch && <div className="pinch-vignette" />}
+    <div className="scene" style={{ justifyContent: 'flex-start', paddingTop: 'clamp(.5rem,3vh,1.5rem)', gap: '0.9rem' }}>
+      {pinch && <div className="pinch-vignette" />}
 
-      <div
-        className="sketch-card"
-        style={{
-          padding: '0.3rem 1rem',
-          fontFamily: 'var(--font-display)',
-          textAlign: 'center',
-          fontSize: '1rem',
-          minHeight: '2.1rem',
-          display: 'grid',
-          placeItems: 'center',
-          width: 'min(34rem, 96vw)',
-        }}
-      >
-        {banner}
-      </div>
-
-      {/* ===== バトルステージ ===== */}
-      <div
-        style={{
-          display: 'flex',
-          gap: '0.4rem',
-          width: '100%',
-          maxWidth: 'min(43rem, 99vw)',
-          justifyContent: 'space-between',
-          alignItems: 'flex-start',
-          position: 'relative',
-        }}
-      >
-        {([0, 1] as Side[]).map((s) => (
-          <div key={s} style={{ display: 'contents' }}>
-            {s === 1 && (
-              <div style={{ display: 'grid', placeItems: 'center', minWidth: '2rem', alignSelf: 'center', paddingTop: '2.4rem' }}>
-                <AnimatePresence>
-                  {clash ? (
-                    <motion.div
-                      key={clash}
-                      initial={{ scale: 0.3, opacity: 0, rotate: -12 }}
-                      animate={{ scale: 1, opacity: 1, rotate: -4 }}
-                      exit={{ scale: 1.6, opacity: 0 }}
-                      style={{
-                        fontFamily: 'var(--font-display)',
-                        fontSize: '1.05rem',
-                        color: 'var(--crayon-red)',
-                        textShadow: '2px 2px 0 #fff',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {clash}
-                    </motion.div>
-                  ) : (
-                    <span style={{ fontFamily: 'var(--font-display)', fontSize: '1.2rem', opacity: 0.6 }}>VS</span>
-                  )}
-                </AnimatePresence>
-              </div>
-            )}
-            <Fighter
-              name={names[s]}
-              attribute={chars[s].attribute}
-              arche={archetypeLabel(chars[s].baseStats)}
-              koseiName={getKosei(chars[s].koseiId).name}
-              imageUrl={s === 0 ? player.imageUrl : opponent.imageUrl}
-              hp={displayHp[s]}
-              maxHp={maxHp[s]}
-              stats={chars[s].baseStats}
-              statuses={chipsFor(s)}
-              shake={shake === s}
-              acting={acting === s}
-              roulette={rouletteSide === s ? rouletteOutcome : null}
-              koseiing={koseiSide === s}
-              pinch={pinch[s]}
-              dir={s === 0 ? 1 : -1}
-              flip={s === 1}
-              floats={floats.filter((f) => f.side === s)}
-            />
-          </div>
+      <div style={{ display: 'flex', gap: 'clamp(.6rem,3vw,1.5rem)', width: '100%', maxWidth: '48rem' }}>
+        {[0, 1].map((s) => (
+          <FighterPanel
+            key={s}
+            side={s as Side}
+            char={chars[s]}
+            image={images[s]}
+            hp={view.hp[s]}
+            maxHp={maxHp[s]}
+            statuses={view.statuses[s]}
+            acting={view.acting === s}
+            shake={view.shake === s}
+            floats={view.floats.filter((f) => f.side === s)}
+          />
         ))}
       </div>
 
-      {/* ===== わざリール ＋ ターンの選択 ===== */}
-      {showReel && (
-        <ReelPanel
-          key={`reel-${ring.side}`}
-          moveIds={state.combatants[ring.side].moveIds}
-          cooldowns={state.combatants[ring.side].cooldowns}
-          landedIndex={ring.landedIndex}
-          spinning={reelSpinning}
-          sideName={names[ring.side]}
-          mine={ring.side === presser}
-          menuMode={stage === 'spin' && reelPhase === 'menu'}
-        />
-      )}
-      {!showReel && <div style={{ height: '9.6rem' }} />}
+      <div
+        className="sketch-card"
+        style={{ width: '100%', maxWidth: '48rem', minHeight: '3rem', display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center', fontWeight: 700, padding: '0.5rem 1rem' }}
+      >
+        {view.banner}
+      </div>
 
-      {/* ボタン */}
-      {stage === 'spin' && reelPhase === 'menu' && (
-        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'center', marginTop: '0.1rem' }}>
-          <button
-            className={`crayon-btn primary${foeLow ? ' todome-glow' : ''}`}
-            style={{ fontSize: '1.25rem', padding: '0.4em 1.2em' }}
-            onClick={chooseAttack}
-          >
-            {mode === 'versus' ? `${names[presser]}、` : ''}
-            {foeLow ? 'せめる（とどめ）' : 'せめる'}
-          </button>
-          <button
-            className="crayon-btn"
-            style={{ fontSize: '1.15rem', padding: '0.4em 1em', opacity: rouletteOk ? 1 : 0.5 }}
-            disabled={!rouletteOk}
-            onClick={() => runTurn('roulette')}
-          >
-            ルーレット
-            <span style={{ fontSize: '0.62em', display: 'block', opacity: 0.75 }}>
-              {rouletteOk
-                ? `（当たれば こせい${koseiOk ? '発動' : '回復'}）`
-                : `（あと${koseiCombatant.rouletteCd}ターン）`}
-            </span>
-          </button>
-          <button
-            className="crayon-btn"
-            style={{ fontSize: '1.1rem', padding: '0.4em 0.9em', opacity: koseiOk ? 1 : 0.5 }}
-            disabled={!koseiOk}
-            onClick={() => runTurn('kosei')}
-          >
-            こせい：{kosei.activeName}
-            {koseiWait ? ` (${koseiWait})` : ''}
-          </button>
+      {lastPair && phase !== 'over' && (
+        <div style={{ fontSize: '0.8rem', opacity: 0.75 }}>
+          さっき：{ICON[lastPair[0]]}{STANCE_JP[lastPair[0]]} vs {ICON[lastPair[1]]}{STANCE_JP[lastPair[1]]}
         </div>
       )}
-      {stage === 'spin' && reelPhase === 'reeling' && (
-        <button
-          className={`crayon-btn primary big${foeLow ? ' todome-glow' : ''}`}
-          style={{ fontSize: '1.65rem', padding: '0.5em 2.2em', marginTop: '0.15rem' }}
-          onClick={stopReel}
-        >
-          {foeLow ? 'とどめ！' : 'とめる！'}
-        </button>
-      )}
 
-      {stage === 'over' && (
-        <motion.p
-          initial={{ scale: 0.5, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          style={{ textAlign: 'center', fontFamily: 'var(--font-display)', fontSize: '1.5rem', marginTop: '0.5rem' }}
-        >
-          {state.winner === 'draw' ? 'あいこ！' : state.winner === 0 ? 'かった！🎉' : 'まけちゃった…'}
-        </motion.p>
-      )}
-
-      <AnimatePresence>
-        {resultCard && <ResultCardView key="rc" card={resultCard} names={names} />}
-      </AnimatePresence>
+      {phase === 'over' ? (
+        <div style={{ fontSize: '0.9rem', opacity: 0.7 }}>けっかへ…</div>
+      ) : phase === 'playing' && !state.done && mode === 'solo' ? (
+        <StanceButtons onPick={pickSolo} canKosei={canKosei} canKonshin={canKonshin} me={me} />
+      ) : phase === 'choose-p1' ? (
+        <>
+          <div style={{ fontWeight: 700, color: 'var(--crayon-red)' }}>P1（{names[0]}）が えらぶ</div>
+          <StanceButtons onPick={pickP1} canKosei={canKosei} canKonshin={canKonshin} me={me} />
+        </>
+      ) : phase === 'handoff' ? (
+        <div style={{ display: 'grid', gap: '0.8rem', placeItems: 'center' }}>
+          <div style={{ fontWeight: 700 }}>P1 は えらんだ！ がめんを P2 にわたして…</div>
+          <button className="crayon-btn primary big" onClick={() => setPhase('choose-p2')}>
+            P2 の ばん →
+          </button>
+        </div>
+      ) : phase === 'choose-p2' ? (
+        <>
+          <div style={{ fontWeight: 700, color: 'var(--crayon-blue)' }}>P2（{names[1]}）が えらぶ</div>
+          <StanceButtons
+            onPick={pickP2}
+            canKosei={koseiReady(state.combatants[1])}
+            canKonshin={konshinReady(state.combatants[1])}
+            me={state.combatants[1]}
+          />
+        </>
+      ) : null}
     </div>
   );
 }
 
-// ---------- ファイター ----------
-
-function StatBar({ label, value, max }: { label: string; value: number; max: number }) {
-  const pct = Math.min(100, (value / max) * 100);
-  const strong = pct >= 66;
-  const weak = pct <= 33;
-  return (
-    <div style={{ display: 'grid', gridTemplateColumns: '3.6em 1fr 1.6em', gap: '0.3rem', alignItems: 'center' }}>
-      <span style={{ fontSize: '0.58rem', color: 'var(--ink-soft)' }}>{label}</span>
-      <span style={{ height: 8, borderRadius: 5, border: '1.5px solid var(--border)', background: '#fff', overflow: 'hidden' }}>
-        <span
-          style={{
-            display: 'block',
-            height: '100%',
-            width: `${pct}%`,
-            background: strong ? 'var(--crayon-red)' : weak ? '#9fb0c0' : 'var(--crayon-yellow)',
-          }}
-        />
-      </span>
-      <span style={{ fontSize: '0.78rem', fontFamily: 'var(--font-display)', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-        {value}
-      </span>
-    </div>
-  );
-}
-
-function Fighter({
-  name, attribute, arche, koseiName, imageUrl, hp, maxHp, stats, statuses, shake, acting, roulette, koseiing, pinch, dir, flip, floats,
+function StanceButtons({
+  onPick,
+  canKosei,
+  canKonshin,
+  me,
 }: {
-  name: string;
-  attribute: Parameters<typeof AttributeBadge>[0]['attribute'];
-  arche: string;
-  koseiName: string;
-  imageUrl: string | null;
+  onPick: (s: ClashStance) => void;
+  canKosei: boolean;
+  canKonshin: boolean;
+  me: ClashCombatant;
+}) {
+  const kName = getKosei(me.koseiId).activeName;
+  const btn = (s: ClashStance, sub: string, disabled = false) => (
+    <button
+      key={s}
+      className="crayon-btn"
+      disabled={disabled}
+      onClick={() => onPick(s)}
+      style={{ borderColor: BTN_COLOR[s], color: BTN_COLOR[s], minWidth: '6rem', fontWeight: 700, opacity: disabled ? 0.45 : 1 }}
+    >
+      {ICON[s]} {STANCE_JP[s]}
+      <span style={{ display: 'block', fontSize: '0.6em', opacity: 0.8 }}>{sub}</span>
+    </button>
+  );
+  return (
+    <div style={{ display: 'flex', gap: '0.55rem', flexWrap: 'wrap', justifyContent: 'center', width: '100%', maxWidth: '48rem' }}>
+      {TRI.map((s) => btn(s, `${STANCE_JP[STANCE_BEATS[s]]}に強い`))}
+      {btn('kosei', canKosei ? kName : 'つかえない', !canKosei)}
+      {btn('konshin', canKonshin ? '一発逆転' : 'HP35%以下で', !canKonshin)}
+    </div>
+  );
+}
+
+function FighterPanel({
+  side,
+  char,
+  image,
+  hp,
+  maxHp,
+  statuses,
+  acting,
+  shake,
+  floats,
+}: {
+  side: Side;
+  char: Character;
+  image: string | null;
   hp: number;
   maxHp: number;
-  stats: Stats;
-  statuses: StatusChip[];
-  shake: boolean;
+  statuses: { jp: string; good: boolean }[];
   acting: boolean;
-  roulette: RouletteOutcome | null;
-  koseiing: boolean;
-  pinch: boolean;
-  dir: 1 | -1;
-  flip?: boolean;
+  shake: boolean;
   floats: Floating[];
 }) {
-  const rouletteGood = roulette === 'activate' || roulette === 'restore';
   const pct = Math.max(0, (hp / maxHp) * 100);
   const low = pct <= 30;
+  const cc = catCounts(char);
+  const dir = side === 0 ? 1 : -1;
+
   return (
-    <div style={{ flex: 1, minWidth: 0, display: 'grid', gap: '0.22rem', alignContent: 'start', justifyItems: 'center' }}>
-      <div style={{ display: 'flex', gap: '0.3rem', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>
-        <strong style={{ fontFamily: 'var(--font-display)', fontSize: '1.05rem' }}>{name}</strong>
-        <AttributeBadge attribute={attribute} size={0.7} />
+    <div className="sketch-card" style={{ flex: 1, minWidth: 0, padding: '0.55rem', position: 'relative' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+        <strong style={{ fontSize: 'clamp(.9rem,2.5vw,1.1rem)' }}>{char.name}</strong>
+        <AttributeBadge attribute={char.attribute} size={0.8} />
+        {low && <span style={{ color: 'var(--crayon-red)', fontWeight: 700, fontSize: '0.8rem' }}>ピンチ！</span>}
       </div>
-      <div style={{ display: 'flex', gap: '0.3rem', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>
-        <span
-          style={{
-            fontFamily: 'var(--font-display)',
-            fontSize: '0.7rem',
-            border: '2px solid var(--border)',
-            borderRadius: 999,
-            padding: '0 0.45rem',
-            background: 'var(--crayon-yellow)',
-          }}
-        >
-          {arche}
-        </span>
-        <span
-          style={{
-            fontFamily: 'var(--font-display)',
-            fontSize: '0.7rem',
-            border: '2px solid var(--border)',
-            borderRadius: 999,
-            padding: '0 0.45rem',
-            background: 'var(--crayon-purple)',
-            color: '#fff',
-          }}
-        >
-          {koseiName}
-        </span>
-        {pinch && (
-          <span
-            style={{
-              fontFamily: 'var(--font-display)',
-              fontSize: '0.7rem',
-              border: '2px solid var(--border)',
-              borderRadius: 999,
-              padding: '0 0.45rem',
-              background: 'var(--crayon-red)',
-              color: '#fff',
-            }}
-          >
-            ピンチ！
-          </span>
-        )}
-      </div>
+      <div style={{ fontSize: '0.7rem', opacity: 0.7 }}>{archetypeLabel(char.baseStats)}</div>
 
-      {/* HP バー */}
-      <motion.div animate={shake ? { x: [0, -3, 3, -2, 0] } : { x: 0 }} transition={{ duration: 0.26 }} style={{ width: '100%' }}>
+      <motion.div
+        animate={shake ? { x: [0, -6, 6, -4, 0] } : acting ? { x: dir * 14 } : { x: 0 }}
+        transition={{ duration: shake ? 0.3 : 0.2 }}
+        style={{ position: 'relative', margin: '0.4rem 0' }}
+      >
         <div
           style={{
-            height: 20,
-            border: '3px solid var(--border)',
-            borderRadius: 11,
+            width: 'min(28vw, 120px)',
+            aspectRatio: '1',
+            margin: '0 auto',
             background: '#fff',
-            overflow: 'hidden',
-            boxShadow: shake ? '0 0 0 4px rgba(214,69,69,0.5)' : 'none',
-            transition: 'box-shadow 0.15s ease',
+            border: '2px solid var(--border)',
+            borderRadius: 8,
+            padding: 6,
+            transform: `rotate(${dir * -1.5}deg)`,
+            boxShadow: shake ? '0 0 0 4px rgba(214,69,69,.5)' : '2px 3px 0 rgba(51,48,43,.15)',
           }}
         >
-          <div style={{ height: '100%', width: `${pct}%`, background: low ? 'var(--bad)' : 'var(--good)', transition: 'width 0.45s ease' }} />
+          <CharacterSprite imageUrl={image} attribute={char.attribute} name={char.name} flip={side === 1} />
         </div>
-        <div
-          style={{
-            fontFamily: 'var(--font-display)',
-            fontSize: '1rem',
-            textAlign: 'center',
-            marginTop: '0.05rem',
-            color: low ? 'var(--bad)' : 'var(--ink)',
-            fontVariantNumeric: 'tabular-nums',
-          }}
-        >
-          HP {Math.max(0, Math.ceil(hp))} / {maxHp}
-        </div>
-      </motion.div>
-
-      {/* キャラ */}
-      <div style={{ position: 'relative', width: 'min(28vw, 124px)', height: 'min(28vw, 124px)', marginTop: '0.1rem' }}>
-        <div
-          style={{
-            position: 'absolute',
-            bottom: -3,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            width: '70%',
-            height: 12,
-            borderRadius: '50%',
-            background: 'radial-gradient(ellipse at center, rgba(51,48,43,0.26), transparent 70%)',
-          }}
-        />
-        <motion.div
-          animate={
-            shake
-              ? { x: [0, -6, 6, -4, 0], rotate: [0, -3, 3, 0] }
-              : acting
-                ? { x: dir * 18, y: -3 }
-                : roulette
-                  ? rouletteGood
-                    ? { scale: 1.08, y: -5 }
-                    : { y: 4, scale: 0.94, rotate: [0, -2, 2, 0] }
-                  : koseiing
-                    ? { scale: 1.08, y: -4 }
-                    : { x: 0, y: 0, scale: 1, rotate: dir * -1.5 }
-          }
-          transition={acting && !shake ? { type: 'spring', stiffness: 520, damping: 13 } : { duration: 0.26 }}
-          style={{
-            width: '100%',
-            height: '100%',
-            borderRadius: '12px 16px 12px 14px',
-            ...(roulette ? { boxShadow: `0 0 0 4px ${ROULETTE_COLOR[roulette]}`, background: 'rgba(0,0,0,0.06)' } : {}),
-            ...(koseiing ? { boxShadow: '0 0 0 5px var(--crayon-purple)', background: 'rgba(123,92,240,0.16)' } : {}),
-            ...(imageUrl && !roulette && !koseiing
-              ? { background: '#fff', border: '3px solid var(--border)', boxShadow: '3px 4px 0 rgba(51,48,43,0.16)', padding: '0.25rem' }
-              : imageUrl
-                ? { border: '3px solid var(--border)', padding: '0.25rem' }
-                : {}),
-          }}
-        >
-          <CharacterSprite imageUrl={imageUrl} attribute={attribute} name={name} flip={flip} />
-        </motion.div>
-        {roulette && (
-          <div
-            style={{
-              position: 'absolute',
-              top: -14,
-              left: '50%',
-              transform: 'translateX(-50%)',
-              fontFamily: 'var(--font-display)',
-              fontSize: '0.85rem',
-              fontWeight: 700,
-              padding: '0.05rem 0.5rem',
-              borderRadius: 8,
-              border: '2px solid var(--border)',
-              background: ROULETTE_COLOR[roulette],
-              color: rouletteGood ? 'var(--ink)' : '#fff',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            🎰 {ROULETTE_LABEL[roulette]}
-          </div>
-        )}
-        {koseiing && (
-          <div style={{ position: 'absolute', top: -6, left: '50%', transform: 'translateX(-50%)', fontSize: '1.4rem' }}>
-            ✦
-          </div>
-        )}
-        {floats.map((f) => (
+        {floats.map((f, i) => (
           <motion.div
             key={f.id}
-            initial={{ y: 0, opacity: 0, scale: 0.6 }}
-            animate={{ y: -46, opacity: 1, scale: 1 }}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: -28 - i * 18 }}
             style={{
               position: 'absolute',
               left: '50%',
-              top: '14%',
-              translateX: '-50%',
-              fontFamily: 'var(--font-display)',
-              fontSize: f.kind === 'info' ? '0.86rem' : f.kind === 'big' ? '2rem' : '1.5rem',
-              color:
-                f.kind === 'heal' ? 'var(--good)' : f.kind === 'dmg' || f.kind === 'big' ? 'var(--bad)' : 'var(--ink)',
-              textShadow: '2px 2px 0 #fff, -2px -2px 0 #fff, 2px -2px 0 #fff, -2px 2px 0 #fff',
+              top: 0,
+              transform: 'translateX(-50%)',
+              fontWeight: 700,
+              fontSize: f.kind === 'dmg' ? '1.15rem' : '1rem',
+              color: f.kind === 'heal' ? 'var(--crayon-green)' : f.kind === 'dmg' ? 'var(--crayon-red)' : 'var(--ink)',
               whiteSpace: 'nowrap',
-              pointerEvents: 'none',
             }}
           >
             {f.text}
           </motion.div>
         ))}
-      </div>
+      </motion.div>
 
-      {/* ステータス（バー） */}
-      <div style={{ display: 'grid', gap: '0.12rem', width: '100%', maxWidth: '13rem', marginTop: '0.1rem' }}>
-        {MINI_STATS.map(([k, label, max]) => (
-          <StatBar key={k} label={label} value={stats[k]} max={max} />
-        ))}
-      </div>
-
-      {/* 状態異常 */}
-      {statuses.length > 0 && (
-        <div style={{ display: 'flex', gap: '0.2rem', flexWrap: 'wrap', justifyContent: 'center' }}>
-          {statuses.map((s, i) => (
-            <span
-              key={i}
-              style={{
-                fontFamily: 'var(--font-display)',
-                fontSize: '0.62rem',
-                border: '2px solid var(--border)',
-                borderRadius: 6,
-                padding: '0 0.3rem',
-                background: s.good ? 'var(--crayon-green)' : '#ffe2d8',
-                color: s.good ? '#fff' : 'var(--ink)',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {s.jp}
-              <span style={{ opacity: 0.8 }}> {s.turnsLeft}</span>
-            </span>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ---------- わざリール ----------
-
-const ROW_H = 46;
-const VIEW_ROWS = 3;
-
-function ReelPanel({
-  moveIds, cooldowns, landedIndex, spinning, sideName, mine, menuMode,
-}: {
-  moveIds: string[];
-  cooldowns: Record<string, number>;
-  landedIndex: number | null;
-  spinning: boolean;
-  sideName: string;
-  mine: boolean;
-  menuMode: boolean;
-}) {
-  const reel = useMemo(() => buildReel(moveIds), [moveIds]);
-  const stripRef = useRef<HTMLDivElement>(null);
-  const yRef = useRef(-Math.random() * reel.length * ROW_H);
-  const loopH = reel.length * ROW_H;
-  const centerY = (VIEW_ROWS * ROW_H - ROW_H) / 2;
-  const REPS = 8;
-
-  useEffect(() => {
-    if (!spinning || landedIndex != null) return;
-    const el = stripRef.current;
-    if (el) el.style.transition = 'none';
-    let raf = 0;
-    let last = performance.now();
-    const speed = 860;
-    const tick = (now: number) => {
-      const dt = Math.min(0.05, (now - last) / 1000);
-      last = now;
-      yRef.current -= speed * dt;
-      if (yRef.current <= -loopH) yRef.current += loopH;
-      if (stripRef.current) stripRef.current.style.transform = `translateY(${yRef.current}px)`;
-      raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [spinning, landedIndex, loopH]);
-
-  useEffect(() => {
-    if (landedIndex == null) return;
-    const el = stripRef.current;
-    if (!el) return;
-    const slip = (Math.random() - 0.5) * ROW_H * 0.5;
-    const cur = yRef.current;
-    let target = centerY - landedIndex * ROW_H;
-    while (target > cur - loopH * 1.6) target -= loopH;
-    target += slip;
-    yRef.current = target;
-    requestAnimationFrame(() => {
-      el.style.transition = 'transform 1.05s cubic-bezier(.1,.7,.12,1)';
-      el.style.transform = `translateY(${target}px)`;
-    });
-  }, [landedIndex, centerY, loopH]);
-
-  const label = menuMode
-    ? `${sideName} の わざ`
-    : mine
-      ? `${sideName} の わざリール`
-      : `${sideName} が えらんでいる…`;
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.35rem', width: '100%', marginTop: '0.15rem' }}>
-      <span style={{ fontFamily: 'var(--font-display)', fontSize: '1rem' }}>{label}</span>
-      <div
-        className="sketch-card"
-        style={{
-          position: 'relative',
-          width: 'min(22rem, 94vw)',
-          height: VIEW_ROWS * ROW_H,
-          overflow: 'hidden',
-          padding: 0,
-          background: 'var(--card)',
-          opacity: menuMode ? 0.72 : 1,
-        }}
-      >
-        <div ref={stripRef} style={{ position: 'absolute', left: 0, right: 0, top: 0, willChange: 'transform' }}>
-          {Array.from({ length: REPS }).flatMap((_, rep) =>
-            reel.map((seg, idx) => {
-              const dim = seg.moveId && (cooldowns[seg.moveId] ?? 0) > 0;
-              const strong = seg.stars === 3;
-              const weak = seg.stars === 1;
-              return (
-                <div
-                  key={`${rep}-${idx}`}
-                  style={{
-                    height: ROW_H,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.45rem',
-                    padding: '0 0.65rem',
-                    borderBottom: '2px solid rgba(51,48,43,0.15)',
-                    boxShadow: strong ? 'inset 0 0 0 3px var(--crayon-yellow)' : undefined,
-                    background: CAT_COLOR[seg.cat],
-                    opacity: dim ? 0.4 : weak ? 0.82 : 1,
-                    fontFamily: 'var(--font-display)',
-                  }}
-                >
-                  <span style={{ fontSize: '0.9rem', width: '1.1rem', textAlign: 'center' }}>{CAT_ICON[seg.cat]}</span>
-                  {seg.kind === 'ultra' ? (
-                    <span style={{ color: '#33302b', fontSize: '1.4rem', flex: 1 }}>7　こせい</span>
-                  ) : seg.kind === 'ska' ? (
-                    <span style={{ color: '#33302b', fontSize: '1.05rem', flex: 1 }}>スカ（はずれ）</span>
-                  ) : (
-                    <>
-                      <span
-                        style={{
-                          color: '#33302b',
-                          flex: 1,
-                          minWidth: 0,
-                          fontWeight: strong ? 700 : 400,
-                          fontSize: strong ? '1.1rem' : weak ? '0.98rem' : '1.05rem',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                        }}
-                      >
-                        {seg.label}
-                      </span>
-                      <span style={{ fontSize: '0.9rem', color: '#fff', textShadow: '0 0 2px #6b4a10, 1px 1px 0 #6b4a10', flexShrink: 0 }}>
-                        {'★'.repeat(seg.stars)}
-                        <span style={{ opacity: 0.35 }}>{'★'.repeat(3 - seg.stars)}</span>
-                      </span>
-                      <span
-                        style={{
-                          minWidth: '2.2rem',
-                          textAlign: 'right',
-                          flexShrink: 0,
-                          color: strong ? '#8a1c0c' : '#33302b',
-                          fontWeight: strong ? 700 : 400,
-                          fontSize: seg.power != null ? (strong ? '1.22rem' : '1.02rem') : '0.74rem',
-                          fontVariantNumeric: 'tabular-nums',
-                        }}
-                      >
-                        {seg.power != null ? seg.power : seg.supportWord}
-                      </span>
-                    </>
-                  )}
-                </div>
-              );
-            }),
-          )}
-        </div>
-        <div style={{ position: 'absolute', left: 0, right: 0, top: 0, height: centerY, background: 'rgba(51,48,43,0.12)', pointerEvents: 'none' }} />
-        <div style={{ position: 'absolute', left: 0, right: 0, top: centerY + ROW_H, bottom: 0, background: 'rgba(51,48,43,0.12)', pointerEvents: 'none' }} />
-        {!menuMode && (
-          <>
-            <div
-              style={{
-                position: 'absolute',
-                left: 2,
-                right: 2,
-                top: centerY - 2,
-                height: ROW_H + 4,
-                zIndex: 3,
-                border: '5px solid var(--crayon-red)',
-                borderRadius: 10,
-                pointerEvents: 'none',
-              }}
-            />
-            <div style={{ position: 'absolute', right: -3, top: centerY + ROW_H / 2 - 10, zIndex: 3, pointerEvents: 'none' }}>
-              <div style={{ width: 0, height: 0, borderTop: '10px solid transparent', borderBottom: '10px solid transparent', borderRight: '16px solid var(--crayon-red)' }} />
-            </div>
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function ResultCardView({ card, names }: { card: ResultCard; names: [string, string] }) {
-  const actorSide = card.side;
-  return (
-    <div
-      style={{
-        position: 'fixed',
-        left: '50%',
-        top: '33%',
-        transform: 'translate(-50%, -50%)',
-        zIndex: 20,
-        pointerEvents: 'none',
-        width: 'max-content',
-      }}
-    >
-      <motion.div
-        initial={{ scale: 0.7, opacity: 0, rotate: -4 }}
-        animate={{ scale: 1, opacity: 1, rotate: -1.5 }}
-        exit={{ scale: 0.9, opacity: 0 }}
-        className="sketch-card"
-        style={{ padding: '0.7rem 1.4rem', textAlign: 'center', background: 'var(--card)', minWidth: '13rem', maxWidth: '92vw' }}
-      >
-        <div style={{ fontSize: '0.72rem', color: 'var(--ink-soft)', fontFamily: 'var(--font-display)' }}>{names[actorSide]}</div>
-        {card.moveName && (
-          <div style={{ fontFamily: 'var(--font-display)', fontSize: '1.4rem', margin: '0 0 0.2rem' }}>
-            {card.attribute ? ATTRIBUTE_META[card.attribute as keyof typeof ATTRIBUTE_META].jp + 'の ' : ''}
-            {card.moveName}
-          </div>
-        )}
-        {card.affinity && (
-          <div
-            style={{
-              fontFamily: 'var(--font-display)',
-              fontSize: '1rem',
-              color: card.affinity === 'こうかばつぐん' ? 'var(--crayon-red)' : 'var(--ink-soft)',
-            }}
-          >
-            {card.affinity === 'こうかばつぐん' ? 'こうかは ばつぐん！' : 'こうかは いまひとつ…'}
-          </div>
-        )}
-        {card.kime === 'crit' && (
-          <div style={{ fontFamily: 'var(--font-display)', fontSize: '1.05rem', color: 'var(--crayon-red)' }}>クリティカル！</div>
-        )}
-        {card.kime === 'graze' && (
-          <div style={{ fontFamily: 'var(--font-display)', fontSize: '0.9rem', color: 'var(--ink-soft)' }}>かすった…</div>
-        )}
+      <div style={{ background: '#0001', borderRadius: 6, height: 18, overflow: 'hidden' }}>
         <div
           style={{
-            fontFamily: 'var(--font-display)',
-            fontSize: card.amount > 0 ? '1.5rem' : '1.1rem',
-            color: card.amount > 0 ? 'var(--bad)' : 'var(--ink-soft)',
-            marginTop: '0.2rem',
+            width: `${pct}%`,
+            height: '100%',
+            background: low ? 'var(--crayon-red)' : 'var(--crayon-green)',
+            transition: 'width .35s',
           }}
-        >
-          {card.amount > 0 ? `${card.amount} ダメージ！` : card.note}
-        </div>
-        {card.statusJp && (
-          <div style={{ fontFamily: 'var(--font-display)', fontSize: '0.95rem', color: 'var(--crayon-purple)', marginTop: '0.1rem' }}>
-            ＋ {card.statusJp}
-          </div>
-        )}
-      </motion.div>
+        />
+      </div>
+      <div style={{ fontSize: 'clamp(1rem,3vw,1.25rem)', fontWeight: 700 }}>
+        {Math.max(0, Math.round(hp))} <span style={{ fontSize: '0.7em', opacity: 0.6 }}>/ {maxHp}</span>
+      </div>
+
+      <div style={{ display: 'flex', gap: 6, fontSize: '0.72rem', marginTop: 2 }}>
+        {TRI.map((cat) => (
+          <span key={cat} style={{ color: STANCE_COLOR[cat] }}>
+            {ICON[cat]}
+            {cc[cat]}
+          </span>
+        ))}
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 3, minHeight: 16 }}>
+        {statuses.map((s, i) => (
+          <span
+            key={i}
+            style={{
+              fontSize: '0.68rem',
+              padding: '1px 5px',
+              borderRadius: 5,
+              background: s.good ? 'rgba(58,166,97,.18)' : 'rgba(236,106,156,.18)',
+            }}
+          >
+            {s.jp}
+          </span>
+        ))}
+      </div>
     </div>
   );
 }
