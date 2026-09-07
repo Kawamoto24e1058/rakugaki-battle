@@ -13,7 +13,6 @@ export {
   playClashToEnd,
   effStat,
   koseiReady,
-  konshinReady,
   moveCategory,
   STANCE_JP,
   STANCE_COLOR,

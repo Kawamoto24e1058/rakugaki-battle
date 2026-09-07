@@ -6,7 +6,7 @@ import {
   createClashState,
   resolveClashTurn,
   moveCategory,
-  konshinReady,
+  koseiReady,
   cpuClashStance,
   playClashToEnd,
   STANCE_BEATS,
@@ -176,25 +176,19 @@ describe('力・技・速さ 三すくみ（プロトタイプ）', () => {
     expect(median).toBeLessThanOrEqual(18);
   });
 
-  it('こんしんは HP35%以下でだけ通る（それ以外は力に落ちる）', () => {
+  it('使えないこせいを選んだら 力 に落ちる', () => {
     const l = drawn([210, 40, 30]);
     const r = drawn([30, 90, 210]);
+    // こせいを使い切ってから もう一度こせいを選ぶ
     let cur = createClashState(l, r, 4);
-    // 満タンでこんしん → reveal では 'power' になっているはず
-    cur = resolveClashTurn(cur, ['konshin', 'power']);
-    const rev = cur.log.find((e) => e.t === 'reveal');
-    if (rev && rev.t === 'reveal') expect(rev.stances[0]).toBe('power');
-
-    // HPを削ってから
-    let low = createClashState(l, r, 4);
-    let g = 0;
-    while (!low.done && g++ < 40 && !konshinReady(low.combatants[0])) {
-      low = resolveClashTurn(low, ['tech', 'power']);
+    cur = resolveClashTurn(cur, ['kosei', 'power']);
+    for (let i = 0; i < 4 && !cur.done && koseiReady(cur.combatants[0]); i++) {
+      cur = resolveClashTurn(cur, ['kosei', 'power']);
     }
-    if (konshinReady(low.combatants[0]) && !low.done) {
-      const after = resolveClashTurn(low, ['konshin', 'tech']);
-      const rev2 = after.log.slice(low.log.length).find((e) => e.t === 'reveal');
-      if (rev2 && rev2.t === 'reveal') expect(rev2.stances[0]).toBe('konshin');
+    if (!koseiReady(cur.combatants[0]) && !cur.done) {
+      const after = resolveClashTurn(cur, ['kosei', 'power']);
+      const rev = after.log.slice(cur.log.length).find((e) => e.t === 'reveal');
+      if (rev && rev.t === 'reveal') expect(rev.stances[0]).toBe('power');
     }
   });
 

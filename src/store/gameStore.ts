@@ -13,8 +13,7 @@ export type Screen =
   | 'battle'
   | 'reward'
   | 'result'
-  | 'zukan'
-  | 'clash-proto';
+  | 'zukan';
 
 export type Mode = 'solo' | 'versus';
 
@@ -48,7 +47,6 @@ interface GameState {
   startSolo: () => void;
   startVersus: () => void;
   openZukan: () => void;
-  openClashProto: () => void;
   devQuickBattle: (mode: Mode) => void;
   setCaptured: (slot: CapturedSlot) => void;
   confirmReveal: () => void;
@@ -87,7 +85,6 @@ export const useGame = create<GameState>((set, get) => ({
     set({ mode: 'versus', screen: 'capture', player: null, pendingChallenger: null, runWins: 0 }),
 
   openZukan: () => set({ screen: 'zukan', zukan: loadZukan() }),
-  openClashProto: () => set({ screen: 'clash-proto' }),
 
   devQuickBattle: (mode) => {
     const roster = get().cpuRoster;

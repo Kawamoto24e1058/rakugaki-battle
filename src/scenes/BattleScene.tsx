@@ -6,7 +6,6 @@ import {
   resolveClashTurn,
   cpuClashStance,
   koseiReady,
-  konshinReady,
   moveCategory,
   archetypeLabel,
   getKosei,
@@ -27,13 +26,20 @@ import type { Character } from '../engine/types';
 import { CharacterSprite, AttributeBadge } from '../components/bits';
 
 const TRI: TriStance[] = ['power', 'tech', 'speed'];
-const ICON: Record<ClashStance, string> = { power: '👊', tech: '✨', speed: '💨', kosei: '★', konshin: '🔥' };
+/** 表示順（サイクルが読める順）：速さ → 力 → 技 → …。 */
+const CYCLE: TriStance[] = ['speed', 'power', 'tech'];
+const ICON: Record<ClashStance, string> = { power: '👊', tech: '✨', speed: '💨', kosei: '★' };
 const BTN_COLOR: Record<ClashStance, string> = {
   power: STANCE_COLOR.power,
   tech: STANCE_COLOR.tech,
   speed: STANCE_COLOR.speed,
   kosei: 'var(--crayon-purple)',
-  konshin: '#c98a00',
+};
+/** その構えが「負ける」相手（＝勝つ相手の逆引き）。 */
+const LOSES_TO: Record<TriStance, TriStance> = {
+  power: 'speed',
+  tech: 'power',
+  speed: 'tech',
 };
 
 function catCounts(c: Character): Record<TriStance, number> {
@@ -63,7 +69,7 @@ interface View {
   floats: Floating[];
 }
 
-type Phase = 'choose-p1' | 'handoff' | 'choose-p2' | 'playing' | 'over';
+type Phase = 'choose-p1' | 'handoff' | 'choose-p2' | 'animating' | 'over';
 
 let floatSeq = 0;
 
@@ -85,13 +91,14 @@ export function BattleScene() {
   const maxHp: [number, number] = [chars[0].baseStats.hp, chars[1].baseStats.hp];
   const images: [string | null, string | null] = [player.imageUrl, opponent.imageUrl];
 
-  const [phase, setPhase] = useState<Phase>(mode === 'versus' ? 'choose-p1' : 'playing');
+  // solo は「プレイヤーが選ぶ」フェーズ、versus は P1 → 受け渡し → P2
+  const [phase, setPhase] = useState<Phase>('choose-p1');
   const [p1Pick, setP1Pick] = useState<ClashStance | null>(null);
   const [lastPair, setLastPair] = useState<[ClashStance, ClashStance] | null>(null);
   const [view, setView] = useState<View>({
     hp: [maxHp[0], maxHp[1]],
     statuses: [[], []],
-    banner: 'ちからだめし！ 力 / 技 / 速さ を えらぶ',
+    banner: 'よみあい！ 力 / 技 / 速さ を えらぶ',
     acting: null,
     shake: null,
     floats: [],
@@ -109,10 +116,6 @@ export function BattleScene() {
     return () => clearTimeout(t);
   }, [phase, state.winner, finishBattle]);
 
-  const me = state.combatants[0];
-  const canKosei = koseiReady(me);
-  const canKonshin = konshinReady(me);
-
   function statusView(side: Side, st: ClashState) {
     return st.combatants[side].statuses.map((s) => ({
       jp: STATUS_META[s.kind].jp,
@@ -121,24 +124,26 @@ export function BattleScene() {
   }
 
   function submit(myStance: ClashStance, foeStance: ClashStance) {
+    if (phase === 'animating' || state.done) return;
     setLastPair([myStance, foeStance]);
+    setPhase('animating');
+    setView((v) => ({ ...v, banner: 'せーの！' }));
     const next = resolveClashTurn(state, [myStance, foeStance]);
-    const events = next.log.slice(state.log.length);
-    setPhase('playing');
-    play(events, next);
+    play(next.log.slice(state.log.length), next);
   }
 
   function pickSolo(stance: ClashStance) {
-    if (phase !== 'playing' || state.done) return;
+    if (phase !== 'choose-p1' || state.done) return;
     const rng = mulberry32((state.seed + state.turn * 2654435761) >>> 0);
     submit(stance, cpuClashStance(state, 1, rng));
   }
   function pickP1(stance: ClashStance) {
+    if (phase !== 'choose-p1') return;
     setP1Pick(stance);
     setPhase('handoff');
   }
   function pickP2(stance: ClashStance) {
-    if (!p1Pick) return;
+    if (phase !== 'choose-p2' || !p1Pick) return;
     submit(p1Pick, stance);
     setP1Pick(null);
   }
@@ -146,11 +151,11 @@ export function BattleScene() {
   function play(events: ClashEvent[], next: ClashState) {
     timers.current.forEach(clearTimeout);
     timers.current = [];
-    let t = 0;
+    let t = 250;
     const v: View = {
       hp: [...view.hp] as [number, number],
       statuses: [[], []],
-      banner: view.banner,
+      banner: 'せーの！',
       acting: null,
       shake: null,
       floats: [],
@@ -178,15 +183,15 @@ export function BattleScene() {
       switch (ev.t) {
         case 'reveal':
           step(() => {
-            v.banner = `${names[0]}「${STANCE_JP[ev.stances[0]]}」 × ${names[1]}「${STANCE_JP[ev.stances[1]]}」 せーの！`;
+            v.banner = `${names[0]}「${STANCE_JP[ev.stances[0]]}」 × ${names[1]}「${STANCE_JP[ev.stances[1]]}」`;
             commit();
-          }, 600);
+          }, 620);
           break;
         case 'clash':
           step(() => {
             v.banner = ev.winner === null ? '五分！' : `${names[ev.winner]} ${ev.note}`;
             commit();
-          }, 620);
+          }, 640);
           break;
         case 'act':
           step(() => {
@@ -271,20 +276,21 @@ export function BattleScene() {
             ? 'ひきわけ'
             : `${names[next.winner as Side]} の かち！`
           : mode === 'versus'
-            ? `ターン ${next.turn}：P1 が えらぶ`
+            ? `ターン ${next.turn}：P1（${names[0]}）が えらぶ`
             : `ターン ${next.turn}：力 / 技 / 速さ を えらぶ`,
         acting: null,
         shake: null,
         floats: [],
       });
-      setPhase(next.done ? 'over' : mode === 'versus' ? 'choose-p1' : 'playing');
-    }, 0);
+      setPhase(next.done ? 'over' : 'choose-p1');
+    }, 40);
   }
 
   const pinch = view.hp.some((h, i) => h > 0 && h / maxHp[i] <= 0.3);
+  const chooser: ClashCombatant = phase === 'choose-p2' ? state.combatants[1] : state.combatants[0];
 
   return (
-    <div className="scene" style={{ justifyContent: 'flex-start', paddingTop: 'clamp(.5rem,3vh,1.5rem)', gap: '0.9rem' }}>
+    <div className="scene" style={{ justifyContent: 'flex-start', paddingTop: 'clamp(.5rem,3vh,1.5rem)', gap: '0.8rem' }}>
       {pinch && <div className="pinch-vignette" />}
 
       <div style={{ display: 'flex', gap: 'clamp(.6rem,3vw,1.5rem)', width: '100%', maxWidth: '48rem' }}>
@@ -311,6 +317,8 @@ export function BattleScene() {
         {view.banner}
       </div>
 
+      <TriangleGuide />
+
       {lastPair && phase !== 'over' && (
         <div style={{ fontSize: '0.8rem', opacity: 0.75 }}>
           さっき：{ICON[lastPair[0]]}{STANCE_JP[lastPair[0]]} vs {ICON[lastPair[1]]}{STANCE_JP[lastPair[1]]}
@@ -319,13 +327,8 @@ export function BattleScene() {
 
       {phase === 'over' ? (
         <div style={{ fontSize: '0.9rem', opacity: 0.7 }}>けっかへ…</div>
-      ) : phase === 'playing' && !state.done && mode === 'solo' ? (
-        <StanceButtons onPick={pickSolo} canKosei={canKosei} canKonshin={canKonshin} me={me} />
-      ) : phase === 'choose-p1' ? (
-        <>
-          <div style={{ fontWeight: 700, color: 'var(--crayon-red)' }}>P1（{names[0]}）が えらぶ</div>
-          <StanceButtons onPick={pickP1} canKosei={canKosei} canKonshin={canKonshin} me={me} />
-        </>
+      ) : phase === 'animating' ? (
+        <div style={{ fontSize: '0.85rem', opacity: 0.55 }}>…</div>
       ) : phase === 'handoff' ? (
         <div style={{ display: 'grid', gap: '0.8rem', placeItems: 'center' }}>
           <div style={{ fontWeight: 700 }}>P1 は えらんだ！ がめんを P2 にわたして…</div>
@@ -333,50 +336,111 @@ export function BattleScene() {
             P2 の ばん →
           </button>
         </div>
-      ) : phase === 'choose-p2' ? (
+      ) : (
         <>
-          <div style={{ fontWeight: 700, color: 'var(--crayon-blue)' }}>P2（{names[1]}）が えらぶ</div>
+          {mode === 'versus' && (
+            <div style={{ fontWeight: 700, color: phase === 'choose-p2' ? 'var(--crayon-blue)' : 'var(--crayon-red)' }}>
+              {phase === 'choose-p2' ? `P2（${names[1]}）` : `P1（${names[0]}）`} が えらぶ
+            </div>
+          )}
           <StanceButtons
-            onPick={pickP2}
-            canKosei={koseiReady(state.combatants[1])}
-            canKonshin={konshinReady(state.combatants[1])}
-            me={state.combatants[1]}
+            onPick={phase === 'choose-p2' ? pickP2 : mode === 'versus' ? pickP1 : pickSolo}
+            me={chooser}
           />
         </>
-      ) : null}
+      )}
     </div>
   );
 }
 
-function StanceButtons({
-  onPick,
-  canKosei,
-  canKonshin,
-  me,
-}: {
-  onPick: (s: ClashStance) => void;
-  canKosei: boolean;
-  canKonshin: boolean;
-  me: ClashCombatant;
-}) {
+/** 三すくみの有利不利をいつでも見られる図（速さ→力→技→速さ）。 */
+function TriangleGuide() {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 4,
+        fontSize: '0.78rem',
+        fontWeight: 700,
+        opacity: 0.9,
+        flexWrap: 'wrap',
+        justifyContent: 'center',
+      }}
+    >
+      <span style={{ opacity: 0.6, fontWeight: 400 }}>じゃんけん：</span>
+      {CYCLE.map((s) => (
+        <span key={s} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+          <span
+            style={{
+              color: '#fff',
+              background: STANCE_COLOR[s],
+              borderRadius: 999,
+              padding: '2px 8px',
+            }}
+          >
+            {ICON[s]}
+            {STANCE_JP[s]}
+          </span>
+          <span style={{ color: STANCE_COLOR[s] }}>→ かつ →</span>
+        </span>
+      ))}
+      <span
+        style={{
+          color: '#fff',
+          background: STANCE_COLOR[CYCLE[0]],
+          borderRadius: 999,
+          padding: '2px 8px',
+        }}
+      >
+        {ICON[CYCLE[0]]}
+        {STANCE_JP[CYCLE[0]]}
+      </span>
+    </div>
+  );
+}
+
+function StanceButtons({ onPick, me }: { onPick: (s: ClashStance) => void; me: ClashCombatant }) {
   const kName = getKosei(me.koseiId).activeName;
-  const btn = (s: ClashStance, sub: string, disabled = false) => (
+  const canKosei = koseiReady(me);
+
+  const triBtn = (s: TriStance) => (
     <button
       key={s}
       className="crayon-btn"
-      disabled={disabled}
       onClick={() => onPick(s)}
-      style={{ borderColor: BTN_COLOR[s], color: BTN_COLOR[s], minWidth: '6rem', fontWeight: 700, opacity: disabled ? 0.45 : 1 }}
+      style={{ borderColor: BTN_COLOR[s], color: BTN_COLOR[s], minWidth: '6.5rem', fontWeight: 700 }}
     >
       {ICON[s]} {STANCE_JP[s]}
-      <span style={{ display: 'block', fontSize: '0.6em', opacity: 0.8 }}>{sub}</span>
+      <span style={{ display: 'block', fontSize: '0.58em', opacity: 0.85, color: STANCE_COLOR[STANCE_BEATS[s]] }}>
+        {STANCE_JP[STANCE_BEATS[s]]}に かつ
+      </span>
+      <span style={{ display: 'block', fontSize: '0.55em', opacity: 0.6 }}>
+        {STANCE_JP[LOSES_TO[s]]}に よわい
+      </span>
     </button>
   );
+
   return (
     <div style={{ display: 'flex', gap: '0.55rem', flexWrap: 'wrap', justifyContent: 'center', width: '100%', maxWidth: '48rem' }}>
-      {TRI.map((s) => btn(s, `${STANCE_JP[STANCE_BEATS[s]]}に強い`))}
-      {btn('kosei', canKosei ? kName : 'つかえない', !canKosei)}
-      {btn('konshin', canKonshin ? '一発逆転' : 'HP35%以下で', !canKonshin)}
+      {TRI.map(triBtn)}
+      <button
+        className="crayon-btn"
+        disabled={!canKosei}
+        onClick={() => onPick('kosei')}
+        style={{
+          borderColor: BTN_COLOR.kosei,
+          color: BTN_COLOR.kosei,
+          minWidth: '6.5rem',
+          fontWeight: 700,
+          opacity: canKosei ? 1 : 0.45,
+        }}
+      >
+        ★ こせい
+        <span style={{ display: 'block', fontSize: '0.56em', opacity: 0.8 }}>
+          {canKosei ? kName : 'いま つかえない'}
+        </span>
+      </button>
     </div>
   );
 }
@@ -440,7 +504,7 @@ function FighterPanel({
           <motion.div
             key={f.id}
             initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: -28 - i * 18 }}
+            animate={{ opacity: 1, y: -28 - (floats.length - 1 - i) * 18 }}
             style={{
               position: 'absolute',
               left: '50%',

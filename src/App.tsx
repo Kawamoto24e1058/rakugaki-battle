@@ -7,7 +7,6 @@ import { BattleScene } from './scenes/BattleScene';
 import { RewardScene } from './scenes/RewardScene';
 import { ResultScene } from './scenes/ResultScene';
 import { ZukanScene } from './scenes/ZukanScene';
-import { ClashPrototype } from './scenes/ClashPrototype';
 
 export default function App() {
   const screen = useGame((s) => s.screen);
@@ -29,8 +28,6 @@ export default function App() {
       return <ResultScene />;
     case 'zukan':
       return <ZukanScene />;
-    case 'clash-proto':
-      return <ClashPrototype />;
     default:
       return <TitleScene />;
   }

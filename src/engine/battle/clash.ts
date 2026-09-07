@@ -22,8 +22,8 @@ export { moveCategory } from '../moves';
 
 export type Side = 0 | 1;
 
-/** 三すくみの構え＋外枠2つ。 */
-export type ClashStance = 'power' | 'tech' | 'speed' | 'kosei' | 'konshin';
+/** 三すくみの構え＋外枠（こせい）。 */
+export type ClashStance = 'power' | 'tech' | 'speed' | 'kosei';
 /** 三すくみに参加する3つ。 */
 export type TriStance = 'power' | 'tech' | 'speed';
 
@@ -32,7 +32,6 @@ export const STANCE_JP: Record<ClashStance, string> = {
   tech: '技',
   speed: '速さ',
   kosei: 'こせい',
-  konshin: 'こんしん',
 };
 /** 力＝赤／技＝緑／速さ＝青（RGB。色覚配慮でUI側はアイコン＋文字も併記）。 */
 export const STANCE_COLOR: Record<TriStance, string> = {
@@ -48,7 +47,6 @@ export const STANCE_BEATS: Record<TriStance, TriStance> = {
 };
 
 const SUDDEN_DEATH_TURN = 12;
-const KONSHIN_HP_PCT = 0.35;
 const CLASH_WIN_MULT = 1.3;
 const CLASH_LOSE_MULT = 0.62;
 /** 速さで力を「中断」したときの、力側のさらなる減衰（振りかぶりを潰す）。 */
@@ -84,8 +82,6 @@ export interface ClashCombatant {
   hp: number;
   statuses: ActiveStatus[];
   cooldowns: Record<MoveId, number>;
-  /** 直近のターンでこんしんを撃った（そのターンだけ被ダメ+50%）。 */
-  konshinExposed: boolean;
   /** 直近のターンでこせいを撃って晒された（相手が力なら被ダメ+30%）。 */
   koseiExposed: boolean;
 }
@@ -129,7 +125,6 @@ function toCombatant(c: Character): ClashCombatant {
     hp: c.baseStats.hp,
     statuses: [],
     cooldowns: {},
-    konshinExposed: false,
     koseiExposed: false,
   };
 }
@@ -150,9 +145,6 @@ function kosei(c: ClashCombatant): Kosei {
 }
 export function koseiReady(c: ClashCombatant): boolean {
   return c.koseiCd <= 0 && c.koseiUses > 0;
-}
-export function konshinReady(c: ClashCombatant): boolean {
-  return c.hp / c.maxHp <= KONSHIN_HP_PCT;
 }
 
 function has(c: ClashCombatant, k: StatusKind): boolean {
@@ -254,19 +246,14 @@ export function resolveClashTurn(
   const next = clone(state);
   const log: ClashEvent[] = [];
 
-  // こんしんは条件を満たさなければ 力 に落とす
+  // こせいが使えなければ 力 に落とす
   const eff: [ClashStance, ClashStance] = [
     normalizeStance(next.combatants[0], stances[0]),
     normalizeStance(next.combatants[1], stances[1]),
   ];
   log.push({ t: 'reveal', stances: eff });
 
-  for (const c of next.combatants) {
-    c.konshinExposed = false;
-    c.koseiExposed = false;
-  }
-  if (eff[0] === 'konshin') next.combatants[0].konshinExposed = true;
-  if (eff[1] === 'konshin') next.combatants[1].konshinExposed = true;
+  for (const c of next.combatants) c.koseiExposed = false;
   if (eff[0] === 'kosei' && eff[1] === 'power') next.combatants[0].koseiExposed = true;
   if (eff[1] === 'kosei' && eff[0] === 'power') next.combatants[1].koseiExposed = true;
 
@@ -361,7 +348,6 @@ export function resolveClashTurn(
 }
 
 function normalizeStance(c: ClashCombatant, s: ClashStance): ClashStance {
-  if (s === 'konshin' && !konshinReady(c)) return 'power';
   if (s === 'kosei' && !koseiReady(c)) return 'power';
   return s;
 }
@@ -408,10 +394,6 @@ function act(
 
   if (stance === 'kosei') {
     applyKosei(state, side, rng, log);
-    return;
-  }
-  if (stance === 'konshin') {
-    applyKonshin(state, side, rng, log);
     return;
   }
 
@@ -469,21 +451,6 @@ function applySupport(state: ClashState, side: Side, move: MoveDef, log: ClashEv
     const k = map[move.debuff.stat] ?? 'atkDown';
     if (applyStatus(tgt, k, move.debuff.turns)) log.push({ t: 'status-apply', side: (1 - side) as Side, kind: k });
   }
-}
-
-function applyKonshin(state: ClashState, side: Side, rng: Rng, log: ClashEvent[]): void {
-  const c = state.combatants[side];
-  const missing = 1 - c.hp / c.maxHp;
-  const power = 34 + missing * 46 + effStat(c, 'heart') / 3;
-  log.push({ t: 'act', side, stance: 'konshin', moveName: 'こんしん' });
-  dealDamage(
-    state,
-    side,
-    { id: 'konshin', name: 'こんしん', category: 'attack', attribute: c.attribute, power, cooldown: 0, target: 'enemy', unlock: [], desc: '', pierce: true },
-    { clashMult: 1, ignoreCap: true, tag: 'こんしん' },
-    rng,
-    log,
-  );
 }
 
 const KOSEI_SUPPORT = new Set(['mend', 'fortress', 'warcry', 'hex']);
@@ -608,7 +575,6 @@ function dealDamage(
 
   if (!move.pierce) dmg *= 40 / (40 + effStat(target, 'def'));
   if (has(target, 'curse')) dmg *= STATUS_META.curse.incomingMult;
-  if (target.konshinExposed) dmg *= 1.5;
   if (target.koseiExposed) dmg *= 1.3;
 
   const hpPct = actor.hp / actor.maxHp;
@@ -718,7 +684,6 @@ export function cpuClashStance(state: ClashState, side: Side, rng: Rng): ClashSt
   const myPct = me.hp / me.maxHp;
   const foePct = foe.hp / foe.maxHp;
 
-  if (konshinReady(me) && rng() < 0.5) return 'konshin';
   if (koseiReady(me)) {
     const offensive = !KOSEI_SUPPORT.has(kosei(me).active.kind);
     if (offensive && foePct < 0.4 && rng() < 0.6) return 'kosei';

@@ -4,7 +4,6 @@ export function TitleScene() {
   const startSolo = useGame((s) => s.startSolo);
   const startVersus = useGame((s) => s.startVersus);
   const openZukan = useGame((s) => s.openZukan);
-  const openClashProto = useGame((s) => s.openClashProto);
   const devQuickBattle = useGame((s) => s.devQuickBattle);
   const zukanCount = useGame((s) => s.zukan.length);
 
@@ -33,24 +32,10 @@ export function TitleScene() {
         </button>
         <button
           className="crayon-btn"
-          style={{ fontSize: '0.85rem', opacity: 0.75, borderStyle: 'dashed' }}
-          onClick={openClashProto}
-        >
-          ⚙ 力/技/速さ プロト（開発）
-        </button>
-        <button
-          className="crayon-btn"
-          style={{ fontSize: '0.85rem', opacity: 0.75, borderStyle: 'dashed' }}
+          style={{ fontSize: '0.85rem', opacity: 0.7, borderStyle: 'dashed' }}
           onClick={() => devQuickBattle('solo')}
         >
-          ⚔ バトル直行 ソロ（開発）
-        </button>
-        <button
-          className="crayon-btn"
-          style={{ fontSize: '0.85rem', opacity: 0.75, borderStyle: 'dashed' }}
-          onClick={() => devQuickBattle('versus')}
-        >
-          ⚔ バトル直行 2人（開発）
+          ⚔ バトル直行（開発・撮影スキップ）
         </button>
       </div>
     </div>
