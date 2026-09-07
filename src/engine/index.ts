@@ -27,9 +27,11 @@ export {
   effStat,
   cpuStance,
   koseiReady,
+  rouletteReady,
   type BattleState,
   type BattleEvent,
   type Combatant,
   type Side,
   type Stance,
+  type RouletteOutcome,
 } from './battle/engine';

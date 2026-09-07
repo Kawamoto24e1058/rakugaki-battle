@@ -22,12 +22,19 @@ import {
 } from './ring';
 
 export type Side = 0 | 1;
-/** そのターンの構え。せめる＝リールを回す。まもる＝回さず被ダメを大きく減らす。こせい＝専用スキル発動。 */
-export type Stance = 'attack' | 'defend' | 'kosei';
+/** そのターンの構え。せめる＝リールを回す。ルーレット＝こせいの運だめし。こせい＝専用スキル発動。 */
+export type Stance = 'attack' | 'roulette' | 'kosei';
+/**
+ * こせいルーレットの結果。
+ * activate＝こせいが使える状態だった → 無料で発動（手持ちのCD/回数は減らない）。
+ * restore＝こせいが使えない状態だった → CD/回数を回復して使えるようにする（この場では発動しない）。
+ * miss＝ハズレ、何も起きない。
+ */
+export type RouletteOutcome = 'activate' | 'restore' | 'miss';
 const ATTR_LIST: Attribute[] = ['fire', 'water', 'wood', 'bolt', 'dark'];
 const SUDDEN_DEATH_TURN = 12;
-/** まもる：被ダメージの目安 -55%（guardPct 60 → dmg×(1-60/110)）＋最大HPの約1割回復＋状態異常1つ解除。 */
-const DEFEND_GUARD_PCT = 60;
+/** こせいルーレットの当たり確率。 */
+const ROULETTE_HIT_CHANCE = 0.5;
 
 export interface Combatant {
   characterId: string;
@@ -41,6 +48,8 @@ export interface Combatant {
   koseiCd: number;
   /** こせいアクティブの残り使用回数（回数制のみ。0で打ち止め）。 */
   koseiUses: number;
+  /** こせいルーレットの残りクールダウン（当たると数ターン回せない。0で回せる）。 */
+  rouletteCd: number;
   maxHp: number;
   hp: number;
   statuses: ActiveStatus[];
@@ -77,7 +86,7 @@ export type BattleEvent =
       /** 攻撃側が瀕死で「こんじょう」火力アップが乗った一撃。 */
       comeback?: boolean;
     }
-  | { t: 'defend'; side: Side }
+  | { t: 'roulette'; side: Side; outcome: RouletteOutcome }
   | { t: 'kosei'; side: Side; name: string; free: boolean }
   | { t: 'dodge'; side: Side }
   | { t: 'heal'; side: Side; amount: number; hpAfter: number }
@@ -111,6 +120,7 @@ function toCombatant(c: Character): Combatant {
     koseiId: k.id,
     koseiCd: 0,
     koseiUses: k.limit.kind === 'count' ? k.limit.n : 99,
+    rouletteCd: 0,
     maxHp: c.baseStats.hp,
     hp: c.baseStats.hp,
     statuses: [],
@@ -135,6 +145,10 @@ function passiveIs<K extends KoseiPassive['kind']>(
 /** こせいアクティブが今つかえるか。 */
 export function koseiReady(c: Combatant): boolean {
   return c.koseiCd <= 0 && c.koseiUses > 0;
+}
+/** こせいルーレットが今まわせるか。 */
+export function rouletteReady(c: Combatant): boolean {
+  return c.rouletteCd <= 0;
 }
 
 export function createBattleState(left: Character, right: Character, seed: number): BattleState {
@@ -202,22 +216,13 @@ export function resolveTurn(
 
   for (const c of next.combatants) c.guardPct = 0;
 
-  // まもる構え（＋こせいアクティブが要塞系のとき）は行動順に関係なくターン開始時に効かせる
-  for (const side of [0, 1] as Side[]) {
-    if (stances[side] === 'defend') {
-      let g = DEFEND_GUARD_PCT;
-      if (passiveIs(next.combatants[side], 'ironWill')) g += 12;
-      next.combatants[side].guardPct = g;
-    }
-  }
-
   const s0 = orderSpd(next.combatants[0]);
   const s1 = orderSpd(next.combatants[1]);
   const order: Side[] = s0 === s1 ? (rng() < 0.5 ? [0, 1] : [1, 0]) : s0 > s1 ? [0, 1] : [1, 0];
 
   for (const side of order) {
     if (next.winner !== null) break;
-    if (stances[side] === 'defend') applyDefend(next, side, log);
+    if (stances[side] === 'roulette') applyKoseiRoulette(next, side, rng, log, tookDamage);
     else if (stances[side] === 'kosei') applyKoseiActive(next, side, rng, log, tookDamage, false);
     else performAction(next, side, rng, log, tookDamage);
     checkFaint(next, log);
@@ -248,6 +253,7 @@ export function resolveTurn(
   for (const side of [0, 1] as Side[]) {
     const c = next.combatants[side];
     if (c.koseiCd > 0) c.koseiCd -= 1;
+    if (c.rouletteCd > 0) c.rouletteCd -= 1;
     for (const k of Object.keys(c.cooldowns)) c.cooldowns[k] = Math.max(0, c.cooldowns[k] - 1);
     c.statuses = c.statuses
       .map((s) => ({ ...s, turnsLeft: s.turnsLeft - 1, age: s.age + 1 }))
@@ -281,33 +287,62 @@ export function resolveTurn(
   return next;
 }
 
-/** まもる構え：被ダメ大幅減（guardPct は resolveTurn で先に設定済み）＋少し回復＋状態異常1つ解除。 */
-function applyDefend(state: BattleState, side: Side, log: BattleEvent[]): void {
+/** 当たったあと、ルーレットが回せなくなるターン数（+1 は当該ターン末の減算ぶん）。 */
+const ROULETTE_COOLDOWN = 3;
+
+/**
+ * こせいルーレット：攻めもこせい発動もせず「こせいの運だめし」。ダメージ・回復は一切なし。
+ * こせいが今つかえるなら → 当たりで無料発動（手持ちのCD/回数は減らさない）。
+ * こせいが今つかえない（CD中・回数切れ）なら → 当たりでそれを回復（この場では発動しない）。
+ * ハズレなら何も起きない（ハズレはルーレット自身のクールダウンも発生しない＝また回せる）。
+ * 当たると数ターンはルーレットを回せなくなる（無限に当て続けられないように）。
+ */
+function applyKoseiRoulette(
+  state: BattleState,
+  side: Side,
+  rng: Rng,
+  log: BattleEvent[],
+  tookDamage: [boolean, boolean],
+): void {
   const c = state.combatants[side];
-  log.push({ t: 'defend', side });
-  log.push({ t: 'move', side, moveName: 'まもる', category: 'support' });
+  const roll = rng() < ROULETTE_HIT_CHANCE;
+  // ルーレットがまだクールダウン中なら不発（UI側では選べないはずの保険）。
+  const hit = c.rouletteCd <= 0 && roll;
+  const wasReady = koseiReady(c);
 
-  const base = Math.round(c.maxHp * 0.07);
-  const amt = Math.round(base * (1 + effStat(c, 'heart') / 80));
-  const before = c.hp;
-  c.hp = Math.min(c.maxHp, c.hp + amt);
-  if (c.hp > before) log.push({ t: 'heal', side, amount: c.hp - before, hpAfter: c.hp });
-
-  const idx = c.statuses.findIndex((s) => STATUS_META[s.kind].kind === 'debuff');
-  if (idx >= 0) {
-    c.statuses.splice(idx, 1);
-    log.push({ t: 'status-cure', side, count: 1 });
+  if (!hit) {
+    log.push({ t: 'roulette', side, outcome: 'miss' });
+    log.push({ t: 'move', side, moveName: 'ルーレット', category: 'support' });
+    log.push({
+      t: 'result', side, moveName: 'ルーレット', attribute: null, kime: null, segKind: 'move',
+      affinity: null, statusJp: null, amount: 0, note: 'ハズレ…',
+    });
+    return;
   }
 
+  c.rouletteCd = ROULETTE_COOLDOWN + 1;
+
+  if (wasReady) {
+    log.push({ t: 'roulette', side, outcome: 'activate' });
+    applyKoseiActive(state, side, rng, log, tookDamage, true);
+    return;
+  }
+
+  log.push({ t: 'roulette', side, outcome: 'restore' });
+  const k = kosei(c);
+  if (k.limit.kind === 'cooldown') c.koseiCd = 0;
+  else c.koseiUses = Math.min(k.limit.n, c.koseiUses + 1);
+  log.push({ t: 'move', side, moveName: 'ルーレット', category: 'support' });
   log.push({
-    t: 'result', side, moveName: 'まもる', attribute: null, kime: null, segKind: 'move',
-    affinity: null, statusJp: null, amount: 0, note: 'みをまもった！',
+    t: 'result', side, moveName: 'ルーレット', attribute: null, kime: null, segKind: 'move',
+    affinity: null, statusJp: null, amount: 0, note: 'こせいが つかえるように！',
   });
 }
 
 /**
  * CPU（ソロの相手）の構え。思考ロジックではなく単純ルール＋シード乱数。
- * こせいが使えるなら状況に応じて。瀕死なら守りがち、相手が瀕死なら攻めて決めにいく。
+ * こせいが使えないときは、たまにルーレットで回復を狙う。使えるときは状況に応じてそのまま使うか、
+ * 手持ちを温存しつつ低確率でルーレットに賭ける。
  */
 export function cpuStance(state: BattleState, side: Side, rng: Rng): Stance {
   const me = state.combatants[side];
@@ -322,10 +357,12 @@ export function cpuStance(state: BattleState, side: Side, rng: Rng): Stance {
     if (offensive && state.turn >= 4 && foePct > 0.4 && foePct < 0.75 && rng() < 0.4) return 'kosei';
     if (!offensive && myPct < 0.6 && rng() < 0.5) return 'kosei';
   }
-  if (foePct < 0.2) return 'attack';
-  if (myPct < 0.3) return rng() < 0.55 ? 'defend' : 'attack';
-  if (myPct < 0.55) return rng() < 0.22 ? 'defend' : 'attack';
-  return rng() < 0.07 ? 'defend' : 'attack';
+  if (foePct < 0.2) return 'attack'; // とどめのチャンスはルーレットで賭けない
+  if (rouletteReady(me)) {
+    if (!koseiReady(me) && rng() < 0.35) return 'roulette';
+    if (koseiReady(me) && rng() < 0.15) return 'roulette';
+  }
+  return 'attack';
 }
 
 function performAction(
@@ -577,14 +614,16 @@ function dealDamage(
   let base = move.power;
   if (move.id === 'fi_finish' && target.hp / target.maxHp < 0.4) base *= 1.6;
 
-  const atkTerm = 0.9 + effStat(actor, 'atk') / 64;
+  const atkTerm = 0.95 + effStat(actor, 'atk') / 42;
   let dmg = base * mult * atkTerm * affMult;
 
   const wetBolt = hasOwnAttr && atkAttr === 'bolt' && has(target, 'wet');
   if (wetBolt) dmg *= 1.6;
 
-  if (!move.pierce) dmg *= (50 / (50 + effStat(target, 'def'))) * (1 - target.guardPct / 110);
-  else dmg *= 1 - target.guardPct / 220;
+  // こせいパッシブ ironWill：常に少しかたい（guardPct 相当 +14）
+  const ironGuard = passiveIs(target, 'ironWill') ? 14 : 0;
+  if (!move.pierce) dmg *= (40 / (40 + effStat(target, 'def'))) * (1 - (target.guardPct + ironGuard) / 110);
+  else dmg *= 1 - (target.guardPct + ironGuard) / 220;
 
   if (has(target, 'curse')) dmg *= STATUS_META.curse.incomingMult;
 

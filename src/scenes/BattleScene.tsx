@@ -6,6 +6,7 @@ import {
   resolveTurn,
   cpuStance,
   koseiReady,
+  rouletteReady,
   getKosei,
   buildReel,
   archetypeLabel,
@@ -16,6 +17,7 @@ import {
   type SegKind,
   type Side,
   type Stance,
+  type RouletteOutcome,
 } from '../engine';
 import { STATUS_META } from '../engine/status';
 import { ATTRIBUTE_META } from '../engine/attributes';
@@ -64,6 +66,17 @@ const CAT_ICON: Record<string, string> = {
   ultra: '★',
 };
 
+const ROULETTE_COLOR: Record<RouletteOutcome, string> = {
+  activate: 'var(--crayon-yellow)',
+  restore: 'var(--crayon-green)',
+  miss: '#9fb0c0',
+};
+const ROULETTE_LABEL: Record<RouletteOutcome, string> = {
+  activate: '当たり！',
+  restore: '回復！',
+  miss: 'ハズレ…',
+};
+
 const MINI_STATS: [keyof Stats, string, number][] = [
   ['atk', 'こうげき', 62],
   ['def', 'ぼうぎょ', 62],
@@ -88,7 +101,7 @@ function reorderForPresser(events: BattleEvent[], presser: Side): BattleEvent[] 
         ? ((e as { side: number }).side as Side)
         : null;
     const startsSeg =
-      e.t === 'ring-spin' || e.t === 'skip' || e.t === 'defend' || e.t === 'kosei' || e.t === 'move';
+      e.t === 'ring-spin' || e.t === 'skip' || e.t === 'roulette' || e.t === 'kosei' || e.t === 'move';
     if (startsSeg && side !== null && (segs.length === 0 || segs[segs.length - 1].actor !== side)) {
       segs.push({ actor: side, events: [e] });
     } else if (segs.length === 0) {
@@ -122,11 +135,12 @@ export function BattleScene() {
   ]);
   const [shake, setShake] = useState<Side | null>(null);
   const [acting, setActing] = useState<Side | null>(null);
-  const [defendingSide, setDefendingSide] = useState<Side | null>(null);
+  const [rouletteSide, setRouletteSide] = useState<Side | null>(null);
+  const [rouletteOutcome, setRouletteOutcome] = useState<RouletteOutcome | null>(null);
   const [koseiSide, setKoseiSide] = useState<Side | null>(null);
   const [clash, setClash] = useState<string | null>(null);
   const [floats, setFloats] = useState<Floating[]>([]);
-  const [banner, setBanner] = useState('せめる・まもる・こせい！');
+  const [banner, setBanner] = useState('せめる・ルーレット・こせい！');
   const [resultCard, setResultCard] = useState<ResultCard | null>(null);
   const [ring, setRing] = useState<{ side: Side; landedIndex: number | null }>({ side: 0, landedIndex: null });
   const floatId = useRef(0);
@@ -140,6 +154,7 @@ export function BattleScene() {
   const kosei = getKosei(chars[presser].koseiId);
   const koseiCombatant = state.combatants[presser];
   const koseiOk = koseiReady(koseiCombatant);
+  const rouletteOk = rouletteReady(koseiCombatant);
   // 回数制は常に「のこり◯回」を出す。クールダウン制は使えない間だけ「あと◯ターン」。
   const koseiWait =
     kosei.limit.kind === 'count'
@@ -159,6 +174,7 @@ export function BattleScene() {
       setStage('playing');
       let i = 0;
       let koseiActor: Side | null = null;
+      let rouletteActor: Side | null = null;
       const setHp = (side: Side, hp: number) =>
         setDisplayHp((cur) => {
           const n = [...cur] as [number, number];
@@ -174,7 +190,8 @@ export function BattleScene() {
           setDisplayHp([finalState.combatants[0].hp, finalState.combatants[1].hp]);
           setState(finalState);
           setActing(null);
-          setDefendingSide(null);
+          setRouletteSide(null);
+          setRouletteOutcome(null);
           setKoseiSide(null);
           if (finalState.phase === 'done') setStage('over');
           else {
@@ -191,26 +208,39 @@ export function BattleScene() {
             setBanner(`ターン ${ev.turn}`);
             setResultCard(null);
             setActing(null);
-            setDefendingSide(null);
+            setRouletteSide(null);
+            setRouletteOutcome(null);
             setKoseiSide(null);
             break;
-          case 'defend':
-            setDefendingSide(ev.side);
+          case 'roulette': {
+            rouletteActor = ev.side;
+            setRouletteSide(ev.side);
+            setRouletteOutcome(ev.outcome);
             setKoseiSide(null);
-            setBanner(`${names[ev.side]} は みをまもった！`);
-            delay = 340;
+            setActing(null);
+            setBanner(`${names[ev.side]} の ルーレット … ${ROULETTE_LABEL[ev.outcome]}`);
+            delay = ev.outcome === 'activate' ? 420 : 620;
             break;
-          case 'kosei':
+          }
+          case 'kosei': {
+            const fromRoulette = rouletteActor === ev.side;
             koseiActor = ev.side;
             setKoseiSide(ev.side);
-            setDefendingSide(null);
+            setRouletteSide(null);
+            setRouletteOutcome(null);
             setActing(null);
-            setBanner(`${names[ev.side]} こせい「${ev.name}」！${ev.free ? '（7コマ！）' : ''}`);
+            setBanner(
+              `${names[ev.side]} こせい「${ev.name}」！` +
+                (ev.free ? (fromRoulette ? '（ルーレット！）' : '（7コマ！）') : ''),
+            );
             delay = 440;
             break;
+          }
           case 'ring-spin':
             setActing(null);
-            setDefendingSide(null);
+            setRouletteSide(null);
+            setRouletteOutcome(null);
+            rouletteActor = null;
             setKoseiSide(null);
             koseiActor = null;
             setResultCard(null);
@@ -226,8 +256,8 @@ export function BattleScene() {
             delay = 420;
             break;
           case 'move':
-            if (ev.moveName === 'まもる') {
-              setBanner(`${names[ev.side]} は みをまもった！`);
+            if (rouletteActor === ev.side) {
+              // ルーレットの結果バナーは roulette イベントで表示済み。
             } else if (koseiActor === ev.side) {
               // こせい技名は kosei イベントで表示済み。紫グロー継続。
             } else {
@@ -355,10 +385,10 @@ export function BattleScene() {
   const anyPinch = (pinch[0] || pinch[1]) && stage !== 'over';
   const foeLow = hpPct(foe) <= 0.2 && displayHp[foe] > 0;
 
-  // リールを見せる場面か（まもる/こせいの間は隠す）
+  // リールを見せる場面か（ルーレット/こせいの間は隠す）
   const showReel =
-    (stage === 'spin' && defendingSide == null && koseiSide == null) ||
-    (stage === 'playing' && defendingSide == null && koseiSide == null);
+    (stage === 'spin' && rouletteSide == null && koseiSide == null) ||
+    (stage === 'playing' && rouletteSide == null && koseiSide == null);
   const reelSpinning = stage === 'spin' ? reelPhase === 'reeling' : ring.landedIndex == null;
 
   return (
@@ -435,7 +465,7 @@ export function BattleScene() {
               statuses={chipsFor(s)}
               shake={shake === s}
               acting={acting === s}
-              defending={defendingSide === s}
+              roulette={rouletteSide === s ? rouletteOutcome : null}
               koseiing={koseiSide === s}
               pinch={pinch[s]}
               dir={s === 0 ? 1 : -1}
@@ -474,10 +504,16 @@ export function BattleScene() {
           </button>
           <button
             className="crayon-btn"
-            style={{ fontSize: '1.15rem', padding: '0.4em 1em' }}
-            onClick={() => runTurn('defend')}
+            style={{ fontSize: '1.15rem', padding: '0.4em 1em', opacity: rouletteOk ? 1 : 0.5 }}
+            disabled={!rouletteOk}
+            onClick={() => runTurn('roulette')}
           >
-            まもる
+            ルーレット
+            <span style={{ fontSize: '0.62em', display: 'block', opacity: 0.75 }}>
+              {rouletteOk
+                ? `（当たれば こせい${koseiOk ? '発動' : '回復'}）`
+                : `（あと${koseiCombatant.rouletteCd}ターン）`}
+            </span>
           </button>
           <button
             className="crayon-btn"
@@ -544,7 +580,7 @@ function StatBar({ label, value, max }: { label: string; value: number; max: num
 }
 
 function Fighter({
-  name, attribute, arche, koseiName, imageUrl, hp, maxHp, stats, statuses, shake, acting, defending, koseiing, pinch, dir, flip, floats,
+  name, attribute, arche, koseiName, imageUrl, hp, maxHp, stats, statuses, shake, acting, roulette, koseiing, pinch, dir, flip, floats,
 }: {
   name: string;
   attribute: Parameters<typeof AttributeBadge>[0]['attribute'];
@@ -557,13 +593,14 @@ function Fighter({
   statuses: StatusChip[];
   shake: boolean;
   acting: boolean;
-  defending: boolean;
+  roulette: RouletteOutcome | null;
   koseiing: boolean;
   pinch: boolean;
   dir: 1 | -1;
   flip?: boolean;
   floats: Floating[];
 }) {
+  const rouletteGood = roulette === 'activate' || roulette === 'restore';
   const pct = Math.max(0, (hp / maxHp) * 100);
   const low = pct <= 30;
   return (
@@ -664,8 +701,10 @@ function Fighter({
               ? { x: [0, -6, 6, -4, 0], rotate: [0, -3, 3, 0] }
               : acting
                 ? { x: dir * 18, y: -3 }
-                : defending
-                  ? { y: 3, scale: 0.94 }
+                : roulette
+                  ? rouletteGood
+                    ? { scale: 1.08, y: -5 }
+                    : { y: 4, scale: 0.94, rotate: [0, -2, 2, 0] }
                   : koseiing
                     ? { scale: 1.08, y: -4 }
                     : { x: 0, y: 0, scale: 1, rotate: dir * -1.5 }
@@ -675,9 +714,9 @@ function Fighter({
             width: '100%',
             height: '100%',
             borderRadius: '12px 16px 12px 14px',
-            ...(defending ? { boxShadow: '0 0 0 4px var(--crayon-blue)', background: 'rgba(47,125,209,0.14)' } : {}),
+            ...(roulette ? { boxShadow: `0 0 0 4px ${ROULETTE_COLOR[roulette]}`, background: 'rgba(0,0,0,0.06)' } : {}),
             ...(koseiing ? { boxShadow: '0 0 0 5px var(--crayon-purple)', background: 'rgba(123,92,240,0.16)' } : {}),
-            ...(imageUrl && !defending && !koseiing
+            ...(imageUrl && !roulette && !koseiing
               ? { background: '#fff', border: '3px solid var(--border)', boxShadow: '3px 4px 0 rgba(51,48,43,0.16)', padding: '0.25rem' }
               : imageUrl
                 ? { border: '3px solid var(--border)', padding: '0.25rem' }
@@ -686,9 +725,30 @@ function Fighter({
         >
           <CharacterSprite imageUrl={imageUrl} attribute={attribute} name={name} flip={flip} />
         </motion.div>
-        {(defending || koseiing) && (
+        {roulette && (
+          <div
+            style={{
+              position: 'absolute',
+              top: -14,
+              left: '50%',
+              transform: 'translateX(-50%)',
+              fontFamily: 'var(--font-display)',
+              fontSize: '0.85rem',
+              fontWeight: 700,
+              padding: '0.05rem 0.5rem',
+              borderRadius: 8,
+              border: '2px solid var(--border)',
+              background: ROULETTE_COLOR[roulette],
+              color: rouletteGood ? 'var(--ink)' : '#fff',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            🎰 {ROULETTE_LABEL[roulette]}
+          </div>
+        )}
+        {koseiing && (
           <div style={{ position: 'absolute', top: -6, left: '50%', transform: 'translateX(-50%)', fontSize: '1.4rem' }}>
-            {defending ? '🛡' : '✦'}
+            ✦
           </div>
         )}
         {floats.map((f) => (

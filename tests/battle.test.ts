@@ -114,23 +114,53 @@ describe('うんめいルーレット バトル', () => {
     expect(median).toBeLessThanOrEqual(22);
   });
 
-  it('まもる構え：被ダメが減り、少し回復し、状態異常が1つ消える', () => {
+  it('こせいルーレット：当たれば こせい発動、切れていれば回復。ハズレもある', () => {
     const l = drawn([210, 40, 30]);
     const r = drawn([30, 90, 210]);
-    let atkOnly = createBattleState(l, r, 5);
-    let bothDefend = createBattleState(l, r, 5);
-    // 数ターン、片方だけ「まもる」続けると、攻めっぱなしより HP が高く残る
-    for (let t = 0; t < 5; t++) {
-      atkOnly = resolveTurn(atkOnly, ['attack', 'attack']);
-      bothDefend = resolveTurn(bothDefend, ['defend', 'attack']);
+    const seen = new Set<string>();
+    for (let seed = 0; seed < 80; seed++) {
+      let cur = createBattleState(l, r, seed);
+      // こせいが使える状態でルーレット → activate / miss
+      cur = resolveTurn(cur, ['roulette', 'attack']);
+      for (const e of cur.log) if (e.t === 'roulette') seen.add(e.outcome);
+      // こせいを使い切る
+      for (let t = 0; t < 3 && cur.phase !== 'done' && koseiReady(cur.combatants[0]); t++) {
+        cur = resolveTurn(cur, ['kosei', 'attack']);
+      }
+      // こせいが切れた状態でルーレット → restore / miss
+      for (let t = 0; t < 3 && cur.phase !== 'done'; t++) {
+        cur = resolveTurn(cur, ['roulette', 'attack']);
+        for (const e of cur.log) if (e.t === 'roulette') seen.add(e.outcome);
+      }
     }
-    expect(bothDefend.combatants[0].hp).toBeGreaterThan(atkOnly.combatants[0].hp);
+    expect(seen.has('activate')).toBe(true);
+    expect(seen.has('restore')).toBe(true);
+    expect(seen.has('miss')).toBe(true);
   });
 
-  it('まもる同士でもバトルはいつか決着する（サドンデス）', () => {
+  it('ルーレットはHPを増減させない（当たりでこせいが撃たれた場合を除く）', () => {
+    const l = drawn([210, 40, 30]);
+    const r = drawn([30, 90, 210]);
+    let checkedNoActivate = 0;
+    for (let seed = 0; seed < 40; seed++) {
+      const cur = resolveTurn(createBattleState(l, r, seed), ['roulette', 'roulette']);
+      expect(cur.log.some((e) => e.t === 'roulette')).toBe(true);
+      const anyActivate = cur.log.some((e) => e.t === 'roulette' && e.outcome === 'activate');
+      if (!anyActivate) {
+        checkedNoActivate++;
+        expect(cur.log.some((e) => e.t === 'heal')).toBe(false);
+        expect(cur.log.some((e) => e.t === 'damage')).toBe(false);
+        expect(cur.combatants[0].hp).toBe(cur.combatants[0].maxHp);
+        expect(cur.combatants[1].hp).toBe(cur.combatants[1].maxHp);
+      }
+    }
+    expect(checkedNoActivate).toBeGreaterThan(0);
+  });
+
+  it('ルーレット同士でもバトルはいつか決着する（サドンデス）', () => {
     let cur = createBattleState(drawn([210, 40, 30]), drawn([30, 90, 210]), 9);
     let guard = 0;
-    while (cur.phase !== 'done' && guard++ < 60) cur = resolveTurn(cur, ['defend', 'defend']);
+    while (cur.phase !== 'done' && guard++ < 60) cur = resolveTurn(cur, ['roulette', 'roulette']);
     expect(cur.phase).toBe('done');
   });
 

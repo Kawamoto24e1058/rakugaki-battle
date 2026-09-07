@@ -15,7 +15,7 @@ export type KoseiPassive =
   | { kind: 'critUp'; add: number } // クリティカル率 +add
   | { kind: 'lastStand'; mult: number } // HP40%未満で こうげき ×mult
   | { kind: 'lifesteal'; pct: number } // 与ダメの pct% を回復
-  | { kind: 'ironWill' } // 常に被ダメ軽減（guardPct +12）／まもるが更に硬い
+  | { kind: 'ironWill' } // 常に被ダメ軽減（guardPct 相当 +14、恒常）
   | { kind: 'venom'; add: number }; // 攻撃の状態異常成功率 +add
 
 /** こせいボタンで撃つアクティブ効果。 */

@@ -30,8 +30,8 @@ describe('特徴抽出とキャラ生成', () => {
       expect(atk + def + spd).toBeLessThanOrEqual(101);
       expect(Math.min(atk, def, spd)).toBeGreaterThanOrEqual(13);
       expect(Math.max(atk, def, spd)).toBeLessThanOrEqual(52);
-      expect(hp).toBeGreaterThanOrEqual(76);
-      expect(hp).toBeLessThanOrEqual(172);
+      expect(hp).toBeGreaterThanOrEqual(50);
+      expect(hp).toBeLessThanOrEqual(118);
       expect(luck).toBeGreaterThanOrEqual(5);
       expect(heart).toBeGreaterThanOrEqual(5);
       expect(character.analysis.length).toBeGreaterThan(5);

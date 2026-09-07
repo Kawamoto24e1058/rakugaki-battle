@@ -17,8 +17,8 @@ export interface AnalysisOverrides {
 const MAIN_BASE = 90;
 const MAIN_MIN = 13;
 const MAIN_MAX = 52;
-const HP_MIN = 76;
-const HP_MAX = 172;
+const HP_MIN = 50;
+const HP_MAX = 118;
 const SUB_MIN = 5;
 const SUB_MAX = 34;
 
@@ -156,7 +156,7 @@ export function featuresToCharacter(
   const mainTotal = Math.round(MAIN_BASE * bstScale);
   const [atk, def, spd] = sharpenTriple(atkScore, defScore, spdScore, mainTotal);
 
-  const hpRaw = 78 + sharpen01(f.coverage / 0.35) * 88;
+  const hpRaw = 52 + sharpen01(f.coverage / 0.35) * 58;
   const hp = Math.max(HP_MIN, Math.min(HP_MAX, Math.round(hpRaw * bstScale)));
 
   const luck = scaleTo(

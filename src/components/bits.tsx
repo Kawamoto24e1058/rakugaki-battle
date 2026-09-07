@@ -33,7 +33,7 @@ const STAT_LABEL: Record<keyof Stats, string> = {
   luck: 'きゅうしょ',
   heart: 'こんじょう',
 };
-const STAT_MAX: Record<keyof Stats, number> = { hp: 200, atk: 62, def: 62, spd: 62, luck: 40, heart: 40 };
+const STAT_MAX: Record<keyof Stats, number> = { hp: 130, atk: 62, def: 62, spd: 62, luck: 40, heart: 40 };
 
 export function StatBars({ stats }: { stats: Stats }) {
   return (
