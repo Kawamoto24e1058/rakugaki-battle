@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react';
+import { motion } from 'framer-motion';
 import type { Character, Stats } from '../engine/types';
 import { ATTRIBUTE_META } from '../engine/attributes';
 
@@ -33,34 +34,62 @@ const STAT_LABEL: Record<keyof Stats, string> = {
   luck: 'きゅうしょ',
   heart: 'こんじょう',
 };
-const STAT_MAX: Record<keyof Stats, number> = { hp: 130, atk: 62, def: 62, spd: 62, luck: 40, heart: 40 };
+export const STAT_MAX: Record<keyof Stats, number> = { hp: 130, atk: 62, def: 62, spd: 62, luck: 40, heart: 40 };
+export const STAT_LABEL_JP = STAT_LABEL;
 
-export function StatBars({ stats }: { stats: Stats }) {
+/** 1本のゲージ。animate で 0 → 値 まで「ギュン」と伸びる。 */
+export function AnimatedStatBar({
+  label,
+  value,
+  max,
+  color = 'var(--crayon-yellow)',
+  animate = true,
+  big = false,
+}: {
+  label: string;
+  value: number;
+  max: number;
+  color?: string;
+  animate?: boolean;
+  big?: boolean;
+}) {
+  const pct = Math.max(2, Math.min(100, (value / max) * 100));
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: big ? '5rem 1fr 2.6rem' : '4.2rem 1fr 2.3rem', alignItems: 'center', gap: '0.5rem' }}>
+      <span style={{ fontSize: big ? '0.95rem' : '0.82rem' }}>{label}</span>
+      <span
+        style={{
+          height: big ? 18 : 13,
+          borderRadius: 8,
+          border: '2px solid var(--border)',
+          background: '#fff',
+          overflow: 'hidden',
+        }}
+      >
+        <motion.span
+          initial={animate ? { width: 0 } : { width: `${pct}%` }}
+          animate={{ width: `${pct}%` }}
+          transition={{ type: 'spring', stiffness: 130, damping: 11, delay: 0.05 }}
+          style={{ display: 'block', height: '100%', background: color }}
+        />
+      </span>
+      <motion.span
+        initial={animate ? { opacity: 0 } : { opacity: 1 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.35 }}
+        style={{ fontSize: big ? '1rem' : '0.88rem', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 700 }}
+      >
+        {value}
+      </motion.span>
+    </div>
+  );
+}
+
+export function StatBars({ stats, animate = false }: { stats: Stats; animate?: boolean }) {
   return (
     <div style={{ display: 'grid', gap: '0.35rem', width: '100%' }}>
       {(Object.keys(STAT_LABEL) as (keyof Stats)[]).map((k) => (
-        <div key={k} style={{ display: 'grid', gridTemplateColumns: '4.2rem 1fr 2.3rem', alignItems: 'center', gap: '0.5rem' }}>
-          <span style={{ fontSize: '0.82rem' }}>{STAT_LABEL[k]}</span>
-          <span
-            style={{
-              height: 13,
-              borderRadius: 8,
-              border: '2px solid var(--border)',
-              background: '#fff',
-              overflow: 'hidden',
-            }}
-          >
-            <span
-              style={{
-                display: 'block',
-                height: '100%',
-                width: `${Math.min(100, (stats[k] / STAT_MAX[k]) * 100)}%`,
-                background: 'var(--crayon-yellow)',
-              }}
-            />
-          </span>
-          <span style={{ fontSize: '0.88rem', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{stats[k]}</span>
-        </div>
+        <AnimatedStatBar key={k} label={STAT_LABEL[k]} value={stats[k]} max={STAT_MAX[k]} animate={animate} />
       ))}
     </div>
   );

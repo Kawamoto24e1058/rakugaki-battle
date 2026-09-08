@@ -21,6 +21,8 @@ interface CapturedSlot {
   character: Character;
   imageUrl: string | null;
   analysis: AnalyzeResult;
+  /** 解析方法。'ai' = Gemini、'local' = ピクセル解析フォールバック。 */
+  analyzedBy?: 'ai' | 'local';
 }
 
 interface GameState {

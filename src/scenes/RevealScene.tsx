@@ -1,10 +1,20 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useGame } from '../store/gameStore';
-import { AttributeBadge, StatBars, CharacterSprite } from '../components/bits';
+import { AttributeBadge, StatBars, AnimatedStatBar, STAT_MAX, STAT_LABEL_JP as STAT_JP, CharacterSprite } from '../components/bits';
 import { MOVES, moveStars, archetypeLabel, getKosei, limitJp } from '../engine';
+import type { Stats } from '../engine/types';
 
 const WEAPON_JP: Record<string, string> = { sword: 'ツメ・剣', wand: '杖', shield: '盾', wing: '翼' };
+
+/** リビールの理由キー → 一緒に見せるステータスゲージ。 */
+const REASON_STAT: Record<string, keyof Stats> = {
+  edge: 'atk',
+  sym: 'def',
+  slim: 'spd',
+  eyes: 'heart',
+  colors: 'luck',
+};
 
 export function RevealScene() {
   const player = useGame((s) => s.player);
@@ -12,7 +22,7 @@ export function RevealScene() {
   const [step, setStep] = useState(0);
 
   if (!player) return null;
-  const { character, imageUrl } = player;
+  const { character, imageUrl, analyzedBy } = player;
   const reasons = character.analysis;
   const done = step >= reasons.length;
 
@@ -21,6 +31,17 @@ export function RevealScene() {
       <h2 style={{ fontSize: '1.8rem', color: 'var(--crayon-blue)' }}>
         {done ? `「${character.name}」の たんじょう！` : 'えを しらべているよ…'}
       </h2>
+      <div
+        style={{
+          fontSize: '0.72rem',
+          padding: '0.1rem 0.6rem',
+          borderRadius: 999,
+          border: '2px solid var(--border)',
+          background: analyzedBy === 'ai' ? 'rgba(58,166,97,.18)' : 'rgba(0,0,0,.06)',
+        }}
+      >
+        {analyzedBy === 'ai' ? '🤖 AI が解析' : '✏️ かんたん解析（AIオフ / キー確認）'}
+      </div>
 
       <div
         className="sketch-card"
@@ -62,6 +83,44 @@ export function RevealScene() {
                 <span style={{ fontFamily: 'var(--font-display)', color: 'var(--crayon-red)', fontSize: '1.1rem' }}>
                   → {reasons[step].effect}
                 </span>
+
+                {/* ステータス系の理由なら、そのゲージも一緒に「ギュン」と伸ばす */}
+                {REASON_STAT[reasons[step].key] && (
+                  <div style={{ marginTop: '0.5rem' }}>
+                    <AnimatedStatBar
+                      big
+                      label={STAT_JP[REASON_STAT[reasons[step].key]]}
+                      value={character.baseStats[REASON_STAT[reasons[step].key]]}
+                      max={STAT_MAX[REASON_STAT[reasons[step].key]]}
+                      color="var(--crayon-red)"
+                    />
+                  </div>
+                )}
+                {reasons[step].key === 'arche' && (
+                  <div style={{ display: 'grid', gap: '0.3rem', marginTop: '0.5rem' }}>
+                    {(['atk', 'def', 'spd'] as (keyof Stats)[]).map((k) => (
+                      <AnimatedStatBar
+                        key={k}
+                        big
+                        label={STAT_JP[k]}
+                        value={character.baseStats[k]}
+                        max={STAT_MAX[k]}
+                        color="var(--crayon-red)"
+                      />
+                    ))}
+                  </div>
+                )}
+                {reasons[step].key === 'power' && (
+                  <div style={{ marginTop: '0.5rem' }}>
+                    <AnimatedStatBar
+                      big
+                      label="ぜんたい"
+                      value={character.baseStats.atk + character.baseStats.def + character.baseStats.spd}
+                      max={110}
+                      color="var(--crayon-purple)"
+                    />
+                  </div>
+                )}
               </motion.div>
             </AnimatePresence>
           </div>
@@ -95,7 +154,7 @@ export function RevealScene() {
                 {WEAPON_JP[character.weapon]} ・ {character.personality === 'aggressive' ? '好戦的' : '穏やか'}
               </span>
             </div>
-            <StatBars stats={character.baseStats} />
+            <StatBars stats={character.baseStats} animate />
             {(() => {
               const k = getKosei(character.koseiId);
               return (

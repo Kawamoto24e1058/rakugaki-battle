@@ -22,9 +22,34 @@ import {
   type Side,
 } from '../engine';
 import { STATUS_META } from '../engine/status';
-import { getMove } from '../engine/moves';
+import { getMove, type MoveDef } from '../engine/moves';
+import { ATTRIBUTE_META } from '../engine/attributes';
 import type { Character } from '../engine/types';
 import { CharacterSprite, AttributeBadge } from '../components/bits';
+
+const CAT_WORD: Record<MoveDef['category'], string> = { attack: 'こうげき', support: 'ほじょ' };
+
+/** わざの効果を短い箇条書きに（ホバーの詳細ポップアップ用）。 */
+function moveDetailLines(m: MoveDef): string[] {
+  const out: string[] = [];
+  if (m.category === 'attack') out.push(`威力 ${m.power}${m.pierce ? '・ぼうぎょ無視' : ''}`);
+  if (m.attribute) out.push(`属性：${ATTRIBUTE_META[m.attribute].jp}`);
+  if (m.first) out.push('かならず 先制');
+  if (m.status) {
+    const s = m.status;
+    out.push(`${Math.round(s.chance * 100)}% で ${STATUS_META[s.kind].jp}${s.toSelf ? '（自分）' : ''}`);
+  }
+  if (m.cures) out.push(m.cures === 'all' ? '状態異常を ぜんぶ なおす' : '状態異常を 1つ なおす');
+  if (m.heal) out.push(`HP ${m.heal} かいふく`);
+  if (m.buff) out.push(`${m.buff.stat} アップ（${m.buff.turns}ターン）`);
+  if (m.debuff) out.push(`あいての ${m.debuff.stat} ダウン`);
+  if (m.guardPct) out.push(`このターン 被ダメ -${m.guardPct}%`);
+  if (m.reflect) out.push(`受けたダメージを ${m.reflect}% 返す`);
+  if (m.drain) out.push(`与ダメの ${m.drain}% 回復`);
+  if (m.recoil) out.push(`反動 ${m.recoil}%`);
+  if (m.cooldown > 0) out.push(`クールダウン ${m.cooldown}`);
+  return out;
+}
 
 const TRI: TriStance[] = ['power', 'tech', 'speed'];
 /** 表示順（サイクルが読める順）：速さ → 力 → 技 → …。 */
@@ -415,48 +440,105 @@ function TriangleGuide() {
   );
 }
 
+function Tip({ title, sub, lines, desc }: { title: string; sub?: string; lines: string[]; desc?: string }) {
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        bottom: 'calc(100% + 8px)',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        width: 'min(15rem, 70vw)',
+        background: '#fff',
+        border: '2.5px solid var(--ink)',
+        borderRadius: 10,
+        padding: '0.5rem 0.65rem',
+        textAlign: 'left',
+        fontWeight: 400,
+        color: 'var(--ink)',
+        boxShadow: '3px 4px 0 rgba(0,0,0,.18)',
+        zIndex: 20,
+        pointerEvents: 'none',
+      }}
+    >
+      <div style={{ fontFamily: 'var(--font-display)', fontSize: '0.95rem' }}>
+        {title}
+        {sub && <span style={{ fontSize: '0.72rem', color: 'var(--ink-soft)' }}>　{sub}</span>}
+      </div>
+      {lines.map((l, i) => (
+        <div key={i} style={{ fontSize: '0.76rem' }}>
+          ・{l}
+        </div>
+      ))}
+      {desc && <div style={{ fontSize: '0.72rem', color: 'var(--ink-soft)', marginTop: 3 }}>{desc}</div>}
+    </div>
+  );
+}
+
 function StanceButtons({ onPick, me }: { onPick: (s: ClashStance) => void; me: ClashCombatant }) {
-  const kName = getKosei(me.koseiId).activeName;
+  const kosei = getKosei(me.koseiId);
   const canKosei = koseiReady(me);
+  const [hover, setHover] = useState<ClashStance | null>(null);
 
   const triBtn = (s: TriStance) => {
     const mv = stanceMoveDef(me, s);
+    const powWord = mv.category === 'attack' ? `威力${mv.power}` : 'ほじょ';
     return (
-      <button
-        key={s}
-        className="crayon-btn"
-        onClick={() => onPick(s)}
-        style={{ borderColor: BTN_COLOR[s], color: BTN_COLOR[s], minWidth: '7rem', fontWeight: 700, padding: '0.35em 0.7em' }}
-      >
-        {ICON[s]} {STANCE_JP[s]}
-        <span style={{ display: 'block', fontSize: '0.62em', opacity: 0.95 }}>「{mv.name}」</span>
-        <span style={{ display: 'block', fontSize: '0.52em', opacity: 0.8, color: STANCE_COLOR[STANCE_BEATS[s]] }}>
-          {STANCE_JP[STANCE_BEATS[s]]}に かつ ／ {STANCE_JP[LOSES_TO[s]]}に よわい
-        </span>
-      </button>
+      <div key={s} style={{ position: 'relative' }} onMouseEnter={() => setHover(s)} onMouseLeave={() => setHover(null)}>
+        {hover === s && (
+          <Tip
+            title={mv.name}
+            sub={`${STANCE_JP[s]}・${CAT_WORD[mv.category]}`}
+            lines={moveDetailLines(mv)}
+            desc={mv.desc || undefined}
+          />
+        )}
+        <button
+          className="crayon-btn"
+          onClick={() => onPick(s)}
+          style={{ borderColor: BTN_COLOR[s], color: BTN_COLOR[s], minWidth: '7.2rem', fontWeight: 700, padding: '0.35em 0.7em' }}
+        >
+          {ICON[s]} {STANCE_JP[s]}
+          <span style={{ display: 'block', fontSize: '0.6em', opacity: 0.95 }}>
+            「{mv.name}」<span style={{ opacity: 0.7 }}>{powWord}</span>
+          </span>
+          <span style={{ display: 'block', fontSize: '0.5em', opacity: 0.8, color: STANCE_COLOR[STANCE_BEATS[s]] }}>
+            {STANCE_JP[STANCE_BEATS[s]]}に かつ ／ {STANCE_JP[LOSES_TO[s]]}に よわい
+          </span>
+        </button>
+      </div>
     );
   };
 
   return (
     <div style={{ display: 'flex', gap: '0.55rem', flexWrap: 'wrap', justifyContent: 'center', width: '100%', maxWidth: '48rem' }}>
       {TRI.map(triBtn)}
-      <button
-        className="crayon-btn"
-        disabled={!canKosei}
-        onClick={() => onPick('kosei')}
-        style={{
-          borderColor: BTN_COLOR.kosei,
-          color: BTN_COLOR.kosei,
-          minWidth: '6.5rem',
-          fontWeight: 700,
-          opacity: canKosei ? 1 : 0.45,
-        }}
-      >
-        ★ こせい
-        <span style={{ display: 'block', fontSize: '0.56em', opacity: 0.8 }}>
-          {canKosei ? kName : 'いま つかえない'}
-        </span>
-      </button>
+      <div style={{ position: 'relative' }} onMouseEnter={() => setHover('kosei')} onMouseLeave={() => setHover(null)}>
+        {hover === 'kosei' && (
+          <Tip
+            title={kosei.activeName}
+            sub={`こせい・${kosei.tagline}`}
+            lines={[`パッシブ：${kosei.passiveJp}`, `効果：${kosei.activeJp}`]}
+          />
+        )}
+        <button
+          className="crayon-btn"
+          disabled={!canKosei}
+          onClick={() => onPick('kosei')}
+          style={{
+            borderColor: BTN_COLOR.kosei,
+            color: BTN_COLOR.kosei,
+            minWidth: '6.5rem',
+            fontWeight: 700,
+            opacity: canKosei ? 1 : 0.45,
+          }}
+        >
+          ★ こせい
+          <span style={{ display: 'block', fontSize: '0.56em', opacity: 0.8 }}>
+            {canKosei ? kosei.activeName : 'いま つかえない'}
+          </span>
+        </button>
+      </div>
     </div>
   );
 }

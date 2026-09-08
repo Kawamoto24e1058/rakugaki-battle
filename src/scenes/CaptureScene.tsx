@@ -147,8 +147,8 @@ export function CaptureScene() {
       const overrides: AnalysisOverrides = {};
       if (attr !== 'auto') overrides.attribute = attr;
       if (weapon !== 'auto') overrides.weapon = weapon;
-      const { result } = await analyzeWithAI(img, overrides);
-      setCaptured({ character: result.character, imageUrl, analysis: result });
+      const { result, via } = await analyzeWithAI(img, overrides);
+      setCaptured({ character: result.character, imageUrl, analysis: result, analyzedBy: via });
     } catch {
       setCameraError('うまく よみとれませんでした。もういちど とってみてね。');
       setStage('camera');
