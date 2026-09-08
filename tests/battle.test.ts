@@ -32,10 +32,13 @@ describe('生成キャラの技セット・こせい', () => {
     }
   });
 
-  it('こせい：60種以上あり、生成キャラは必ず有効なこせいを持つ', () => {
-    expect(KOSEI_LIST.length).toBeGreaterThanOrEqual(60);
+  it('こせい：120種（24テンプレ×5属性）で全て 属性＋形タグを持つ・生成キャラは有効なこせい', () => {
+    expect(KOSEI_LIST.length).toBe(120);
     for (const a of ['fire', 'water', 'wood', 'bolt', 'dark']) {
-      expect(KOSEI_LIST.some((k) => k.tags.includes(`attr:${a}`))).toBe(true);
+      expect(KOSEI_LIST.filter((k) => k.tags.includes(`attr:${a}`)).length).toBe(24);
+    }
+    for (const k of KOSEI_LIST) {
+      expect(k.tags.some((t) => t.startsWith('shape:'))).toBe(true);
     }
     for (let s = 0; s < 30; s++) {
       const c = drawn([(s * 53) % 256, (s * 97) % 256, (s * 29) % 256], 50 + (s % 50), 60 + (s % 60));

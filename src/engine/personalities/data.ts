@@ -73,21 +73,6 @@ function jpStatus(s: StatusKind): string {
   return m[s] ?? s;
 }
 
-/** 個性を1件つくる短縮ビルダー。 */
-function K(
-  id: string,
-  name: string,
-  tagline: string,
-  tags: string[],
-  passive: KoseiPassive,
-  active: KoseiActive,
-  activeName: string,
-  activeJp: string,
-  limit: KoseiLimit,
-): Kosei {
-  return { id, name, tagline, tags, passive, passiveJp: passiveText(passive), active, activeName, activeJp, limit };
-}
-
 const CD = (turns: number): KoseiLimit => ({ kind: 'cooldown', turns });
 const N = (n: number): KoseiLimit => ({ kind: 'count', n });
 
@@ -95,62 +80,128 @@ const N = (n: number): KoseiLimit => ({ kind: 'count', n });
 const ATTR_ST: Record<Attribute, StatusKind> = {
   fire: 'burn', water: 'wet', wood: 'bind', bolt: 'shock', dark: 'curse',
 };
+const ATTR_WORD: Record<Attribute, string> = {
+  fire: 'ほのお', water: 'みず', wood: 'もり', bolt: 'いかずち', dark: 'やみ',
+};
 
-/**
- * 属性 × テーマ でこせいを量産するテンプレ。
- * theme: attacker / bruiser / fortress / speed / trick / mystic / vampire / berserk
- */
-function pack(attr: Attribute, prefixes: [string, string, string, string]): Kosei[] {
-  const st = ATTR_ST[attr];
-  const [p0, p1, p2, p3] = prefixes;
-  const A = `attr:${attr}`;
-  return [
-    K(`${attr}_avatar`, `${p0}の化身`, `${p0}をあやつる強い子`, [A, 'mood:fierce', 'deco:colorful'],
-      { kind: 'immune', status: st }, { kind: 'stormStatus', power: 40, status: st },
-      `${p0}のいかり`, `威力大。ほぼ確実に ${jpStatus(st)}（長め）`, CD(3)),
-    K(`${attr}_fist`, `${p0}のこぶし`, `パンチが とにかく重い`, [A, 'shape:spiky', 'weapon:sword', 'mood:fierce'],
-      { kind: 'atkUp', mult: 1.14 }, { kind: 'smash', power: 50, pierce: true },
-      `${p1}クラッシュ`, '威力特大。ぼうぎょ無視の一撃', CD(3)),
-    K(`${attr}_wall`, `${p0}のとりで`, `とにかく かたい`, [A, 'shape:round', 'shape:wide', 'weapon:shield', 'shape:symmetric'],
-      { kind: 'ironWill' }, { kind: 'fortress', guardPct: 88, reflect: 45 },
-      `${p2}バリア`, '2ターン、ほぼ無敵＋受けたダメージを返す', N(2)),
-    K(`${attr}_gale`, `${p0}のはやて`, `だれよりも 速い`, [A, 'shape:tall', 'part:wings', 'shape:small'],
-      { kind: 'firstMove' }, { kind: 'barrage', hits: 3, power: 18 },
-      `${p3}ラッシュ`, '3回れんぞく攻撃', CD(3)),
-    K(`${attr}_trick`, `${p0}のまやかし`, `よめない うごき`, [A, 'shape:asymmetric', 'part:eyes'],
-      { kind: 'venom', add: 0.25 }, { kind: 'hex' },
-      `${p2}ジャマー`, '相手の こうげき・ぼうぎょ・すばやさ を下げる（3ターン）', CD(3)),
-    K(`${attr}_priest`, `${p0}のめぐみ`, `やさしい いやし手`, [A, 'mood:calm', 'shape:round'],
-      { kind: 'regen', pct: 0.045 }, { kind: 'mend', pct: 0.34 },
-      `${p1}のいのり`, 'HPを大きく回復＋状態異常ぜんぶ回復', N(2)),
-    K(`${attr}_vampire`, `${p0}のきば`, `うばって 生きる`, [A, 'shape:spiky', 'mood:fierce', 'part:eyes'],
-      { kind: 'lifesteal', pct: 0.18 }, { kind: 'leech', power: 40, drainPct: 80 },
-      `${p3}ドレイン`, '威力大。与えたダメージの多くを回復', CD(3)),
-    K(`${attr}_berserk`, `${p2}のいかり`, `おいつめられるほど 強い`, [A, 'mood:fierce', 'shape:spiky', 'deco:plain'],
-      { kind: 'lastStand', mult: 1.3 }, { kind: 'vengeance', base: 22 },
-      `${p1}リベンジ`, '減ったHPが多いほど 威力アップ', CD(2)),
-    K(`${attr}_sniper`, `${p0}のねらい`, `急所を つく`, [A, 'part:eyes', 'shape:tall'],
-      { kind: 'critUp', add: 0.09 }, { kind: 'smash', power: 42, status: st },
-      `${p3}スナイプ`, '威力大。急所に当たりやすい＋状態異常', CD(3)),
-    K(`${attr}_champion`, `${p0}のたましい`, `気合で 押し切る`, [A, 'deco:plain', 'shape:big', 'mood:fierce'],
-      { kind: 'atkUp', mult: 1.1 }, { kind: 'warcry' },
-      `${p2}オーラ`, '3ターン、自分の こうげき・すばやさ 大アップ', N(2)),
-    K(`${attr}_guardian`, `${p2}のまもり`, `みんなを まもる`, [A, 'shape:symmetric', 'shape:big', 'weapon:shield', 'mood:calm'],
-      { kind: 'defUp', mult: 1.16 }, { kind: 'mend', pct: 0.24 },
-      `${p1}ヒール`, 'HPを回復＋状態異常ぜんぶ回復', N(2)),
-    K(`${attr}_chaos`, `${p3}のまつり`, `なにが 起きるか わからない`, [A, 'deco:colorful', 'shape:asymmetric'],
-      { kind: 'spdUp', mult: 1.12 }, { kind: 'wildcard' },
-      `${p1}ガチャ`, 'ランダムで 大ダメージ／全回復／相手を弱体', CD(2)),
-  ];
+type ShapeKey = 'spiky' | 'round' | 'tall' | 'wide' | 'big' | 'small';
+
+interface KTemplate {
+  key: string;
+  /** 名前の役割ことば（表示名は「${属性}の${role}」）。 */
+  role: string;
+  tagline: string;
+  shape: ShapeKey;
+  passive: KoseiPassive;
+  active: (st: StatusKind) => KoseiActive;
+  activeName: string;
+  activeJp: (st: StatusKind) => string;
+  limit: KoseiLimit;
 }
 
-export const KOSEI_LIST: Kosei[] = [
-  ...pack('fire', ['ほのお', 'フレア', 'バーン', 'ヒート']),
-  ...pack('water', ['みず', 'アクア', 'スプラッシュ', 'タイダル']),
-  ...pack('wood', ['もり', 'リーフ', 'ブルーム', 'ルート']),
-  ...pack('bolt', ['いかずち', 'ボルト', 'スパーク', 'サンダー']),
-  ...pack('dark', ['やみ', 'シャドウ', 'ダーク', 'ヴォイド']),
+/** 24 の「戦い方テンプレ」。形（shape）でマッチさせる。属性 × 24 = 120 こせい。 */
+const TEMPLATES: KTemplate[] = [
+  // トゲトゲ
+  { key: 'berserk', role: 'あばれ者', tagline: 'おいつめられるほど 強い', shape: 'spiky',
+    passive: { kind: 'lastStand', mult: 1.32 }, active: () => ({ kind: 'vengeance', base: 22 }),
+    activeName: 'リベンジ', activeJp: () => '減ったHPが多いほど 威力アップ', limit: CD(2) },
+  { key: 'thorn', role: 'トゲの王', tagline: 'さわると いたい', shape: 'spiky',
+    passive: { kind: 'thorns', pct: 0.3 }, active: () => ({ kind: 'fortress', guardPct: 80, reflect: 55 }),
+    activeName: 'トゲよろい', activeJp: () => '2ターン、鉄壁＋受けたダメージを大きく返す', limit: N(2) },
+  { key: 'fang', role: 'キバの子', tagline: 'うばって 生きる', shape: 'spiky',
+    passive: { kind: 'lifesteal', pct: 0.16 }, active: () => ({ kind: 'leech', power: 40, drainPct: 80 }),
+    activeName: 'まるかじり', activeJp: () => '威力大。与えたダメージの多くを回復', limit: CD(3) },
+  { key: 'edge', role: '刃のたましい', tagline: 'いちげき ひっさつ', shape: 'spiky',
+    passive: { kind: 'critUp', add: 0.1 }, active: () => ({ kind: 'smash', power: 44, pierce: true }),
+    activeName: 'いちげき', activeJp: () => '威力特大。ぼうぎょ無視＋急所に当たりやすい', limit: CD(3) },
+
+  // まる
+  { key: 'heal', role: 'いやし手', tagline: 'やさしい', shape: 'round',
+    passive: { kind: 'regen', pct: 0.05 }, active: () => ({ kind: 'mend', pct: 0.36 }),
+    activeName: 'いやしのひかり', activeJp: () => 'HPを大きく回復＋状態異常ぜんぶ回復', limit: N(2) },
+  { key: 'shell', role: 'まる盾', tagline: 'とにかく かたい', shape: 'round',
+    passive: { kind: 'ironWill' }, active: () => ({ kind: 'fortress', guardPct: 88, reflect: 35 }),
+    activeName: 'まるまるガード', activeJp: () => '2ターン、ほぼ無敵＋反射', limit: N(2) },
+  { key: 'bounce', role: 'はねっ子', tagline: 'ぴょんぴょん とぶ', shape: 'round',
+    passive: { kind: 'spdUp', mult: 1.14 }, active: () => ({ kind: 'barrage', hits: 3, power: 16 }),
+    activeName: 'ぽんぽん連打', activeJp: () => '3回れんぞく攻撃', limit: CD(3) },
+  { key: 'lucky', role: 'ラッキー', tagline: 'なにが 起きるか わからない', shape: 'round',
+    passive: { kind: 'critUp', add: 0.08 }, active: () => ({ kind: 'wildcard' }),
+    activeName: 'なにが出るかな', activeJp: () => 'ランダムで 大ダメージ／全回復／相手を弱体', limit: CD(2) },
+
+  // たて長
+  { key: 'sniper', role: 'ねらい手', tagline: '急所を つく', shape: 'tall',
+    passive: { kind: 'critUp', add: 0.11 }, active: (st) => ({ kind: 'smash', power: 42, status: st }),
+    activeName: 'スナイプ', activeJp: (st) => `威力大。急所＋${jpStatus(st)}`, limit: CD(3) },
+  { key: 'quick', role: 'いちばん速い子', tagline: 'だれよりも 速い', shape: 'tall',
+    passive: { kind: 'firstMove' }, active: () => ({ kind: 'barrage', hits: 3, power: 18 }),
+    activeName: 'だっしゅ連撃', activeJp: () => '3回れんぞく攻撃・先手', limit: CD(3) },
+  { key: 'reach', role: 'のびる子', tagline: 'とおくまで とどく', shape: 'tall',
+    passive: { kind: 'venom', add: 0.2 }, active: (st) => ({ kind: 'stormStatus', power: 34, status: st }),
+    activeName: 'からめとり', activeJp: (st) => `威力大。ほぼ確実に ${jpStatus(st)}（長め）`, limit: CD(3) },
+  { key: 'seer', role: '見とおす目', tagline: 'ぜんぶ おみとおし', shape: 'tall',
+    passive: { kind: 'spdUp', mult: 1.1 }, active: () => ({ kind: 'hex' }),
+    activeName: 'みやぶり', activeJp: () => '相手の こうげき・ぼうぎょ・すばやさ を下げる（3ターン）', limit: CD(3) },
+
+  // よこ広
+  { key: 'bruiser', role: 'パワータイプ', tagline: 'パンチが 重い', shape: 'wide',
+    passive: { kind: 'atkUp', mult: 1.14 }, active: () => ({ kind: 'smash', power: 50, pierce: true }),
+    activeName: 'パワークラッシュ', activeJp: () => '威力特大。ぼうぎょ無視', limit: CD(3) },
+  { key: 'tank', role: 'どっしり型', tagline: 'びくとも しない', shape: 'wide',
+    passive: { kind: 'defUp', mult: 1.18 }, active: () => ({ kind: 'fortress', guardPct: 85, reflect: 30 }),
+    activeName: 'てっぺき', activeJp: () => '2ターン、鉄壁＋反射', limit: N(2) },
+  { key: 'rock', role: '動かない子', tagline: 'ふんばりが つよい', shape: 'wide',
+    passive: { kind: 'ironWill' }, active: () => ({ kind: 'warcry' }),
+    activeName: 'ふんばりオーラ', activeJp: () => '3ターン、自分の こうげき・すばやさ 大アップ', limit: N(2) },
+  { key: 'quake', role: 'じしんの子', tagline: 'ずしんと くる', shape: 'wide',
+    passive: { kind: 'atkUp', mult: 1.1 }, active: () => ({ kind: 'vengeance', base: 26 }),
+    activeName: 'ゆさぶり', activeJp: () => '減ったHPが多いほど 威力アップ', limit: CD(2) },
+
+  // 大きい
+  { key: 'champ', role: 'チャンピオン', tagline: '気合で 押し切る', shape: 'big',
+    passive: { kind: 'atkUp', mult: 1.12 }, active: () => ({ kind: 'warcry' }),
+    activeName: 'たたかいのうた', activeJp: () => '3ターン、こうげき・すばやさ 大アップ', limit: N(2) },
+  { key: 'titan', role: 'きょじん', tagline: 'ピンチで めざめる', shape: 'big',
+    passive: { kind: 'lastStand', mult: 1.3 }, active: () => ({ kind: 'smash', power: 48 }),
+    activeName: 'だいちのいちげき', activeJp: () => '威力特大', limit: CD(3) },
+  { key: 'king', role: 'おうさま', tagline: 'みんなを まもる', shape: 'big',
+    passive: { kind: 'defUp', mult: 1.16 }, active: () => ({ kind: 'mend', pct: 0.26 }),
+    activeName: 'おうのいのり', activeJp: () => 'HPを回復＋状態異常ぜんぶ回復', limit: N(2) },
+  { key: 'glutton', role: 'たべる子', tagline: 'なんでも たべる', shape: 'big',
+    passive: { kind: 'lifesteal', pct: 0.2 }, active: () => ({ kind: 'leech', power: 44, drainPct: 85 }),
+    activeName: 'まるのみ', activeJp: () => '威力大。多く回復', limit: CD(3) },
+
+  // 小さい
+  { key: 'trick', role: 'いたずらっ子', tagline: 'よめない うごき', shape: 'small',
+    passive: { kind: 'venom', add: 0.26 }, active: () => ({ kind: 'hex' }),
+    activeName: 'まぜっかえし', activeJp: () => '相手を弱体（3ターン）＋小ダメージ', limit: CD(3) },
+  { key: 'sprite', role: 'ようせい', tagline: 'ちいさな いやし手', shape: 'small',
+    passive: { kind: 'regen', pct: 0.05 }, active: () => ({ kind: 'mend', pct: 0.3 }),
+    activeName: 'ようせいのめぐみ', activeJp: () => 'HP回復＋状態異常ぜんぶ回復', limit: N(2) },
+  { key: 'gremlin', role: 'こわっぱ', tagline: 'なにを するか わからない', shape: 'small',
+    passive: { kind: 'spdUp', mult: 1.12 }, active: () => ({ kind: 'wildcard' }),
+    activeName: 'いたずらガチャ', activeJp: () => 'ランダムで 大ダメージ／全回復／弱体', limit: CD(2) },
+  { key: 'pest', role: 'しつこい子', tagline: 'まとわりつく', shape: 'small',
+    passive: { kind: 'venom', add: 0.3 }, active: (st) => ({ kind: 'stormStatus', power: 30, status: st }),
+    activeName: 'まとわりつき', activeJp: (st) => `ほぼ確実に ${jpStatus(st)}（長め）`, limit: CD(3) },
 ];
+
+export const KOSEI_LIST: Kosei[] = (['fire', 'water', 'wood', 'bolt', 'dark'] as Attribute[]).flatMap((attr) => {
+  const st = ATTR_ST[attr];
+  const w = ATTR_WORD[attr];
+  return TEMPLATES.map<Kosei>((t) => ({
+    id: `${attr}_${t.key}`,
+    name: `${w}の${t.role}`,
+    tagline: t.tagline,
+    tags: [`attr:${attr}`, `shape:${t.shape}`],
+    passive: t.passive,
+    passiveJp: passiveText(t.passive),
+    active: t.active(st),
+    activeName: t.activeName,
+    activeJp: t.activeJp(st),
+    limit: t.limit,
+  }));
+});
 
 const KOSEI_BY_ID = new Map(KOSEI_LIST.map((k) => [k.id, k]));
 

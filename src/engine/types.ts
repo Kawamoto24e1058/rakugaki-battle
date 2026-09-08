@@ -71,6 +71,8 @@ export interface Character {
   movePool: string[];
   /** こせい（パッシブ＋専用アクティブ）のID。絵の特徴で決まる。 */
   koseiId: string;
+  /** こせい名の前につく二つ名（例「あばれん坊の」）。表示上の個性を増やす。 */
+  koseiTitle?: string;
   /** 属性技の段階 1〜3（進化で上がる）。 */
   skillLevel: number;
   analysis: AnalysisReason[];

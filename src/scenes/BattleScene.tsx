@@ -116,6 +116,8 @@ interface Beat {
   ms: number;
   /** 勝利演出（決着の場面のみ）。 */
   win?: Side;
+  /** こせい発動のカットイン。 */
+  koseiAct?: { side: Side; moveName: string };
 }
 
 type Phase = 'choose-p1' | 'handoff' | 'choose-p2' | 'animating' | 'over';
@@ -142,7 +144,14 @@ function buildBeats(
 
   const add = (
     banner: string,
-    opts: { cut?: Beat['cut']; flash?: boolean; impact?: string | null; ms?: number; win?: Side } = {},
+    opts: {
+      cut?: Beat['cut'];
+      flash?: boolean;
+      impact?: string | null;
+      ms?: number;
+      win?: Side;
+      koseiAct?: Beat['koseiAct'];
+    } = {},
   ) => {
     beats.push({
       view: {
@@ -158,6 +167,7 @@ function buildBeats(
       impact: opts.impact ?? null,
       ms: opts.ms ?? 2000,
       win: opts.win,
+      koseiAct: opts.koseiAct,
     });
   };
 
@@ -176,7 +186,13 @@ function buildBeats(
         );
         break;
       case 'act':
-        if (ev.moveName.startsWith('（')) {
+        if (ev.stance === 'kosei') {
+          acting = ev.side;
+          add(`${names[ev.side]} こせい はつどう！`, {
+            koseiAct: { side: ev.side, moveName: ev.moveName },
+            ms: 2600,
+          });
+        } else if (ev.moveName.startsWith('（')) {
           add(`${names[ev.side]} は ${ev.moveName.replace(/[（）]/g, '')}`);
         } else {
           acting = ev.side;
@@ -422,6 +438,16 @@ export function BattleScene() {
       {curBeat?.cut && <ClashCut cut={curBeat.cut} names={names} />}
       {curBeat?.win != null && (
         <VictoryOverlay name={names[curBeat.win]} char={chars[curBeat.win]} image={images[curBeat.win]} />
+      )}
+      {curBeat?.koseiAct && (
+        <KoseiCutIn
+          key={beatIdx}
+          name={names[curBeat.koseiAct.side]}
+          char={chars[curBeat.koseiAct.side]}
+          image={images[curBeat.koseiAct.side]}
+          side={curBeat.koseiAct.side}
+          moveName={curBeat.koseiAct.moveName}
+        />
       )}
 
       <div style={{ display: 'flex', gap: 'clamp(.6rem,3vw,1.5rem)', width: '100%', maxWidth: '48rem' }}>
@@ -678,6 +704,112 @@ function StanceButtons({ onPick, me }: { onPick: (s: ClashStance) => void; me: C
           <span style={{ fontSize: '0.72rem', opacity: 0.8 }}>{kosei.tagline}</span>
         </button>
       </div>
+    </div>
+  );
+}
+
+/** こせい発動のカットイン：黒帯＋紫の閃光＋斜めスライドするキャラ＋こせい名。 */
+function KoseiCutIn({
+  name,
+  char,
+  image,
+  side,
+  moveName,
+}: {
+  name: string;
+  char: Character;
+  image: string | null;
+  side: Side;
+  moveName: string;
+}) {
+  const kosei = getKosei(char.koseiId);
+  const dir = side === 0 ? -1 : 1;
+  const fullName = `${char.koseiTitle ?? ''}${kosei.name}`;
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 46,
+        pointerEvents: 'none',
+        overflow: 'hidden',
+        display: 'grid',
+        placeItems: 'center',
+      }}
+    >
+      {/* 黒帯 */}
+      <motion.div
+        initial={{ scaleY: 0 }}
+        animate={{ scaleY: 1 }}
+        transition={{ duration: 0.18 }}
+        style={{
+          position: 'absolute',
+          left: 0,
+          right: 0,
+          top: '18%',
+          bottom: '18%',
+          background: 'linear-gradient(90deg, rgba(30,20,50,.92), rgba(90,50,160,.86), rgba(30,20,50,.92))',
+        }}
+      />
+      {/* 閃光の線 */}
+      {[0, 1, 2, 3].map((i) => (
+        <motion.div
+          key={i}
+          initial={{ x: `${dir * -120}vw`, opacity: 0.9 }}
+          animate={{ x: `${dir * 120}vw`, opacity: 0 }}
+          transition={{ duration: 0.5, delay: 0.05 + i * 0.06, ease: 'easeOut' }}
+          style={{
+            position: 'absolute',
+            top: `${28 + i * 12}%`,
+            height: 6,
+            width: '60vw',
+            background: '#fff',
+            filter: 'blur(1px)',
+          }}
+        />
+      ))}
+      {/* キャラ */}
+      <motion.div
+        initial={{ x: `${dir * 60}vw`, opacity: 0, rotate: dir * 10 }}
+        animate={{ x: `${dir * -6}vw`, opacity: 1, rotate: 0 }}
+        transition={{ type: 'spring', stiffness: 220, damping: 18, delay: 0.12 }}
+        style={{
+          position: 'relative',
+          width: 'min(38vw, 160px)',
+          aspectRatio: '1',
+          background: '#fff',
+          border: '4px solid #fff',
+          borderRadius: 12,
+          padding: 8,
+          boxShadow: '0 0 0 6px var(--crayon-purple), 0 14px 30px rgba(0,0,0,.4)',
+        }}
+      >
+        <CharacterSprite imageUrl={image} attribute={char.attribute} name={name} flip={side === 1} />
+      </motion.div>
+      {/* テキスト */}
+      <motion.div
+        initial={{ y: 24, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ delay: 0.28 }}
+        style={{ position: 'absolute', bottom: '22%', display: 'grid', placeItems: 'center', gap: 4 }}
+      >
+        <div style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: 'clamp(1rem,3.4vw,1.3rem)', color: '#ffe08a' }}>
+          ★ こせい はつどう！
+        </div>
+        <div
+          style={{
+            fontFamily: 'var(--font-display)',
+            fontWeight: 900,
+            fontSize: 'clamp(1.4rem,5vw,2rem)',
+            color: '#fff',
+            WebkitTextStroke: '3px var(--crayon-purple)',
+            paintOrder: 'stroke',
+          }}
+        >
+          {fullName}
+        </div>
+        <div style={{ fontSize: 'clamp(0.9rem,3vw,1.1rem)', color: '#fff', fontWeight: 700 }}>「{moveName}」</div>
+      </motion.div>
     </div>
   );
 }

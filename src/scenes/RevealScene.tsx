@@ -172,7 +172,9 @@ export function RevealScene() {
             gap: '0.12rem',
           }}
         >
-          <div style={{ fontFamily: 'var(--font-display)', fontSize: '1rem' }}>こせい：{kosei.name}</div>
+          <div style={{ fontFamily: 'var(--font-display)', fontSize: '1rem' }}>
+            こせい：{character.koseiTitle ?? ''}{kosei.name}
+          </div>
           <div style={{ fontSize: '0.76rem', color: 'var(--ink-soft)' }}>{kosei.tagline}</div>
           <div style={{ fontSize: '0.78rem' }}>パッシブ：{kosei.passiveJp}</div>
           <div style={{ fontSize: '0.78rem' }}>

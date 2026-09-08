@@ -208,6 +208,17 @@ describe('力・技・速さ 三すくみ（プロトタイプ）', () => {
     }
   });
 
+  it('こせいは三すくみと無関係：クラッシュ判定が出ない・相手はふつうに行動', () => {
+    const l = drawn([210, 40, 30]);
+    const r = drawn([30, 90, 210]);
+    const st = resolveClashTurn(createClashState(l, r, 33), ['kosei', 'power']);
+    const evs = st.log.slice(0);
+    expect(evs.some((e) => e.t === 'clash')).toBe(false);
+    // side1（力）は「見切られて うごけない」ではなく、ちゃんと技を出す
+    const act1 = evs.find((e) => e.t === 'act' && e.side === 1);
+    expect(act1 && act1.t === 'act' && !act1.moveName.startsWith('（')).toBe(true);
+  });
+
   it('こせい構え：発動してクールダウン/回数を消費する', () => {
     const l = drawn([210, 40, 30]);
     const r = drawn([30, 90, 210]);

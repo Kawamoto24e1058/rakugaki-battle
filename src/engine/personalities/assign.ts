@@ -36,11 +36,12 @@ export function assignKosei(
     let score = 0;
     for (const t of k.tags) {
       if (t.startsWith('attr:')) continue;
-      if (tagSet.has(t)) score += 2;
+      // 「属性＋形」で当てる方針。形の一致を強く見る。
+      if (tagSet.has(t)) score += t.startsWith('shape:') ? 4 : 2;
     }
-    if (archetype && ACTIVE_ARCHE[k.active.kind] === archetype) score += 1.6;
-    // タグが全く合わなくても、乱数で最低限ばらける
-    score += rng() * 0.9;
+    if (archetype && ACTIVE_ARCHE[k.active.kind] === archetype) score += 1.4;
+    // 形が合わなくても乱数で最低限ばらける（合えば埋もれない程度）
+    score += rng() * 1.1;
     if (score > bestScore + 1e-9) {
       bestScore = score;
       best = [{ id: k.id, score }];
@@ -50,4 +51,19 @@ export function assignKosei(
   }
   if (best.length === 0) return pool[0]?.id ?? KOSEI_LIST[0].id;
   return best[Math.floor(rng() * best.length)].id;
+}
+
+/** こせい名の前につける「二つ名」。雰囲気・かざり・目 で決まる（表示上の個性を増やす）。 */
+export function koseiTitle(tags: string[], seed: number): string {
+  const s = new Set(tags);
+  const rng = mulberry32((seed ^ 0x2545f491) >>> 0);
+  const pools: string[][] = [];
+  if (s.has('mood:fierce')) pools.push(['あばれん坊の', 'ねっけつな', 'まっすぐな', 'こわいもの知らずの']);
+  if (s.has('mood:calm')) pools.push(['しずかな', 'ものしずかな', 'おだやかな', 'マイペースな']);
+  if (s.has('deco:colorful')) pools.push(['きらめく', 'にぎやかな', 'カラフルな']);
+  if (s.has('deco:plain')) pools.push(['しぶい', 'ミニマルな', 'すっぴんの']);
+  if (s.has('part:eyes')) pools.push(['まなざしの', 'めぢからの']);
+  if (pools.length === 0) pools.push(['なぞの', 'ふしぎな', 'げんきな', 'のんびりした', 'ゆうかんな']);
+  const pool = pools[Math.floor(rng() * pools.length)];
+  return pool[Math.floor(rng() * pool.length)];
 }

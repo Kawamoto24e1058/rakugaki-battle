@@ -85,8 +85,6 @@ export interface ClashCombatant {
   cooldowns: Record<MoveId, number>;
   /** 力／技／速さ の代表わざ（バトル開始時に確定・UI ボタンに表示・その構えで基本これが出る）。 */
   stanceMoves: Record<TriStance, MoveId>;
-  /** 直近のターンでこせいを撃って晒された（相手が力なら被ダメ+30%）。 */
-  koseiExposed: boolean;
 }
 
 export type ClashEvent =
@@ -129,7 +127,6 @@ function toCombatant(c: Character): ClashCombatant {
     statuses: [],
     cooldowns: {},
     stanceMoves: signatureMoves(c.moveIds),
-    koseiExposed: false,
   };
 }
 
@@ -264,16 +261,16 @@ export function resolveClashTurn(
   ];
   log.push({ t: 'reveal', stances: eff });
 
-  for (const c of next.combatants) c.koseiExposed = false;
-  if (eff[0] === 'kosei' && eff[1] === 'power') next.combatants[0].koseiExposed = true;
-  if (eff[1] === 'kosei' && eff[0] === 'power') next.combatants[1].koseiExposed = true;
-
-  // クラッシュ
+  // こせいは三すくみと完全に無関係：こせいを含むターンはクラッシュ判定なし
+  // （こせい側は発動、もう片方はふつうに行動＝有利不利なし）。
+  const koseiTurn = eff[0] === 'kosei' || eff[1] === 'kosei';
   const r0 = clashResult(eff[0], eff[1]);
   let clashWinner: Side | null = null;
   const t0 = triOf(eff[0]);
   const t1 = triOf(eff[1]);
-  if (r0 === 'win' && t0) {
+  if (koseiTurn) {
+    // クラッシュ演出は出さない（こせいのカットインが主役）
+  } else if (r0 === 'win' && t0) {
     clashWinner = 0;
     log.push({ t: 'clash', winner: 0, note: clashNote(0, t0) });
   } else if (r0 === 'lose' && t1) {
@@ -591,7 +588,6 @@ function dealDamage(
 
   if (!move.pierce) dmg *= 40 / (40 + effStat(target, 'def'));
   if (has(target, 'curse')) dmg *= STATUS_META.curse.incomingMult;
-  if (target.koseiExposed) dmg *= 1.3;
 
   const hpPct = actor.hp / actor.maxHp;
   if (hpPct < 0.35) {
