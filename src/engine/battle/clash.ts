@@ -24,6 +24,11 @@ export type Side = 0 | 1;
 
 /** 三すくみの構え＋外枠（こせい）。 */
 export type ClashStance = 'power' | 'tech' | 'speed' | 'kosei';
+/**
+ * バトルの「1手」。技IDそのもの（編成した技を直接えらぶ）／
+ * 後方互換で 'power'|'tech'|'speed'（そのカテゴリの代表技）／'kosei'。
+ */
+export type ClashChoice = string;
 /** 三すくみに参加する3つ。 */
 export type TriStance = 'power' | 'tech' | 'speed';
 
@@ -83,8 +88,6 @@ export interface ClashCombatant {
   hp: number;
   statuses: ActiveStatus[];
   cooldowns: Record<MoveId, number>;
-  /** 力／技／速さ の代表わざ（バトル開始時に確定・UI ボタンに表示・その構えで基本これが出る）。 */
-  stanceMoves: Record<TriStance, MoveId>;
 }
 
 export type ClashEvent =
@@ -126,7 +129,6 @@ function toCombatant(c: Character): ClashCombatant {
     hp: c.baseStats.hp,
     statuses: [],
     cooldowns: {},
-    stanceMoves: signatureMoves(c.moveIds),
   };
 }
 
@@ -193,27 +195,19 @@ function rankCategory(moveIds: MoveId[], cat: TriStance): MoveDef[] {
   return [...pool].sort((a, b) => score(b) - score(a));
 }
 
-/** キャラの「力／技／速さ の代表わざ」（バトル開始時に確定・UIのボタンに表示）。 */
-function signatureMoves(moveIds: MoveId[]): Record<TriStance, MoveId> {
-  return {
-    power: rankCategory(moveIds, 'power')[0].id,
-    tech: rankCategory(moveIds, 'tech')[0].id,
-    speed: rankCategory(moveIds, 'speed')[0].id,
-  };
-}
-
-/** その構えで実際に出るわざ：代表わざ → CD なら同カテゴリの別の技 → 基本技。 */
+/** そのカテゴリで実際に出るわざ：強い順 → CD なら次 → 基本技。 */
 function pickMove(c: ClashCombatant, cat: TriStance): MoveDef {
   const ranked = rankCategory(c.moveIds, cat);
-  const sig = MOVES_SAFE(c.stanceMoves[cat]);
-  const order = sig ? [sig, ...ranked.filter((m) => m.id !== sig.id)] : ranked;
-  const ready = order.find((m) => (c.cooldowns[m.id] ?? 0) <= 0);
+  const ready = ranked.find((m) => (c.cooldowns[m.id] ?? 0) <= 0);
   return ready ?? BASIC[cat];
 }
 
-/** UI 表示用：その構えの代表わざの名前（＋威力の目安）。 */
-export function stanceMoveDef(c: ClashCombatant, cat: TriStance): MoveDef {
-  return MOVES_SAFE(c.stanceMoves[cat]) ?? BASIC[cat];
+/** キャラがそのカテゴリの技を1つでも編成しているか（0なら その構えは選べない）。 */
+export function hasCategoryMove(moveIds: MoveId[], cat: TriStance): boolean {
+  return moveIds.some((id) => {
+    const m = MOVES_SAFE(id);
+    return !!m && moveCategory(m) === cat;
+  });
 }
 
 // ---------- クラッシュ判定 ----------
@@ -247,18 +241,18 @@ function clashNote(win: Side, wStance: TriStance): string {
 
 export function resolveClashTurn(
   state: ClashState,
-  stances: [ClashStance, ClashStance],
+  choices: [ClashChoice, ClashChoice],
 ): ClashState {
   if (state.done) return state;
   const rng = mulberry32((state.seed + state.turn * 0x9e3779b1) >>> 0);
   const next = clone(state);
   const log: ClashEvent[] = [];
 
-  // こせいが使えなければ 力 に落とす
-  const eff: [ClashStance, ClashStance] = [
-    normalizeStance(next.combatants[0], stances[0]),
-    normalizeStance(next.combatants[1], stances[1]),
-  ];
+  // 「1手」を { カテゴリ, 実際に出る技 } に解決する
+  const r0c = resolveChoice(next.combatants[0], choices[0]);
+  const r1c = resolveChoice(next.combatants[1], choices[1]);
+  const eff: [ClashStance, ClashStance] = [r0c.stance, r1c.stance];
+  const chosenMoves: [MoveDef | null, MoveDef | null] = [r0c.move, r1c.move];
   log.push({ t: 'reveal', stances: eff });
 
   // こせいは三すくみと完全に無関係：こせいを含むターンはクラッシュ判定なし
@@ -292,7 +286,7 @@ export function resolveClashTurn(
       log.push({ t: 'act', side, stance: eff[side], moveName: '（見切られて うごけない）' });
       continue;
     }
-    act(next, side, eff[side], foe, res, rng, log);
+    act(next, side, eff[side], chosenMoves[side], foe, res, rng, log);
     checkFaint(next);
   }
 
@@ -361,9 +355,24 @@ export function resolveClashTurn(
   return next;
 }
 
-function normalizeStance(c: ClashCombatant, s: ClashStance): ClashStance {
-  if (s === 'kosei' && !koseiReady(c)) return 'power';
-  return s;
+/** ClashChoice（技ID / 'power'|'tech'|'speed' / 'kosei'）→ { カテゴリ, 実際に出る技 }。 */
+function resolveChoice(c: ClashCombatant, choice: ClashChoice): { stance: ClashStance; move: MoveDef | null } {
+  if (choice === 'kosei') {
+    if (koseiReady(c)) return { stance: 'kosei', move: null };
+    choice = 'power'; // こせいが使えない → 力カテゴリの代表技に落とす
+  }
+  if (choice === 'power' || choice === 'tech' || choice === 'speed') {
+    const m = pickMove(c, choice);
+    return { stance: moveCategory(m), move: m };
+  }
+  // 技ID 指定
+  const m = MOVES_SAFE(choice);
+  if (m && c.moveIds.includes(m.id) && (c.cooldowns[m.id] ?? 0) <= 0) {
+    return { stance: moveCategory(m), move: m };
+  }
+  // 指定技が使えない（CD中／未編成）→ 同カテゴリの使える技 or 基本技
+  const cat = m ? moveCategory(m) : 'power';
+  return { stance: cat, move: pickMove(c, cat) };
 }
 
 function decideOrder(
@@ -386,6 +395,7 @@ function act(
   state: ClashState,
   side: Side,
   stance: ClashStance,
+  chosenMove: MoveDef | null,
   foeStance: ClashStance,
   result: ClashResult,
   rng: Rng,
@@ -411,7 +421,7 @@ function act(
     return;
   }
 
-  const move = pickMove(c, stance);
+  const move = chosenMove ?? pickMove(c, stance);
   if (move.cooldown > 0 && !move.id.startsWith('basic_')) c.cooldowns[move.id] = move.cooldown + 1;
   log.push({ t: 'act', side, stance, moveName: move.name });
 
@@ -694,7 +704,6 @@ function cloneC(c: ClashCombatant): ClashCombatant {
     moveIds: [...c.moveIds],
     statuses: c.statuses.map((s) => ({ ...s })),
     cooldowns: { ...c.cooldowns },
-    stanceMoves: { ...c.stanceMoves },
   };
 }
 
@@ -713,14 +722,14 @@ export function cpuClashStance(state: ClashState, side: Side, rng: Rng): ClashSt
     if (!offensive && myPct < 0.55 && rng() < 0.5) return 'kosei';
     if (offensive && state.turn >= 3 && rng() < 0.2) return 'kosei';
   }
-  // 得意カテゴリ（代表わざの威力が高い所）に寄せつつ、読まれないよう散らす
+  // 編成している技のカテゴリだけ候補にする（偏った編成なら偏って戦う）
+  const owned = (['power', 'tech', 'speed'] as TriStance[]).filter((cat) => hasCategoryMove(me.moveIds, cat));
+  const cats = owned.length > 0 ? owned : (['power'] as TriStance[]);
   const strength = (cat: TriStance) => rankCategory(me.moveIds, cat)[0].power;
-  const best = (['power', 'tech', 'speed'] as TriStance[]).sort((a, b) => strength(b) - strength(a))[0];
+  const best = [...cats].sort((a, b) => strength(b) - strength(a))[0];
   const r = rng();
-  if (r < 0.5) return best;
-  if (r < 0.75) return 'power';
-  if (r < 0.9) return 'speed';
-  return 'tech';
+  if (r < 0.55) return best;
+  return cats[Math.floor(rng() * cats.length)];
 }
 
 export function playClashToEnd(state: ClashState, seed = state.seed): ClashState {

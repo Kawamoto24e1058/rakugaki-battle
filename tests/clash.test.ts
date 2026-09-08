@@ -208,6 +208,29 @@ describe('力・技・速さ 三すくみ（プロトタイプ）', () => {
     }
   });
 
+  it('技IDを直接えらべる：偏った編成（技2・速さ1、力なし）でも動く', () => {
+    const a = drawn([210, 40, 30]);
+    const b = drawn([30, 90, 210]);
+    // 力なし・技/速さ編成を組む
+    const tech = Object.values(MOVES).find((m) => moveCategory(m) === 'tech' && m.category === 'attack')!;
+    const tech2 = Object.values(MOVES).find((m) => moveCategory(m) === 'tech' && m.id !== tech.id)!;
+    const speed = Object.values(MOVES).find((m) => moveCategory(m) === 'speed')!;
+    a.moveIds = [tech.id, tech2.id, speed.id];
+    b.moveIds = [speed.id, tech.id];
+    let st = createClashState(a, b, 3);
+    // side0 が「技ID を直接」えらぶ → その技が出る
+    st = resolveClashTurn(st, [tech.id, speed.id]);
+    const act0 = st.log.find((e) => e.t === 'act' && e.side === 0);
+    expect(act0 && act0.t === 'act' && (act0.moveName === tech.name || act0.stance === 'tech')).toBe(true);
+    // 別の技IDを指定すると別の技が出る
+    if (!st.done) {
+      const before = st.log.length;
+      st = resolveClashTurn(st, [tech2.id, 'speed']);
+      const act = st.log.slice(before).find((e) => e.t === 'act' && e.side === 0);
+      expect(act && act.t === 'act').toBe(true);
+    }
+  });
+
   it('こせいは三すくみと無関係：クラッシュ判定が出ない・相手はふつうに行動', () => {
     const l = drawn([210, 40, 30]);
     const r = drawn([30, 90, 210]);

@@ -13,7 +13,7 @@ export {
   effStat,
   koseiReady,
   moveCategory,
-  stanceMoveDef,
+  hasCategoryMove,
   STANCE_JP,
   STANCE_COLOR,
   STANCE_BEATS,
@@ -21,6 +21,7 @@ export {
   type ClashEvent,
   type ClashCombatant,
   type ClashStance,
+  type ClashChoice,
   type TriStance,
   type Side,
 } from './battle/clash';

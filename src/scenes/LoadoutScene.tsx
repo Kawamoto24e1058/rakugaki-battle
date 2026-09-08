@@ -1,7 +1,15 @@
 import { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useGame } from '../store/gameStore';
-import { getMove, moveCategory, moveCost, autoLoadout, LOADOUT_BUDGET, type MoveDef } from '../engine/moves';
+import {
+  getMove,
+  moveCategory,
+  moveCost,
+  autoLoadout,
+  LOADOUT_BUDGET,
+  LOADOUT_MAX_MOVES,
+  type MoveDef,
+} from '../engine/moves';
 import { STATUS_META } from '../engine/status';
 import type { Stats } from '../engine/types';
 import { CharacterSprite } from '../components/bits';
@@ -75,11 +83,12 @@ export function LoadoutScene() {
     }
   }
   const emptyCats = (['power', 'tech', 'speed'] as Cat[]).filter((c) => catCount[c] === 0);
+  const slotsLeft = LOADOUT_MAX_MOVES - sel.length;
 
   const toggle = (m: MoveDef) => {
     const on = sel.includes(m.id);
     if (on) setSel(sel.filter((x) => x !== m.id));
-    else if (moveCost(m) <= left) setSel([...sel, m.id]);
+    else if (moveCost(m) <= left && slotsLeft > 0) setSel([...sel, m.id]);
   };
 
   return (
@@ -88,7 +97,7 @@ export function LoadoutScene() {
         {player.character.name} の わざを えらぼう
       </h2>
       <div style={{ fontSize: '0.82rem', color: 'var(--ink-soft)', textAlign: 'center' }}>
-        ★を {LOADOUT_BUDGET}こ ぶんまで。すきな だけ・すきな カテゴリだけ でも OK。
+        わざは {LOADOUT_MAX_MOVES}こ まで（★{LOADOUT_BUDGET}こ ぶん）。力・技・速さ の 好きな くみあわせで OK。
       </div>
 
       {/* 予算メーター */}
@@ -97,7 +106,7 @@ export function LoadoutScene() {
           {'★'.repeat(Math.max(0, spent))}
           <span style={{ opacity: 0.25 }}>{'★'.repeat(Math.max(0, left))}</span>
         </div>
-        <span style={{ fontWeight: 700 }}>のこり ★{Math.max(0, left)}</span>
+        <span style={{ fontWeight: 700 }}>あと {Math.max(0, slotsLeft)}こ／★{Math.max(0, left)}</span>
         <span style={{ fontSize: '0.85rem', color: 'var(--ink-soft)' }}>
           {(['power', 'tech', 'speed'] as Cat[]).map((c) => (
             <span key={c} style={{ color: CAT_COLOR[c], marginLeft: 8 }}>
@@ -110,7 +119,7 @@ export function LoadoutScene() {
 
       {emptyCats.length > 0 && sel.length > 0 && (
         <div style={{ fontSize: '0.76rem', color: 'var(--crayon-red)' }}>
-          {emptyCats.map((c) => `${CAT_JP[c]}`).join('・')} の わざが ないよ（その かまえは よわい こうげきに なる）
+          {emptyCats.map((c) => `${CAT_JP[c]}`).join('・')} の わざが ないよ（{emptyCats.map((c) => CAT_JP[c]).join('・')} の かまえは えらべなくなる）
         </div>
       )}
 
@@ -130,7 +139,7 @@ export function LoadoutScene() {
           const cat = moveCategory(m);
           const on = sel.includes(m.id);
           const cost = moveCost(m);
-          const affordable = on || cost <= left;
+          const affordable = on || (cost <= left && slotsLeft > 0);
           return (
             <motion.button
               key={m.id}

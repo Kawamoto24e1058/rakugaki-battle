@@ -7,7 +7,6 @@ import {
   cpuClashStance,
   koseiReady,
   moveCategory,
-  stanceMoveDef,
   archetypeLabel,
   getKosei,
   mulberry32,
@@ -17,6 +16,7 @@ import {
   type ClashState,
   type ClashEvent,
   type ClashStance,
+  type ClashChoice,
   type ClashCombatant,
   type TriStance,
   type Side,
@@ -300,7 +300,7 @@ export function BattleScene() {
   }, [chars, names]);
 
   const [phase, setPhase] = useState<Phase>('choose-p1');
-  const [p1Pick, setP1Pick] = useState<ClashStance | null>(null);
+  const [p1Pick, setP1Pick] = useState<ClashChoice | null>(null);
   const [lastPair, setLastPair] = useState<[ClashStance, ClashStance] | null>(null);
   const [flash, setFlash] = useState(false);
   const [beats, setBeats] = useState<Beat[]>([]);
@@ -345,10 +345,19 @@ export function BattleScene() {
     return () => window.clearTimeout(t);
   }, [phase, state.winner, finishBattle]);
 
-  function submit(myStance: ClashStance, foeStance: ClashStance) {
+  const choiceStance = (ch: ClashChoice): ClashStance => {
+    if (ch === 'kosei' || ch === 'power' || ch === 'tech' || ch === 'speed') return ch;
+    try {
+      return moveCategory(getMove(ch));
+    } catch {
+      return 'power';
+    }
+  };
+
+  function submit(myChoice: ClashChoice, foeChoice: ClashChoice) {
     if (phase === 'animating' || state.done) return;
-    setLastPair([myStance, foeStance]);
-    const next = resolveClashTurn(state, [myStance, foeStance]);
+    setLastPair([choiceStance(myChoice), choiceStance(foeChoice)]);
+    const next = resolveClashTurn(state, [myChoice, foeChoice]);
     pendingNext.current = next;
     setBeats(buildBeats(next.log.slice(state.log.length), view, next, names));
     setBeatIdx(0);
@@ -386,19 +395,19 @@ export function BattleScene() {
     setPhase(next.done ? 'over' : 'choose-p1');
   }
 
-  function pickSolo(stance: ClashStance) {
+  function pickSolo(choice: ClashChoice) {
     if (phase !== 'choose-p1' || state.done) return;
     const rng = mulberry32((state.seed + state.turn * 2654435761) >>> 0);
-    submit(stance, cpuClashStance(state, 1, rng));
+    submit(choice, cpuClashStance(state, 1, rng));
   }
-  function pickP1(stance: ClashStance) {
+  function pickP1(choice: ClashChoice) {
     if (phase !== 'choose-p1') return;
-    setP1Pick(stance);
+    setP1Pick(choice);
     setPhase('handoff');
   }
-  function pickP2(stance: ClashStance) {
+  function pickP2(choice: ClashChoice) {
     if (phase !== 'choose-p2' || !p1Pick) return;
-    submit(p1Pick, stance);
+    submit(p1Pick, choice);
     setP1Pick(null);
   }
 
@@ -523,7 +532,7 @@ export function BattleScene() {
               {phase === 'choose-p2' ? `P2（${names[1]}）` : `P1（${names[0]}）`} が えらぶ
             </div>
           )}
-          <StanceButtons
+          <MoveButtons
             onPick={phase === 'choose-p2' ? pickP2 : mode === 'versus' ? pickP1 : pickSolo}
             me={chooser}
           />
@@ -636,15 +645,31 @@ function Tip({ title, sub, lines, desc }: { title: string; sub?: string; lines: 
   );
 }
 
-function StanceButtons({ onPick, me }: { onPick: (s: ClashStance) => void; me: ClashCombatant }) {
+const TRI_ORDER: Record<TriStance, number> = { power: 0, tech: 1, speed: 2 };
+
+/** 編成した技（最大3）＋こせい を そのままボタンに。技のカテゴリで三すくみが決まる。 */
+function MoveButtons({ onPick, me }: { onPick: (c: ClashChoice) => void; me: ClashCombatant }) {
   const kosei = getKosei(me.koseiId);
   const canKosei = koseiReady(me);
-  const [open, setOpen] = useState<ClashStance | null>(null);
+  const [open, setOpen] = useState<string | null>(null);
+
+  const moves = useMemo(() => {
+    const list = me.moveIds
+      .map((id) => {
+        try {
+          return getMove(id);
+        } catch {
+          return null;
+        }
+      })
+      .filter((m): m is MoveDef => !!m);
+    return list.sort((a, b) => TRI_ORDER[moveCategory(a)] - TRI_ORDER[moveCategory(b)] || b.power - a.power);
+  }, [me.moveIds]);
 
   const shell: React.CSSProperties = {
-    minWidth: '10.5rem',
+    minWidth: '9.5rem',
     maxWidth: '13rem',
-    flex: '1 1 10.5rem',
+    flex: '1 1 9.5rem',
     padding: '0.7em 0.8em',
     lineHeight: 1.2,
     display: 'grid',
@@ -652,26 +677,29 @@ function StanceButtons({ onPick, me }: { onPick: (s: ClashStance) => void; me: C
     textAlign: 'center',
   };
 
-  const triBtn = (s: TriStance) => {
-    const mv = stanceMoveDef(me, s);
-    const gist = moveGist(mv);
+  const moveBtn = (m: MoveDef) => {
+    const s = moveCategory(m);
+    const cd = me.cooldowns[m.id] ?? 0;
+    const gist = moveGist(m);
     return (
-      <div key={s} style={{ position: 'relative', display: 'flex' }}>
-        {open === s && (
-          <Tip title={mv.name} sub={`${STANCE_JP[s]}`} lines={moveDetailLines(mv)} desc={mv.desc || undefined} />
+      <div key={m.id} style={{ position: 'relative', display: 'flex' }}>
+        {open === m.id && (
+          <Tip title={m.name} sub={STANCE_JP[s]} lines={moveDetailLines(m)} desc={m.desc || undefined} />
         )}
         <button
           className="crayon-btn"
-          onClick={() => onPick(s)}
-          onMouseEnter={() => setOpen(s)}
+          disabled={cd > 0}
+          onClick={() => onPick(m.id)}
+          onMouseEnter={() => setOpen(m.id)}
           onMouseLeave={() => setOpen(null)}
-          style={{ ...shell, borderColor: BTN_COLOR[s], color: 'var(--ink)' }}
+          style={{ ...shell, borderColor: BTN_COLOR[s], color: 'var(--ink)', opacity: cd > 0 ? 0.4 : 1 }}
         >
           <span style={{ fontFamily: 'var(--font-display)', fontSize: '1.15rem', color: BTN_COLOR[s] }}>
-            「{mv.name}」
+            「{m.name}」
           </span>
           <span style={{ fontSize: '0.92rem', fontWeight: 700 }}>
-            {mv.category === 'attack' ? `いりょく ${mv.power}` : 'ほじょわざ'}
+            {m.category === 'attack' ? `いりょく ${m.power}` : 'ほじょわざ'}
+            {cd > 0 ? `（あと${cd}）` : ''}
           </span>
           {gist && <span style={{ fontSize: '0.76rem', opacity: 0.85 }}>{gist}</span>}
           <span style={{ fontSize: '0.72rem', color: BTN_COLOR[s], opacity: 0.9 }}>
@@ -684,7 +712,7 @@ function StanceButtons({ onPick, me }: { onPick: (s: ClashStance) => void; me: C
 
   return (
     <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', justifyContent: 'center', width: '100%', maxWidth: '48rem' }}>
-      {TRI.map(triBtn)}
+      {moves.map(moveBtn)}
       <div style={{ position: 'relative', display: 'flex' }}>
         {open === 'kosei' && (
           <Tip title={kosei.activeName} sub={`こせい・${kosei.tagline}`} lines={[`パッシブ：${kosei.passiveJp}`, `効果：${kosei.activeJp}`]} />
@@ -700,7 +728,7 @@ function StanceButtons({ onPick, me }: { onPick: (s: ClashStance) => void; me: C
           <span style={{ fontFamily: 'var(--font-display)', fontSize: '1.15rem', color: BTN_COLOR.kosei }}>
             ★ {kosei.activeName}
           </span>
-          <span style={{ fontSize: '0.8rem' }}>{canKosei ? 'こせいわざ' : 'いま つかえない'}</span>
+          <span style={{ fontSize: '0.8rem' }}>{canKosei ? 'こせいわざ（三すくみ外）' : 'いま つかえない'}</span>
           <span style={{ fontSize: '0.72rem', opacity: 0.8 }}>{kosei.tagline}</span>
         </button>
       </div>

@@ -152,45 +152,53 @@ function safeCat(id: MoveId): MoveCategory3 | null {
   }
 }
 
+/** 編成できる技の数（三すくみ＝3カテゴリなので3つまで）。 */
+export const LOADOUT_MAX_MOVES = 3;
+
 /**
- * 候補プールから「初期おまかせ編成」を作る（★予算内・治療1つ・なるべく3すくみを散らす）。
+ * 候補プールから「初期おまかせ編成」を作る（★予算内・最大3つ・力技速を1つずつ）。
  * プレイヤーが編成画面で自由に組み替える。CPU もこれを使う。
  */
-export function autoLoadout(pool: MoveId[], seed: number, budget = LOADOUT_BUDGET): MoveId[] {
+export function autoLoadout(
+  pool: MoveId[],
+  seed: number,
+  budget = LOADOUT_BUDGET,
+  maxMoves = LOADOUT_MAX_MOVES,
+): MoveId[] {
   const rng = mulberry32((seed ^ 0x9e3d71b1) >>> 0);
   const picked: MoveId[] = [];
   let spent = 0;
-  const canAfford = (id: MoveId) => spent + safeCost(id) <= budget;
+  const canAdd = (id: MoveId) =>
+    !!id && !picked.includes(id) && picked.length < maxMoves && spent + safeCost(id) <= budget;
   const add = (id: MoveId) => {
-    if (!id || picked.includes(id) || !canAfford(id)) return false;
+    if (!canAdd(id)) return false;
     picked.push(id);
     spent += safeCost(id);
     return true;
   };
 
-  // 1) 治療を1つ（安いものを優先）
-  const cures = pool.filter((id) => hasCureEffect(id)).sort((a, b) => safeCost(a) - safeCost(b));
-  if (cures[0]) add(cures[0]);
-
-  // 2) 力・技・速さ を1つずつ（各カテゴリの中くらいのコストを優先）
+  // 1) 力・技・速さ を1つずつ（各カテゴリの中くらいのコストを優先）＝三すくみを回せる基本形
   for (const cat of ['power', 'speed', 'tech'] as MoveCategory3[]) {
+    if (picked.length >= maxMoves) break;
     if (picked.some((id) => safeCat(id) === cat)) continue;
     const cands = pool
       .filter((id) => !picked.includes(id) && safeCat(id) === cat)
-      .sort((a, b) => safeCost(b) - safeCost(a)); // 予算がある内は強い方から
-    for (const id of cands) if (add(id)) break;
+      .sort((a, b) => safeCost(a) - safeCost(b)); // 3枠しかないので安めから（治療を1枠残す）
+    // 治療技があればそのカテゴリでは治療を優先
+    const cure = cands.find((id) => hasCureEffect(id));
+    for (const id of cure ? [cure, ...cands] : cands) if (add(id)) break;
   }
 
-  // 3) 残り予算を、強い技優先＋少し乱数でうめる
+  // 2) 余った予算・枠を、強い技優先＋少し乱数でうめる
   const rest = pool
     .filter((id) => !picked.includes(id))
     .sort((a, b) => safeCost(b) - safeCost(a) + (rng() - 0.5));
   for (const id of rest) {
-    if (spent >= budget) break;
+    if (picked.length >= maxMoves || spent >= budget) break;
     add(id);
   }
 
-  // 4) 最低1つ
+  // 3) 最低1つ
   if (picked.length === 0 && pool[0]) picked.push(pool[0]);
   return picked;
 }
