@@ -5,7 +5,7 @@
  * 環境変数:
  *   GROQ_API_KEY       … Groq（推奨）。gsk_... 。'mock' で擬似データ
  *   GEMINI_API_KEY     … Gemini。GROQ が無いときに使う
- *   RAKUGAKI_AI_MODEL  … 省略時 Groq='meta-llama/llama-4-scout-17b-16e-instruct' / Gemini='gemini-2.5-flash'
+ *   RAKUGAKI_AI_MODEL  … 省略時 Groq='qwen/qwen3.8-27b'（画像対応）/ Gemini='gemini-2.5-flash'
  *   RAKUGAKI_AI_MOCK=1 … 擬似データを強制
  */
 import {
@@ -84,14 +84,15 @@ function mockFeatures(req: AnalyzeRequest): Record<string, unknown> {
 // ---------- Groq（OpenAI 互換）----------
 
 async function callGroq(req: AnalyzeRequest, key: string, repair?: string): Promise<unknown> {
-  const model = process.env.RAKUGAKI_AI_MODEL || 'meta-llama/llama-4-scout-17b-16e-instruct';
+  const model = process.env.RAKUGAKI_AI_MODEL || 'qwen/qwen3.8-27b';
   const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
     headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
     body: JSON.stringify({
       model,
       temperature: 0,
-      max_tokens: 1200,
+      // Groq 無料枠の OTPM（出力トークン/分）制限に合わせる。JSON は 700 前後で収まる。
+      max_tokens: 900,
       response_format: { type: 'json_object' },
       messages: [
         { role: 'system', content: `${AI_SYSTEM_PROMPT}\n\n${AI_JSON_INSTRUCTION}` },
