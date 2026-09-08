@@ -37,7 +37,7 @@ const STAT_LABEL: Record<keyof Stats, string> = {
 export const STAT_MAX: Record<keyof Stats, number> = { hp: 130, atk: 62, def: 62, spd: 62, luck: 40, heart: 40 };
 export const STAT_LABEL_JP = STAT_LABEL;
 
-/** 1本のゲージ。animate で 0 → 値 まで「ギュン」と伸びる。 */
+/** 1本のゲージ。animate で 0 → 値 まで「ギュン」と伸びる。delay で順ぐりに。 */
 export function AnimatedStatBar({
   label,
   value,
@@ -45,6 +45,8 @@ export function AnimatedStatBar({
   color = 'var(--crayon-yellow)',
   animate = true,
   big = false,
+  delay = 0.05,
+  note,
 }: {
   label: string;
   value: number;
@@ -52,35 +54,49 @@ export function AnimatedStatBar({
   color?: string;
   animate?: boolean;
   big?: boolean;
+  delay?: number;
+  note?: string;
 }) {
   const pct = Math.max(2, Math.min(100, (value / max) * 100));
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: big ? '5rem 1fr 2.6rem' : '4.2rem 1fr 2.3rem', alignItems: 'center', gap: '0.5rem' }}>
-      <span style={{ fontSize: big ? '0.95rem' : '0.82rem' }}>{label}</span>
-      <span
-        style={{
-          height: big ? 18 : 13,
-          borderRadius: 8,
-          border: '2px solid var(--border)',
-          background: '#fff',
-          overflow: 'hidden',
-        }}
-      >
+    <div>
+      <div style={{ display: 'grid', gridTemplateColumns: big ? '5rem 1fr 2.6rem' : '4.2rem 1fr 2.3rem', alignItems: 'center', gap: '0.5rem' }}>
+        <span style={{ fontSize: big ? '0.95rem' : '0.82rem' }}>{label}</span>
+        <span
+          style={{
+            height: big ? 18 : 13,
+            borderRadius: 8,
+            border: '2px solid var(--border)',
+            background: '#fff',
+            overflow: 'hidden',
+          }}
+        >
+          <motion.span
+            initial={animate ? { width: 0 } : { width: `${pct}%` }}
+            animate={{ width: `${pct}%` }}
+            transition={{ type: 'spring', stiffness: 130, damping: 11, delay }}
+            style={{ display: 'block', height: '100%', background: color }}
+          />
+        </span>
         <motion.span
-          initial={animate ? { width: 0 } : { width: `${pct}%` }}
-          animate={{ width: `${pct}%` }}
-          transition={{ type: 'spring', stiffness: 130, damping: 11, delay: 0.05 }}
-          style={{ display: 'block', height: '100%', background: color }}
-        />
-      </span>
-      <motion.span
-        initial={animate ? { opacity: 0 } : { opacity: 1 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.35 }}
-        style={{ fontSize: big ? '1rem' : '0.88rem', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 700 }}
-      >
-        {value}
-      </motion.span>
+          initial={animate ? { opacity: 0 } : { opacity: 1 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: delay + 0.3 }}
+          style={{ fontSize: big ? '1rem' : '0.88rem', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 700 }}
+        >
+          {value}
+        </motion.span>
+      </div>
+      {note && (
+        <motion.div
+          initial={animate ? { opacity: 0 } : { opacity: 1 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: delay + 0.15 }}
+          style={{ fontSize: '0.72rem', color: 'var(--ink-soft)', marginLeft: big ? '5.5rem' : '4.7rem', lineHeight: 1.3 }}
+        >
+          {note}
+        </motion.div>
+      )}
     </div>
   );
 }

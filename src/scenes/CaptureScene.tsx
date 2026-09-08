@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { motion } from 'framer-motion';
 import { useGame } from '../store/gameStore';
 import {
   analyzeImageData,
@@ -157,6 +158,8 @@ export function CaptureScene() {
     }
   }
 
+  if (busy && imageUrl) return <ScanningOverlay imageUrl={imageUrl} />;
+
   return (
     <div className="scene">
       <h2 style={{ fontSize: '1.8rem' }}>{playerLabel}の えを とりこもう</h2>
@@ -246,6 +249,57 @@ export function CaptureScene() {
       <button className="crayon-btn" style={{ marginTop: 'auto', fontSize: '0.9rem' }} onClick={reset}>
         タイトルに もどる
       </button>
+    </div>
+  );
+}
+
+/** 解析中：絵の上をスキャンラインが走る＋からっぽのゲージが脈打つ。 */
+function ScanningOverlay({ imageUrl }: { imageUrl: string }) {
+  return (
+    <div className="scene" style={{ justifyContent: 'center', gap: '1.4rem' }}>
+      <motion.h2
+        style={{ fontSize: '1.6rem', color: 'var(--crayon-blue)' }}
+        animate={{ opacity: [1, 0.55, 1] }}
+        transition={{ repeat: Infinity, duration: 1.4 }}
+      >
+        AIが えを みているよ…
+      </motion.h2>
+
+      <div
+        className="sketch-card"
+        style={{ position: 'relative', width: 'min(20rem, 72vw)', aspectRatio: '1', padding: 8, background: '#fff', overflow: 'hidden' }}
+      >
+        <img src={imageUrl} alt="かいせきちゅう" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+        <motion.div
+          initial={{ top: '-6%' }}
+          animate={{ top: '106%' }}
+          transition={{ repeat: Infinity, duration: 1.6, ease: 'easeInOut' }}
+          style={{
+            position: 'absolute',
+            left: 0,
+            right: 0,
+            height: 4,
+            background: 'var(--crayon-green)',
+            boxShadow: '0 0 12px 3px rgba(58,166,97,.6)',
+          }}
+        />
+      </div>
+
+      <div style={{ display: 'grid', gap: '0.5rem', width: 'min(22rem, 86vw)' }}>
+        {['こうげき', 'ぼうぎょ', 'すばやさ', 'HP'].map((lbl, i) => (
+          <div key={lbl} style={{ display: 'grid', gridTemplateColumns: '4.5rem 1fr', alignItems: 'center', gap: '0.5rem' }}>
+            <span style={{ fontSize: '0.82rem', color: 'var(--ink-soft)' }}>{lbl}</span>
+            <span style={{ height: 16, borderRadius: 8, border: '2px solid var(--border)', background: '#fff', overflow: 'hidden' }}>
+              <motion.span
+                animate={{ width: ['12%', '46%', '20%'] }}
+                transition={{ repeat: Infinity, duration: 1.5, delay: i * 0.15, ease: 'easeInOut' }}
+                style={{ display: 'block', height: '100%', background: 'rgba(0,0,0,.12)' }}
+              />
+            </span>
+          </div>
+        ))}
+      </div>
+      <p style={{ fontSize: '0.85rem', color: 'var(--ink-soft)' }}>いろ・かたち・つよさ を しらべているよ</p>
     </div>
   );
 }

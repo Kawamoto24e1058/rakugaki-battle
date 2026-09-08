@@ -1,36 +1,50 @@
-import { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { useGame } from '../store/gameStore';
-import { AttributeBadge, StatBars, AnimatedStatBar, STAT_MAX, STAT_LABEL_JP as STAT_JP, CharacterSprite } from '../components/bits';
+import { AttributeBadge, AnimatedStatBar, STAT_MAX, STAT_LABEL_JP as STAT_JP, CharacterSprite } from '../components/bits';
 import { MOVES, moveStars, archetypeLabel, getKosei, limitJp } from '../engine';
 import type { Stats } from '../engine/types';
 
 const WEAPON_JP: Record<string, string> = { sword: 'ツメ・剣', wand: '杖', shield: '盾', wing: '翼' };
 
-/** リビールの理由キー → 一緒に見せるステータスゲージ。 */
-const REASON_STAT: Record<string, keyof Stats> = {
-  edge: 'atk',
-  sym: 'def',
-  slim: 'spd',
-  eyes: 'heart',
-  colors: 'luck',
+/** ステータス → その理由カードのキー。 */
+const STAT_REASON: Record<keyof Stats, string> = {
+  hp: 'power',
+  atk: 'edge',
+  def: 'sym',
+  spd: 'slim',
+  luck: 'colors',
+  heart: 'eyes',
 };
+const STAT_COLOR: Record<keyof Stats, string> = {
+  hp: 'var(--crayon-green)',
+  atk: 'var(--crayon-red)',
+  def: 'var(--crayon-blue)',
+  spd: '#3b82f6',
+  luck: 'var(--crayon-yellow)',
+  heart: 'var(--crayon-pink)',
+};
+const STAT_ORDER: (keyof Stats)[] = ['hp', 'atk', 'def', 'spd', 'luck', 'heart'];
 
 export function RevealScene() {
   const player = useGame((s) => s.player);
   const confirmReveal = useGame((s) => s.confirmReveal);
-  const [step, setStep] = useState(0);
 
   if (!player) return null;
   const { character, imageUrl, analyzedBy } = player;
   const reasons = character.analysis;
-  const done = step >= reasons.length;
+  const reasonOf = (key: string) => reasons.find((r) => r.key === key);
+  const kosei = getKosei(character.koseiId);
+  const attrReason = reasonOf('color');
 
   return (
-    <div className="scene">
-      <h2 style={{ fontSize: '1.8rem', color: 'var(--crayon-blue)' }}>
-        {done ? `「${character.name}」の たんじょう！` : 'えを しらべているよ…'}
-      </h2>
+    <div className="scene" style={{ justifyContent: 'flex-start', paddingTop: 'clamp(1rem,4vh,2rem)' }}>
+      <motion.h2
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        style={{ fontSize: '1.7rem', color: 'var(--crayon-blue)', textAlign: 'center' }}
+      >
+        「{character.name}」の たんじょう！
+      </motion.h2>
       <div
         style={{
           fontSize: '0.72rem',
@@ -43,169 +57,118 @@ export function RevealScene() {
         {analyzedBy === 'ai' ? '🤖 AI が解析' : '✏️ かんたん解析（AIオフ / キー確認）'}
       </div>
 
-      <div
+      <motion.div
         className="sketch-card"
-        style={{ width: 'min(16rem, 60vw)', aspectRatio: '1', padding: 10, background: '#fff' }}
+        initial={{ scale: 0.85, rotate: -3, opacity: 0 }}
+        animate={{ scale: 1, rotate: 0, opacity: 1 }}
+        transition={{ type: 'spring', stiffness: 180, damping: 14 }}
+        style={{ width: 'min(30rem, 94vw)', padding: '1rem 1.1rem', display: 'grid', gap: '0.7rem', marginTop: '0.4rem' }}
       >
-        <CharacterSprite imageUrl={imageUrl} attribute={character.attribute} name={character.name} />
-      </div>
-
-      {!done && (
-        <>
-          <div style={{ display: 'flex', gap: '0.3rem' }}>
-            {reasons.map((r, i) => (
-              <span
-                key={r.key}
-                style={{
-                  width: 10,
-                  height: 10,
-                  borderRadius: '50%',
-                  border: '2px solid var(--border)',
-                  background: i <= step ? 'var(--crayon-red)' : '#fff',
-                }}
-              />
-            ))}
-          </div>
-          <div style={{ minHeight: '9rem', width: 'min(30rem, 92vw)', display: 'grid', placeItems: 'center' }}>
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={reasons[step].key}
-                className="sketch-card"
-                initial={{ opacity: 0, y: 20, rotate: -2 }}
-                animate={{ opacity: 1, y: 0, rotate: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                style={{ padding: '1.1rem 1.3rem', textAlign: 'center', display: 'grid', gap: '0.4rem', width: '100%' }}
-              >
-                <span style={{ fontSize: '0.95rem', color: 'var(--ink-soft)' }}>{reasons[step].label}</span>
-                <strong style={{ fontFamily: 'var(--font-display)', fontSize: '1.2rem' }}>
-                  {reasons[step].detected}
-                </strong>
-                <span style={{ fontFamily: 'var(--font-display)', color: 'var(--crayon-red)', fontSize: '1.1rem' }}>
-                  → {reasons[step].effect}
-                </span>
-
-                {/* ステータス系の理由なら、そのゲージも一緒に「ギュン」と伸ばす */}
-                {REASON_STAT[reasons[step].key] && (
-                  <div style={{ marginTop: '0.5rem' }}>
-                    <AnimatedStatBar
-                      big
-                      label={STAT_JP[REASON_STAT[reasons[step].key]]}
-                      value={character.baseStats[REASON_STAT[reasons[step].key]]}
-                      max={STAT_MAX[REASON_STAT[reasons[step].key]]}
-                      color="var(--crayon-red)"
-                    />
-                  </div>
-                )}
-                {reasons[step].key === 'arche' && (
-                  <div style={{ display: 'grid', gap: '0.3rem', marginTop: '0.5rem' }}>
-                    {(['atk', 'def', 'spd'] as (keyof Stats)[]).map((k) => (
-                      <AnimatedStatBar
-                        key={k}
-                        big
-                        label={STAT_JP[k]}
-                        value={character.baseStats[k]}
-                        max={STAT_MAX[k]}
-                        color="var(--crayon-red)"
-                      />
-                    ))}
-                  </div>
-                )}
-                {reasons[step].key === 'power' && (
-                  <div style={{ marginTop: '0.5rem' }}>
-                    <AnimatedStatBar
-                      big
-                      label="ぜんたい"
-                      value={character.baseStats.atk + character.baseStats.def + character.baseStats.spd}
-                      max={110}
-                      color="var(--crayon-purple)"
-                    />
-                  </div>
-                )}
-              </motion.div>
-            </AnimatePresence>
-          </div>
-          <button className="crayon-btn primary big" onClick={() => setStep((n) => n + 1)}>
-            {step + 1 >= reasons.length ? 'できあがり！' : 'つぎへ'}
-          </button>
-        </>
-      )}
-
-      {done && (
-        <>
-          <motion.div
+        <div style={{ display: 'flex', gap: '0.8rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          <div
             className="sketch-card"
-            initial={{ scale: 0.8, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            style={{ width: 'min(30rem, 92vw)', padding: '1rem 1.2rem', display: 'grid', gap: '0.7rem' }}
+            style={{ width: 'min(9rem, 34vw)', aspectRatio: '1', padding: 6, background: '#fff', flexShrink: 0 }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', justifyContent: 'center', flexWrap: 'wrap' }}>
-              <strong style={{ fontFamily: 'var(--font-display)', fontSize: '1.3rem' }}>{character.name}</strong>
+            <CharacterSprite imageUrl={imageUrl} attribute={character.attribute} name={character.name} />
+          </div>
+          <div style={{ display: 'grid', gap: '0.35rem', minWidth: 0 }}>
+            <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', flexWrap: 'wrap' }}>
               <AttributeBadge attribute={character.attribute} />
               <span
                 style={{
-                  fontFamily: 'var(--font-display)', fontSize: '0.9rem',
+                  fontFamily: 'var(--font-display)', fontSize: '0.85rem',
                   border: '2px solid var(--border)', borderRadius: 999, padding: '0.05rem 0.6rem',
                   background: 'var(--crayon-yellow)',
                 }}
               >
                 {archetypeLabel(character.baseStats)}
               </span>
-              <span style={{ fontSize: '0.85rem', color: 'var(--ink-soft)' }}>
-                {WEAPON_JP[character.weapon]} ・ {character.personality === 'aggressive' ? '好戦的' : '穏やか'}
+            </div>
+            {attrReason && (
+              <div style={{ fontSize: '0.76rem', color: 'var(--ink-soft)' }}>
+                {attrReason.detected} → {attrReason.effect}
+              </div>
+            )}
+            <div style={{ fontSize: '0.78rem' }}>
+              {WEAPON_JP[character.weapon]} ・ {character.personality === 'aggressive' ? '好戦的' : '穏やか'}
+            </div>
+          </div>
+        </div>
+
+        {/* ステータス：最初から全部見えていて、順ぐりにギュンと伸びる */}
+        <div style={{ display: 'grid', gap: '0.55rem' }}>
+          {STAT_ORDER.map((k, i) => (
+            <AnimatedStatBar
+              key={k}
+              big
+              label={STAT_JP[k]}
+              value={character.baseStats[k]}
+              max={STAT_MAX[k]}
+              color={STAT_COLOR[k]}
+              delay={0.25 + i * 0.16}
+              note={reasonOf(STAT_REASON[k])?.detected}
+            />
+          ))}
+        </div>
+
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.25 + STAT_ORDER.length * 0.16 + 0.2 }}
+          style={{
+            border: '2px solid var(--border)',
+            borderRadius: 10,
+            background: 'rgba(123,92,240,0.1)',
+            padding: '0.5rem 0.7rem',
+            display: 'grid',
+            gap: '0.12rem',
+          }}
+        >
+          <div style={{ fontFamily: 'var(--font-display)', fontSize: '1rem' }}>こせい：{kosei.name}</div>
+          <div style={{ fontSize: '0.76rem', color: 'var(--ink-soft)' }}>{kosei.tagline}</div>
+          <div style={{ fontSize: '0.78rem' }}>パッシブ：{kosei.passiveJp}</div>
+          <div style={{ fontSize: '0.78rem' }}>
+            こせい技：<strong style={{ fontFamily: 'var(--font-display)' }}>{kosei.activeName}</strong>
+            （{kosei.activeJp}／{limitJp(kosei.limit)}）
+          </div>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.25 + STAT_ORDER.length * 0.16 + 0.35 }}
+          style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap', justifyContent: 'center' }}
+        >
+          {character.moveIds.map((m) => {
+            const mv = MOVES[m];
+            const stars = mv ? moveStars(mv) : 1;
+            return (
+              <span
+                key={m}
+                style={{
+                  fontSize: '0.75rem', border: '2px solid var(--border)', borderRadius: 8,
+                  padding: '0.1rem 0.5rem', background: '#fff', fontFamily: 'var(--font-display)',
+                  display: 'inline-flex', gap: '0.3rem', alignItems: 'center',
+                }}
+              >
+                {mv?.name ?? m}
+                <span style={{ color: '#b8860b', letterSpacing: '-1px' }}>{'★'.repeat(stars)}</span>
               </span>
-            </div>
-            <StatBars stats={character.baseStats} animate />
-            {(() => {
-              const k = getKosei(character.koseiId);
-              return (
-                <div
-                  style={{
-                    border: '2px solid var(--border)',
-                    borderRadius: 10,
-                    background: 'rgba(123,92,240,0.1)',
-                    padding: '0.5rem 0.7rem',
-                    display: 'grid',
-                    gap: '0.15rem',
-                  }}
-                >
-                  <div style={{ fontFamily: 'var(--font-display)', fontSize: '1.05rem' }}>
-                    こせい：{k.name}
-                  </div>
-                  <div style={{ fontSize: '0.78rem', color: 'var(--ink-soft)' }}>{k.tagline}</div>
-                  <div style={{ fontSize: '0.8rem' }}>
-                    パッシブ：{k.passiveJp}
-                  </div>
-                  <div style={{ fontSize: '0.8rem' }}>
-                    こせい技：<strong style={{ fontFamily: 'var(--font-display)' }}>{k.activeName}</strong>（{k.activeJp}／{limitJp(k.limit)}）
-                  </div>
-                </div>
-              );
-            })()}
-            <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap', justifyContent: 'center' }}>
-              {character.moveIds.map((m) => {
-                const mv = MOVES[m];
-                const stars = mv ? moveStars(mv) : 1;
-                return (
-                  <span
-                    key={m}
-                    style={{
-                      fontSize: '0.75rem', border: '2px solid var(--border)', borderRadius: 8,
-                      padding: '0.1rem 0.5rem', background: '#fff', fontFamily: 'var(--font-display)',
-                      display: 'inline-flex', gap: '0.3rem', alignItems: 'center',
-                    }}
-                  >
-                    {mv?.name ?? m}
-                    <span style={{ color: '#b8860b', letterSpacing: '-1px' }}>{'★'.repeat(stars)}</span>
-                  </span>
-                );
-              })}
-            </div>
-          </motion.div>
-          <button className="crayon-btn primary big" onClick={confirmReveal}>
-            けってい！
-          </button>
-        </>
-      )}
+            );
+          })}
+        </motion.div>
+      </motion.div>
+
+      <motion.button
+        className="crayon-btn primary big"
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.25 + STAT_ORDER.length * 0.16 + 0.5 }}
+        style={{ marginTop: '0.8rem' }}
+        onClick={confirmReveal}
+      >
+        けってい！
+      </motion.button>
     </div>
   );
 }
