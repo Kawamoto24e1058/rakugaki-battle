@@ -13,13 +13,16 @@ export interface AnalysisOverrides {
   flavor?: { name?: string; bio?: string };
   /**
    * AI が「絵を見て」付けたステータス印象（各 0..1）。
-   * あれば、形から計算したスコアとブレンドして反映する（AI 寄り 6:4）。
+   * あれば、形から計算したスコアとブレンドして反映する（AI 寄り）。
    */
   statLook?: { power: number; tough: number; speed: number; hp: number };
+  /** AI が付けた各ステータスの理由（絵の具体物つき・リビール表示用）。 */
+  statReasons?: { power?: string; tough?: string; speed?: string; hp?: string };
 }
 
 const mix = (a: number, b: number, t: number) => a * (1 - t) + b * t;
-const LOOK_WEIGHT = 0.6;
+// AI が具体物を見て決めた印象は強めに信じる（形からの計算 25%）。
+const LOOK_WEIGHT = 0.75;
 
 // メイン3ステータス（こうげき・ぼうぎょ・すばやさ）の合計は「種族値」で 79〜101 に振れる。
 const MAIN_BASE = 90;
@@ -196,7 +199,7 @@ export function featuresToCharacter(
   const koseiId = assignKosei(attribute, tags, seed, archetypeLabel(baseStats));
   const kosei = getKosei(koseiId);
 
-  const analysis = buildReasons(f, attribute, weapon, personality, baseStats, bst01, tags, kosei);
+  const analysis = buildReasons(f, attribute, weapon, personality, baseStats, bst01, tags, kosei, overrides.statReasons);
   const name = overrides.name ?? overrides.flavor?.name ?? makeName(rng, attribute);
 
   return {
@@ -240,9 +243,11 @@ function buildReasons(
   bst01: number,
   tags: string[],
   kosei: { name: string; tagline: string; passiveJp: string; activeName: string },
+  statReasons?: { power?: string; tough?: string; speed?: string; hp?: string },
 ): AnalysisReason[] {
   const r: AnalysisReason[] = [];
   const arche = archetypeLabel(stats);
+  const sr = statReasons ?? {};
 
   r.push({
     key: 'color',
@@ -272,23 +277,30 @@ function buildReasons(
       : 'まんべんなく高い',
     effect: `${arche}（こうげき${stats.atk}／ぼうぎょ${stats.def}／すばやさ${stats.spd}）`,
   });
+  const strong = (v: number) => (v >= 44 ? '高い' : v >= 30 ? 'ふつう' : 'ひかえめ');
   r.push({
     key: 'edge',
-    label: '輪郭',
-    detected: f.spikiness > 0.5 ? 'トゲトゲ' : f.spikiness > 0.25 ? 'ゴツゴツ' : 'なめらか',
-    effect: f.spikiness > 0.5 ? 'こうげき が高い' : 'こうげき ふつう',
+    label: 'こうげき',
+    detected: sr.power || (f.spikiness > 0.5 ? 'トゲトゲしている' : f.spikiness > 0.25 ? 'ゴツゴツしている' : 'なめらかな形'),
+    effect: `こうげき ${strong(stats.atk)}（${stats.atk}）`,
   });
   r.push({
     key: 'sym',
-    label: '対称・太さ',
-    detected: f.symmetry > 0.75 ? 'きれいに左右対称' : '個性的なかたち',
-    effect: f.symmetry > 0.75 && f.fillDensity > 0.5 ? 'ぼうぎょ が高い' : 'ぼうぎょ ふつう',
+    label: 'ぼうぎょ',
+    detected: sr.tough || (f.symmetry > 0.75 && f.fillDensity > 0.5 ? 'どっしり詰まっている' : '軽めのつくり'),
+    effect: `ぼうぎょ ${strong(stats.def)}（${stats.def}）`,
   });
   r.push({
     key: 'slim',
-    label: '細さ・すきま',
-    detected: f.fillDensity < 0.45 || f.aspect < 0.8 ? '細身・軽い' : 'どっしり',
-    effect: f.fillDensity < 0.45 || f.aspect < 0.8 ? 'すばやさ が高い' : 'すばやさ ふつう',
+    label: 'すばやさ',
+    detected: sr.speed || (f.fillDensity < 0.45 || f.aspect < 0.8 ? '細身・身軽そう' : 'どっしりしている'),
+    effect: `すばやさ ${strong(stats.spd)}（${stats.spd}）`,
+  });
+  r.push({
+    key: 'hpwhy',
+    label: 'たいりょく（HP）',
+    detected: sr.hp || (f.coverage > 0.22 ? '大きく描いてある' : '小さめに描いてある'),
+    effect: `HP ${stats.hp}`,
   });
   r.push({
     key: 'eyes',

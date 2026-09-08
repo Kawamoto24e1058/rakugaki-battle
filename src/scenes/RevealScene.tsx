@@ -9,7 +9,7 @@ const WEAPON_JP: Record<string, string> = { sword: 'ツメ・剣', wand: '杖', 
 
 /** ステータス → その理由カードのキー。 */
 const STAT_REASON: Record<keyof Stats, string> = {
-  hp: 'power',
+  hp: 'hpwhy',
   atk: 'edge',
   def: 'sym',
   spd: 'slim',

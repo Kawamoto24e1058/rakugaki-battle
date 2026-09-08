@@ -24,10 +24,12 @@ import {
 import { STATUS_META } from '../engine/status';
 import { getMove, type MoveDef } from '../engine/moves';
 import { ATTRIBUTE_META, attributeMatchup } from '../engine/attributes';
-import type { Character } from '../engine/types';
+import type { Character, Stats } from '../engine/types';
 import { CharacterSprite, AttributeBadge } from '../components/bits';
 
-const CAT_WORD: Record<MoveDef['category'], string> = { attack: 'こうげき', support: 'ほじょ' };
+const STAT_JP: Record<keyof Stats, string> = {
+  hp: 'HP', atk: 'こうげき', def: 'ぼうぎょ', spd: 'すばやさ', luck: 'きゅうしょ', heart: 'こんじょう',
+};
 
 function moveDetailLines(m: MoveDef): string[] {
   const out: string[] = [];
@@ -40,14 +42,27 @@ function moveDetailLines(m: MoveDef): string[] {
   }
   if (m.cures) out.push(m.cures === 'all' ? '状態異常を ぜんぶ なおす' : '状態異常を 1つ なおす');
   if (m.heal) out.push(`HP ${m.heal} かいふく`);
-  if (m.buff) out.push(`${m.buff.stat} アップ（${m.buff.turns}ターン）`);
-  if (m.debuff) out.push(`あいての ${m.debuff.stat} ダウン`);
+  if (m.buff) out.push(`${STAT_JP[m.buff.stat]} アップ（${m.buff.turns}ターン）`);
+  if (m.debuff) out.push(`あいての ${STAT_JP[m.debuff.stat]} ダウン`);
   if (m.guardPct) out.push(`このターン 被ダメ -${m.guardPct}%`);
   if (m.reflect) out.push(`受けたダメージを ${m.reflect}% 返す`);
   if (m.drain) out.push(`与ダメの ${m.drain}% 回復`);
   if (m.recoil) out.push(`反動 ${m.recoil}%`);
   if (m.cooldown > 0) out.push(`クールダウン ${m.cooldown}`);
   return out;
+}
+
+/** ボタンに1個だけ出す「何が起きる技か」の短いことば。 */
+function moveGist(m: MoveDef): string | null {
+  if (m.heal || m.cures) return 'かいふく';
+  if (m.status && !m.status.toSelf) return `${STATUS_META[m.status.kind].jp}をねらう`;
+  if (m.guardPct) return 'ダメージを へらす';
+  if (m.buff) return `${STAT_JP[m.buff.stat]}アップ`;
+  if (m.debuff) return `あいて ${STAT_JP[m.debuff.stat]}ダウン`;
+  if (m.drain) return 'すいとり';
+  if (m.first) return 'かならず せんせい';
+  if (m.pierce) return 'ぼうぎょ むし';
+  return null;
 }
 
 const TRI: TriStance[] = ['power', 'tech', 'speed'];
@@ -58,7 +73,6 @@ const BTN_COLOR: Record<ClashStance, string> = {
   speed: STANCE_COLOR.speed,
   kosei: 'var(--crayon-purple)',
 };
-const LOSES_TO: Record<TriStance, TriStance> = { power: 'speed', tech: 'power', speed: 'tech' };
 /** 大きく見せたい damage tag。 */
 const LOUD_TAGS = new Set(['クリティカル', 'カウンター']);
 
@@ -81,18 +95,152 @@ interface Floating {
   kind: 'dmg' | 'heal' | 'info';
   big: boolean;
 }
+interface StatusChip {
+  jp: string;
+  good: boolean;
+}
 interface View {
   hp: [number, number];
-  statuses: [{ jp: string; good: boolean }[], { jp: string; good: boolean }[]];
+  statuses: [StatusChip[], StatusChip[]];
   banner: string;
   acting: Side | null;
   shake: Side | null;
   floats: Floating[];
 }
+interface Beat {
+  view: View;
+  cut: { a: ClashStance; b: ClashStance; winner: Side | null } | null;
+  flash: boolean;
+  impact: string | null;
+}
 
 type Phase = 'choose-p1' | 'handoff' | 'choose-p2' | 'animating' | 'over';
 
 let floatSeq = 0;
+
+const withHp = (hp: [number, number], side: Side, val: number): [number, number] =>
+  side === 0 ? [val, hp[1]] : [hp[0], val];
+
+/** エンジンの ClashEvent 列を「1タップ = 1場面」の Beat 列に変換する。 */
+function buildBeats(
+  events: ClashEvent[],
+  start: View,
+  next: ClashState,
+  names: [string, string],
+): Beat[] {
+  const beats: Beat[] = [];
+  let hp: [number, number] = [...start.hp];
+  let sv: [StatusChip[], StatusChip[]] = [[...start.statuses[0]], [...start.statuses[1]]];
+  let acting: Side | null = null;
+  let shake: Side | null = null;
+  let floats: Floating[] = [];
+  let pending: [ClashStance, ClashStance] | null = null;
+
+  const add = (
+    banner: string,
+    opts: { cut?: Beat['cut']; flash?: boolean; impact?: string | null } = {},
+  ) => {
+    beats.push({
+      view: {
+        hp: [...hp],
+        statuses: [[...sv[0]], [...sv[1]]],
+        banner,
+        acting,
+        shake,
+        floats: [...floats],
+      },
+      cut: opts.cut ?? null,
+      flash: !!opts.flash,
+      impact: opts.impact ?? null,
+    });
+  };
+
+  for (const ev of events) {
+    floats = [];
+    shake = null;
+    acting = null;
+    switch (ev.t) {
+      case 'reveal':
+        pending = ev.stances;
+        break;
+      case 'clash':
+        add(
+          ev.winner === null ? 'おなじ かまえ！ どうじに うごく' : `${names[ev.winner]} が さきに うごく！`,
+          { cut: pending ? { a: pending[0], b: pending[1], winner: ev.winner } : null },
+        );
+        break;
+      case 'act':
+        acting = ev.side;
+        add(`${names[ev.side]} の こうげき ―「${ev.moveName}」！`);
+        break;
+      case 'damage': {
+        const loud = !!ev.tag && LOUD_TAGS.has(ev.tag);
+        const big = loud || ev.amount >= 26;
+        hp = withHp(hp, ev.side, ev.hpAfter);
+        acting = (1 - ev.side) as Side;
+        shake = ev.side;
+        floats = [{ id: ++floatSeq, side: ev.side, text: `${ev.amount}`, kind: 'dmg', big }];
+        add(
+          ev.tag ? `${ev.tag}！ ${names[ev.side]} に ${ev.amount} ダメージ` : `${names[ev.side]} に ${ev.amount} ダメージ！`,
+          { flash: true, impact: loud ? `${ev.tag}！` : null },
+        );
+        break;
+      }
+      case 'heal':
+        hp = withHp(hp, ev.side, ev.hpAfter);
+        floats = [{ id: ++floatSeq, side: ev.side, text: `+${ev.amount}`, kind: 'heal', big: false }];
+        add(`${names[ev.side]} は HP を ${ev.amount} かいふく！`);
+        break;
+      case 'consolation':
+        hp = withHp(hp, ev.side, Math.min(next.combatants[ev.side].maxHp, hp[ev.side] + ev.amount));
+        floats = [{ id: ++floatSeq, side: ev.side, text: `+${ev.amount}`, kind: 'heal', big: false }];
+        add(`${names[ev.side]} は たてなおした（+${ev.amount}）`);
+        break;
+      case 'status-apply': {
+        const jp = STATUS_META[ev.kind].jp;
+        const debuff = STATUS_META[ev.kind].kind === 'debuff';
+        sv = [
+          ev.side === 0 ? [...sv[0], { jp, good: !debuff }] : sv[0],
+          ev.side === 1 ? [...sv[1], { jp, good: !debuff }] : sv[1],
+        ];
+        floats = [{ id: ++floatSeq, side: ev.side, text: jp, kind: 'info', big: false }];
+        add(`${names[ev.side]} は ${jp} に なった！`, { impact: debuff ? `${jp}！` : null });
+        break;
+      }
+      case 'status-resist':
+        add(`${names[ev.side]} には きかなかった`);
+        break;
+      case 'status-tick': {
+        const jp = STATUS_META[ev.kind].jp;
+        hp = withHp(hp, ev.side, ev.hpAfter);
+        floats = [{ id: ++floatSeq, side: ev.side, text: `${jp} ${ev.amount}`, kind: 'dmg', big: false }];
+        add(`${names[ev.side]} は ${jp} で ${ev.amount} ダメージ`);
+        break;
+      }
+      case 'sudden-death':
+        add(`サドンデス！ リードしている ${names[ev.leader]} が おおきく けずられる`, { impact: 'サドンデス！' });
+        break;
+      default:
+        break;
+    }
+  }
+
+  // しめの1枚（決着 or 次ターン案内）。状態異常は確定値で表示。
+  floats = [];
+  shake = null;
+  acting = null;
+  sv = [
+    next.combatants[0].statuses.map((s) => ({ jp: STATUS_META[s.kind].jp, good: STATUS_META[s.kind].kind === 'buff' })),
+    next.combatants[1].statuses.map((s) => ({ jp: STATUS_META[s.kind].jp, good: STATUS_META[s.kind].kind === 'buff' })),
+  ];
+  hp = [next.combatants[0].hp, next.combatants[1].hp];
+  if (next.done) {
+    add(next.winner === 'draw' ? 'ひきわけ！' : `${names[next.winner as Side]} の かち！`);
+  } else {
+    add(`ターン ${next.turn} へ`);
+  }
+  return beats;
+}
 
 export function BattleScene() {
   const player = useGame((s) => s.player)!;
@@ -116,7 +264,6 @@ export function BattleScene() {
     const m = attributeMatchup(chars[0].attribute, chars[1].attribute);
     const j0 = ATTRIBUTE_META[chars[0].attribute].jp;
     const j1 = ATTRIBUTE_META[chars[1].attribute].jp;
-    // 属性はダメージではなく「状態異常の入りやすさ」に効く。
     if (m === 'strong') return `${j0}の技は ${j1}に 状態異常が 入りやすい！（${names[0]}）`;
     if (m === 'weak') return `${j1}の技は ${j0}に 状態異常が 入りやすい！（${names[1]}）`;
     return `${j0} と ${j1}：属性の 得意・苦手なし`;
@@ -125,9 +272,10 @@ export function BattleScene() {
   const [phase, setPhase] = useState<Phase>('choose-p1');
   const [p1Pick, setP1Pick] = useState<ClashStance | null>(null);
   const [lastPair, setLastPair] = useState<[ClashStance, ClashStance] | null>(null);
-  const [clashCut, setClashCut] = useState<{ a: ClashStance; b: ClashStance; winner: Side | null | 'pending' } | null>(null);
   const [flash, setFlash] = useState(false);
-  const [impact, setImpact] = useState<string | null>(null);
+  const [beats, setBeats] = useState<Beat[]>([]);
+  const [beatIdx, setBeatIdx] = useState(0);
+  const pendingNext = useRef<ClashState | null>(null);
   const [view, setView] = useState<View>({
     hp: [maxHp[0], maxHp[1]],
     statuses: [[], []],
@@ -136,33 +284,65 @@ export function BattleScene() {
     shake: null,
     floats: [],
   });
-  const timers = useRef<number[]>([]);
 
+  const cur = phase === 'animating' && beats[beatIdx] ? beats[beatIdx].view : view;
+  const curBeat = phase === 'animating' ? beats[beatIdx] : undefined;
+  const lastBeat = beatIdx >= beats.length - 1;
+
+  // ダメージ演出のフラッシュ（beat に入った瞬間だけ）
   useEffect(() => {
-    const t = timers.current;
-    return () => t.forEach(clearTimeout);
-  }, []);
+    if (phase !== 'animating') return;
+    if (!beats[beatIdx]?.flash) return;
+    setFlash(true);
+    const t = window.setTimeout(() => setFlash(false), 150);
+    return () => window.clearTimeout(t);
+  }, [phase, beatIdx, beats]);
 
   useEffect(() => {
     if (phase !== 'over') return;
-    const t = window.setTimeout(() => finishBattle(state.winner === 0), 1700);
-    return () => clearTimeout(t);
+    const t = window.setTimeout(() => finishBattle(state.winner === 0), 1500);
+    return () => window.clearTimeout(t);
   }, [phase, state.winner, finishBattle]);
-
-  function statusView(side: Side, st: ClashState) {
-    return st.combatants[side].statuses.map((s) => ({
-      jp: STATUS_META[s.kind].jp,
-      good: STATUS_META[s.kind].kind === 'buff',
-    }));
-  }
 
   function submit(myStance: ClashStance, foeStance: ClashStance) {
     if (phase === 'animating' || state.done) return;
     setLastPair([myStance, foeStance]);
-    setPhase('animating');
-    setView((v) => ({ ...v, banner: 'せーの！' }));
     const next = resolveClashTurn(state, [myStance, foeStance]);
-    play(next.log.slice(state.log.length), next);
+    pendingNext.current = next;
+    setBeats(buildBeats(next.log.slice(state.log.length), view, next, names));
+    setBeatIdx(0);
+    setPhase('animating');
+  }
+
+  function advance() {
+    if (!lastBeat) {
+      setBeatIdx((i) => i + 1);
+      return;
+    }
+    const next = pendingNext.current;
+    if (!next) return;
+    setState(next);
+    setBeats([]);
+    setBeatIdx(0);
+    setFlash(false);
+    setView({
+      hp: [next.combatants[0].hp, next.combatants[1].hp],
+      statuses: [
+        next.combatants[0].statuses.map((s) => ({ jp: STATUS_META[s.kind].jp, good: STATUS_META[s.kind].kind === 'buff' })),
+        next.combatants[1].statuses.map((s) => ({ jp: STATUS_META[s.kind].jp, good: STATUS_META[s.kind].kind === 'buff' })),
+      ],
+      banner: next.done
+        ? next.winner === 'draw'
+          ? 'ひきわけ'
+          : `${names[next.winner as Side]} の かち！`
+        : mode === 'versus'
+          ? `ターン ${next.turn}：P1（${names[0]}）が えらぶ`
+          : `ターン ${next.turn}：力 / 技 / 速さ を えらぶ`,
+      acting: null,
+      shake: null,
+      floats: [],
+    });
+    setPhase(next.done ? 'over' : 'choose-p1');
   }
 
   function pickSolo(stance: ClashStance) {
@@ -181,173 +361,15 @@ export function BattleScene() {
     setP1Pick(null);
   }
 
-  function play(events: ClashEvent[], next: ClashState) {
-    timers.current.forEach(clearTimeout);
-    timers.current = [];
-    let t = 250;
-    const v: View = {
-      hp: [...view.hp] as [number, number],
-      statuses: [[], []],
-      banner: 'せーの！',
-      acting: null,
-      shake: null,
-      floats: [],
-    };
-    const commit = () => {
-      const snap: View = { ...v, hp: [...v.hp] as [number, number], floats: [...v.floats] };
-      timers.current.push(window.setTimeout(() => setView(snap), t));
-    };
-    const step = (fn: () => void, gap: number) => {
-      timers.current.push(window.setTimeout(fn, t));
-      t += gap;
-    };
-    const addFloat = (side: Side, text: string, kind: Floating['kind'], big = false) => {
-      const id = ++floatSeq;
-      v.floats = [...v.floats, { id, side, text, kind, big }];
-      timers.current.push(
-        window.setTimeout(
-          () => setView((prev) => ({ ...prev, floats: prev.floats.filter((f) => f.id !== id) })),
-          t + 1200,
-        ),
-      );
-    };
-    const at = (fn: () => void, extraMs = 0) => timers.current.push(window.setTimeout(fn, t + extraMs));
-
-    let cutCleared = false;
-    for (const ev of events) {
-      switch (ev.t) {
-        case 'reveal':
-          step(() => {
-            setClashCut({ a: ev.stances[0], b: ev.stances[1], winner: 'pending' });
-            v.banner = 'せーの！';
-            commit();
-          }, 900);
-          break;
-        case 'clash':
-          step(() => {
-            setClashCut((c) => (c ? { ...c, winner: ev.winner } : c));
-            v.banner = ev.winner === null ? '五分！' : `${names[ev.winner]} ${ev.note}`;
-            commit();
-          }, 1150);
-          break;
-        case 'act':
-          step(() => {
-            if (!cutCleared) {
-              setClashCut(null);
-              cutCleared = true;
-            }
-            v.acting = ev.side;
-            v.banner = `${names[ev.side]} → ${ev.moveName}！`;
-            commit();
-          }, 480);
-          step(() => {
-            v.acting = null;
-            commit();
-          }, 90);
-          break;
-        case 'damage': {
-          const loud = !!ev.tag && LOUD_TAGS.has(ev.tag);
-          const big = loud || ev.amount >= 26;
-          step(() => {
-            v.hp[ev.side] = ev.hpAfter;
-            v.shake = ev.side;
-            addFloat(ev.side, `${ev.amount}`, 'dmg', big);
-            commit();
-            setFlash(true);
-            at(() => setFlash(false), 120);
-            if (ev.tag && LOUD_TAGS.has(ev.tag)) {
-              setImpact(`${ev.tag}！`);
-              at(() => setImpact(null), 800);
-            }
-          }, big ? 130 : 90);
-          step(() => {
-            v.shake = null;
-            commit();
-          }, big ? 480 : 360);
-          break;
-        }
-        case 'heal':
-          step(() => {
-            v.hp[ev.side] = ev.hpAfter;
-            addFloat(ev.side, `+${ev.amount}`, 'heal');
-            commit();
-          }, 420);
-          break;
-        case 'consolation':
-          step(() => {
-            v.hp[ev.side] = Math.min(maxHp[ev.side], v.hp[ev.side] + ev.amount);
-            addFloat(ev.side, `立て直し +${ev.amount}`, 'heal');
-            commit();
-          }, 360);
-          break;
-        case 'status-apply':
-          step(() => {
-            const jp = STATUS_META[ev.kind].jp;
-            v.banner = `${names[ev.side]} は ${jp}！`;
-            addFloat(ev.side, jp, 'info');
-            commit();
-            if (STATUS_META[ev.kind].kind === 'debuff') {
-              setImpact(`${jp}！`);
-              at(() => setImpact(null), 800);
-            }
-          }, 520);
-          break;
-        case 'status-resist':
-          step(() => {
-            v.banner = `${names[ev.side]} は こうかなし`;
-            commit();
-          }, 280);
-          break;
-        case 'status-tick':
-          step(() => {
-            v.hp[ev.side] = ev.hpAfter;
-            addFloat(ev.side, `${STATUS_META[ev.kind].jp} ${ev.amount}`, 'dmg');
-            commit();
-          }, 440);
-          break;
-        case 'sudden-death':
-          step(() => {
-            v.banner = `サドンデス！ ${names[ev.leader]}（リード）が おおきく けずられる`;
-            setImpact('サドンデス！');
-            at(() => setImpact(null), 900);
-            commit();
-          }, 640);
-          break;
-        case 'end':
-          step(() => {
-            v.banner = ev.winner === 'draw' ? 'ひきわけ！' : `${names[ev.winner]} の かち！`;
-            commit();
-          }, 360);
-          break;
-        default:
-          break;
-      }
-    }
-
-    step(() => {
-      setClashCut(null);
-      setImpact(null);
-      setState(next);
-      setView({
-        hp: [next.combatants[0].hp, next.combatants[1].hp],
-        statuses: [statusView(0, next), statusView(1, next)],
-        banner: next.done
-          ? next.winner === 'draw'
-            ? 'ひきわけ'
-            : `${names[next.winner as Side]} の かち！`
-          : mode === 'versus'
-            ? `ターン ${next.turn}：P1（${names[0]}）が えらぶ`
-            : `ターン ${next.turn}：力 / 技 / 速さ を えらぶ`,
-        acting: null,
-        shake: null,
-        floats: [],
-      });
-      setPhase(next.done ? 'over' : 'choose-p1');
-    }, 40);
-  }
-
-  const pinch = view.hp.some((h, i) => h > 0 && h / maxHp[i] <= 0.3);
+  const pinch = cur.hp.some((h, i) => h > 0 && h / maxHp[i] <= 0.3);
   const chooser: ClashCombatant = phase === 'choose-p2' ? state.combatants[1] : state.combatants[0];
+  const impact = curBeat?.impact ?? null;
+
+  const tapLabel = !lastBeat
+    ? '▶ つぎ'
+    : pendingNext.current?.done
+      ? 'けっかを みる ▶'
+      : 'つぎのターン ▶';
 
   return (
     <div className="scene" style={{ justifyContent: 'flex-start', paddingTop: 'clamp(.4rem,2vh,1rem)', gap: '0.7rem' }}>
@@ -357,19 +379,19 @@ export function BattleScene() {
       )}
       {impact && (
         <motion.div
-          key={impact}
+          key={impact + beatIdx}
           initial={{ scale: 0.3, opacity: 0, rotate: -6 }}
           animate={{ scale: [0.3, 1.2, 1], opacity: 1, rotate: [-6, 3, 0] }}
           style={{
             position: 'fixed',
-            top: '34%',
+            top: '32%',
             left: '50%',
             transform: 'translateX(-50%)',
             zIndex: 28,
             pointerEvents: 'none',
             fontFamily: 'var(--font-display)',
             fontWeight: 900,
-            fontSize: 'clamp(1.6rem, 7vw, 2.8rem)',
+            fontSize: 'clamp(1.8rem, 8vw, 3rem)',
             color: '#fff',
             WebkitTextStroke: '3px var(--ink)',
             paintOrder: 'stroke',
@@ -378,7 +400,7 @@ export function BattleScene() {
           {impact}
         </motion.div>
       )}
-      {clashCut && <ClashCut cut={clashCut} names={names} />}
+      {curBeat?.cut && <ClashCut cut={curBeat.cut} names={names} />}
 
       <div style={{ display: 'flex', gap: 'clamp(.6rem,3vw,1.5rem)', width: '100%', maxWidth: '48rem' }}>
         {[0, 1].map((s) => (
@@ -387,31 +409,49 @@ export function BattleScene() {
             side={s as Side}
             char={chars[s]}
             image={images[s]}
-            hp={view.hp[s]}
+            hp={cur.hp[s]}
             maxHp={maxHp[s]}
-            statuses={view.statuses[s]}
-            acting={view.acting === s}
-            shake={view.shake === s}
-            floats={view.floats.filter((f) => f.side === s)}
+            statuses={cur.statuses[s]}
+            acting={cur.acting === s}
+            shake={cur.shake === s}
+            floats={cur.floats.filter((f) => f.side === s)}
           />
         ))}
       </div>
 
       <div
         className="sketch-card"
-        style={{ width: '100%', maxWidth: '48rem', minHeight: '2.8rem', display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center', fontWeight: 700, padding: '0.45rem 1rem' }}
+        style={{
+          width: '100%',
+          maxWidth: '48rem',
+          minHeight: '3.2rem',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          textAlign: 'center',
+          fontWeight: 700,
+          fontSize: phase === 'animating' ? '1.05rem' : '1rem',
+          padding: '0.5rem 1rem',
+        }}
       >
-        {view.banner}
+        {cur.banner}
       </div>
 
-      <div style={{ fontSize: '0.76rem', color: 'var(--ink-soft)' }}>{matchup}</div>
-
-      <TriangleGuide />
-
-      {phase === 'over' ? (
+      {phase === 'animating' ? (
+        <div style={{ display: 'grid', placeItems: 'center', gap: '0.5rem', width: '100%' }}>
+          <div style={{ fontSize: '0.72rem', color: 'var(--ink-soft)' }}>
+            {beatIdx + 1} / {beats.length}
+          </div>
+          <button
+            className="crayon-btn primary big"
+            style={{ minWidth: '13rem', fontSize: '1.2rem', padding: '0.6em 1.4em' }}
+            onClick={advance}
+          >
+            {tapLabel}
+          </button>
+        </div>
+      ) : phase === 'over' ? (
         <div style={{ fontSize: '0.9rem', opacity: 0.7 }}>けっかへ…</div>
-      ) : phase === 'animating' ? (
-        <div style={{ fontSize: '0.85rem', opacity: 0.55, minHeight: '4.5rem', display: 'grid', placeItems: 'center' }}>…</div>
       ) : phase === 'handoff' ? (
         <div style={{ display: 'grid', gap: '0.8rem', placeItems: 'center' }}>
           <div style={{ fontWeight: 700 }}>P1 は えらんだ！ がめんを P2 にわたして…</div>
@@ -421,6 +461,8 @@ export function BattleScene() {
         </div>
       ) : (
         <>
+          <div style={{ fontSize: '0.76rem', color: 'var(--ink-soft)' }}>{matchup}</div>
+          <TriangleGuide />
           {mode === 'versus' && (
             <div style={{ fontWeight: 700, color: phase === 'choose-p2' ? 'var(--crayon-blue)' : 'var(--crayon-red)' }}>
               {phase === 'choose-p2' ? `P2（${names[1]}）` : `P1（${names[0]}）`} が えらぶ
@@ -443,7 +485,6 @@ export function BattleScene() {
 
 /** 三すくみを三角形で。速さ→力→技→速さ（矢印の向きに勝つ）。 */
 function TriangleGuide() {
-  // viewBox 300x232。速さ=上、力=右下、技=左下。
   const V = { speed: [150, 42], power: [246, 188], tech: [54, 188] } as const;
   const R = 36;
   const node = (s: TriStance, [x, y]: readonly [number, number]) => (
@@ -457,7 +498,6 @@ function TriangleGuide() {
       </text>
     </g>
   );
-  // 勝つ方向: 速さ→力, 力→技, 技→速さ
   const edges: [readonly [number, number], readonly [number, number]][] = [
     [V.speed, V.power],
     [V.power, V.tech],
@@ -468,7 +508,7 @@ function TriangleGuide() {
       <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--ink-soft)' }}>
         じゃんけん：矢印の むきに かつ
       </span>
-      <svg width="236" height="182" viewBox="0 0 300 232" role="img" aria-label="速さは力に、力は技に、技は速さに勝つ">
+      <svg width="212" height="164" viewBox="0 0 300 232" role="img" aria-label="速さは力に、力は技に、技は速さに勝つ">
         <defs>
           <marker id="tg-arrow" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
             <path d="M0 0 L12 6 L0 12 z" fill="var(--ink)" />
@@ -544,31 +584,43 @@ function Tip({ title, sub, lines, desc }: { title: string; sub?: string; lines: 
 function StanceButtons({ onPick, me }: { onPick: (s: ClashStance) => void; me: ClashCombatant }) {
   const kosei = getKosei(me.koseiId);
   const canKosei = koseiReady(me);
-  const [hover, setHover] = useState<ClashStance | null>(null);
+  const [open, setOpen] = useState<ClashStance | null>(null);
 
-  const bigBtn: React.CSSProperties = {
-    minWidth: '9rem',
-    fontWeight: 700,
-    padding: '0.55em 0.9em',
-    fontSize: '1.15rem',
-    lineHeight: 1.15,
+  const shell: React.CSSProperties = {
+    minWidth: '10.5rem',
+    maxWidth: '13rem',
+    flex: '1 1 10.5rem',
+    padding: '0.7em 0.8em',
+    lineHeight: 1.2,
+    display: 'grid',
+    gap: 3,
+    textAlign: 'center',
   };
 
   const triBtn = (s: TriStance) => {
     const mv = stanceMoveDef(me, s);
-    const powWord = mv.category === 'attack' ? `威力 ${mv.power}` : 'ほじょ';
+    const gist = moveGist(mv);
     return (
-      <div key={s} style={{ position: 'relative' }} onMouseEnter={() => setHover(s)} onMouseLeave={() => setHover(null)}>
-        {hover === s && (
-          <Tip title={mv.name} sub={`${STANCE_JP[s]}・${CAT_WORD[mv.category]}`} lines={moveDetailLines(mv)} desc={mv.desc || undefined} />
+      <div key={s} style={{ position: 'relative', display: 'flex' }}>
+        {open === s && (
+          <Tip title={mv.name} sub={`${STANCE_JP[s]}`} lines={moveDetailLines(mv)} desc={mv.desc || undefined} />
         )}
-        <button className="crayon-btn" onClick={() => onPick(s)} style={{ ...bigBtn, borderColor: BTN_COLOR[s], color: BTN_COLOR[s] }}>
-          {ICON[s]} {STANCE_JP[s]}
-          <span style={{ display: 'block', fontSize: '0.66em', opacity: 0.95, marginTop: 2 }}>
-            「{mv.name}」<span style={{ opacity: 0.7 }}>{powWord}</span>
+        <button
+          className="crayon-btn"
+          onClick={() => onPick(s)}
+          onMouseEnter={() => setOpen(s)}
+          onMouseLeave={() => setOpen(null)}
+          style={{ ...shell, borderColor: BTN_COLOR[s], color: 'var(--ink)' }}
+        >
+          <span style={{ fontFamily: 'var(--font-display)', fontSize: '1.15rem', color: BTN_COLOR[s] }}>
+            「{mv.name}」
           </span>
-          <span style={{ display: 'block', fontSize: '0.55em', opacity: 0.8, color: STANCE_COLOR[STANCE_BEATS[s]] }}>
-            {STANCE_JP[STANCE_BEATS[s]]}に かつ ／ {STANCE_JP[LOSES_TO[s]]}に よわい
+          <span style={{ fontSize: '0.92rem', fontWeight: 700 }}>
+            {mv.category === 'attack' ? `いりょく ${mv.power}` : 'ほじょわざ'}
+          </span>
+          {gist && <span style={{ fontSize: '0.76rem', opacity: 0.85 }}>{gist}</span>}
+          <span style={{ fontSize: '0.72rem', color: BTN_COLOR[s], opacity: 0.9 }}>
+            {ICON[s]} {STANCE_JP[s]}（{STANCE_JP[STANCE_BEATS[s]]}に かつ）
           </span>
         </button>
       </div>
@@ -578,39 +630,54 @@ function StanceButtons({ onPick, me }: { onPick: (s: ClashStance) => void; me: C
   return (
     <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', justifyContent: 'center', width: '100%', maxWidth: '48rem' }}>
       {TRI.map(triBtn)}
-      <div style={{ position: 'relative' }} onMouseEnter={() => setHover('kosei')} onMouseLeave={() => setHover(null)}>
-        {hover === 'kosei' && (
+      <div style={{ position: 'relative', display: 'flex' }}>
+        {open === 'kosei' && (
           <Tip title={kosei.activeName} sub={`こせい・${kosei.tagline}`} lines={[`パッシブ：${kosei.passiveJp}`, `効果：${kosei.activeJp}`]} />
         )}
         <button
           className="crayon-btn"
           disabled={!canKosei}
           onClick={() => onPick('kosei')}
-          style={{ ...bigBtn, borderColor: BTN_COLOR.kosei, color: BTN_COLOR.kosei, opacity: canKosei ? 1 : 0.45 }}
+          onMouseEnter={() => setOpen('kosei')}
+          onMouseLeave={() => setOpen(null)}
+          style={{ ...shell, borderColor: BTN_COLOR.kosei, color: 'var(--ink)', opacity: canKosei ? 1 : 0.45 }}
         >
-          ★ こせい
-          <span style={{ display: 'block', fontSize: '0.6em', opacity: 0.85, marginTop: 2 }}>
-            {canKosei ? kosei.activeName : 'いま つかえない'}
+          <span style={{ fontFamily: 'var(--font-display)', fontSize: '1.15rem', color: BTN_COLOR.kosei }}>
+            ★ {kosei.activeName}
           </span>
+          <span style={{ fontSize: '0.8rem' }}>{canKosei ? 'こせいわざ' : 'いま つかえない'}</span>
+          <span style={{ fontSize: '0.72rem', opacity: 0.8 }}>{kosei.tagline}</span>
         </button>
       </div>
     </div>
   );
 }
 
-/** 選んだ構えが画面中央で大きくぶつかる演出。 */
+/** 選んだ構えが画面中央で大きくぶつかる演出。pending→勝者 を内部で自動再生。 */
 function ClashCut({
   cut,
   names,
 }: {
-  cut: { a: ClashStance; b: ClashStance; winner: Side | null | 'pending' };
+  cut: { a: ClashStance; b: ClashStance; winner: Side | null };
   names: [string, string];
 }) {
+  const [resolved, setResolved] = useState(false);
+  useEffect(() => {
+    setResolved(false);
+    const t = window.setTimeout(() => setResolved(true), 650);
+    return () => window.clearTimeout(t);
+  }, [cut]);
+
   const colorOf = (st: ClashStance) => (st === 'kosei' ? 'var(--crayon-purple)' : STANCE_COLOR[st as TriStance]);
 
   const card = (st: ClashStance, side: Side) => {
-    const mode: 'pending' | 'win' | 'lose' | 'even' =
-      cut.winner === 'pending' ? 'pending' : cut.winner === null ? 'even' : cut.winner === side ? 'win' : 'lose';
+    const mode: 'pending' | 'win' | 'lose' | 'even' = !resolved
+      ? 'pending'
+      : cut.winner === null
+        ? 'even'
+        : cut.winner === side
+          ? 'win'
+          : 'lose';
     const dir = side === 0 ? -1 : 1;
     return (
       <motion.div
@@ -644,13 +711,13 @@ function ClashCut({
     );
   };
 
-  const bigText = cut.winner === 'pending' ? '' : cut.winner === null ? 'ごかく！' : `${names[cut.winner]} の かち！`;
+  const bigText = !resolved ? '' : cut.winner === null ? 'ごかく！' : `${names[cut.winner]} の かち！`;
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 30, pointerEvents: 'none', display: 'grid', placeItems: 'center', background: 'rgba(0,0,0,0.16)' }}>
       <div style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
         {card(cut.a, 0)}
-        {cut.winner === 'pending' && (
+        {!resolved && (
           <motion.div
             animate={{ scale: [1, 1.4, 1], rotate: [0, 18, -18, 0] }}
             transition={{ repeat: Infinity, duration: 0.55 }}
@@ -702,7 +769,7 @@ function FighterPanel({
   image: string | null;
   hp: number;
   maxHp: number;
-  statuses: { jp: string; good: boolean }[];
+  statuses: StatusChip[];
   acting: boolean;
   shake: boolean;
   floats: Floating[];

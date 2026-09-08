@@ -17,10 +17,15 @@ function ai(overrides: Partial<AiFeatures> = {}): AiFeatures {
     colorCount: 2,
     eyeCount: 2,
     temperament: 'calm',
+    bodyType: 'ふつうの体',
     powerLook: 0.5,
+    powerReason: 'ふつう',
     toughnessLook: 0.5,
+    toughnessReason: 'ふつう',
     speedLook: 0.5,
+    speedReason: 'ふつう',
     hpLook: 0.5,
+    hpReason: 'ふつう',
     name: 'テストン',
     flavor: 'てすと。',
     revealNotes: [{ step: 'attribute', text: 'あかい！' }],
@@ -68,6 +73,32 @@ describe('AI Vision の特徴 → キャラ変換', () => {
     expect(atkC.baseStats.atk).toBeGreaterThan(atkC.baseStats.def);
     expect(spdC.baseStats.spd).toBeGreaterThan(spdC.baseStats.atk);
     expect(defC.baseStats.def).toBeGreaterThan(defC.baseStats.atk);
+  });
+
+  it('AI の各ステータス理由が analysis に載る（リビール表示用）', () => {
+    const c = aiFeaturesToCharacter(
+      ai({
+        powerReason: 'するどい ツメが ある',
+        toughnessReason: 'よろいが あつい',
+        speedReason: 'はねが ある',
+        hpReason: '体が 大きい',
+      }),
+      99,
+    );
+    const texts = c.analysis.map((a) => a.detected);
+    expect(texts).toContain('するどい ツメが ある');
+    expect(texts).toContain('よろいが あつい');
+    expect(texts).toContain('はねが ある');
+    expect(texts).toContain('体が 大きい');
+  });
+
+  it('戦車タイプ（攻・防 高く 速 低い）が型に出る', () => {
+    const tank = aiFeaturesToCharacter(
+      ai({ powerLook: 0.85, toughnessLook: 0.9, speedLook: 0.15, hpLook: 0.8 }),
+      3,
+    );
+    expect(tank.baseStats.def).toBeGreaterThan(tank.baseStats.spd);
+    expect(tank.baseStats.atk).toBeGreaterThan(tank.baseStats.spd);
   });
 
   it('coerceAiFeatures：壊れた入力は null、範囲外はクランプ', () => {

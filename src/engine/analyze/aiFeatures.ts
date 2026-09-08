@@ -41,16 +41,23 @@ export interface AiFeatures {
   eyeCount: number;
   /** 性格。好戦的 or おだやか。 */
   temperament: 'aggressive' | 'calm';
+  /** 体つきの一言（「戦車のようにゴツい」など）。 */
+  bodyType: string;
 
-  // ---- 「この生き物はどう見えるか」＝ステータスの印象（各 0..1）。AI が絵を見て付ける ----
+  // ---- 「この生き物はどう見えるか」＝ステータスの印象（各 0..1）。AI が絵の具体物を見て付ける ----
   /** つよそう（するどい・武器・攻撃的なポーズ）。→ こうげき */
   powerLook: number;
+  /** powerLook の理由（絵の具体物つき・子ども向け一言）。 */
+  powerReason: string;
   /** かたそう（分厚い・鎧・どっしり・盾）。→ ぼうぎょ */
   toughnessLook: number;
+  toughnessReason: string;
   /** すばやそう（細い・翼・とがった脚・身軽）。→ すばやさ */
   speedLook: number;
+  speedReason: string;
   /** タフそう（大きい・がっしり・体力ありそう）。→ HP */
   hpLook: number;
+  hpReason: string;
   /** 名前（カタカナ中心・4〜7字くらい）。 */
   name: string;
   /** 図鑑の一文（子ども向け）。 */
@@ -93,6 +100,7 @@ export function aiToFeatureVector(ai: AiFeatures): FeatureVector {
 export function aiFeaturesToCharacter(ai: AiFeatures, seed: number): Character {
   const fv = aiToFeatureVector(ai);
   const weapon = ai.weapon === 'none' ? undefined : ai.weapon;
+  const r = (s: string) => (s && s.trim() ? s.trim() : undefined);
   return featuresToCharacter(fv, seed, {
     attribute: ai.attribute,
     weapon,
@@ -103,6 +111,12 @@ export function aiFeaturesToCharacter(ai: AiFeatures, seed: number): Character {
       tough: clamp(ai.toughnessLook, 0, 1),
       speed: clamp(ai.speedLook, 0, 1),
       hp: clamp(ai.hpLook, 0, 1),
+    },
+    statReasons: {
+      power: r(ai.powerReason),
+      tough: r(ai.toughnessReason),
+      speed: r(ai.speedReason),
+      hp: r(ai.hpReason),
     },
   });
 }
@@ -134,10 +148,15 @@ export function coerceAiFeatures(raw: unknown): AiFeatures | null {
     colorCount: clampInt(num('colorCount', 2), 1, 6),
     eyeCount: clampInt(num('eyeCount', 2), 0, 6),
     temperament: o.temperament === 'aggressive' ? 'aggressive' : 'calm',
+    bodyType: typeof o.bodyType === 'string' ? o.bodyType.slice(0, 60) : '',
     powerLook: clamp(num('powerLook'), 0, 1),
+    powerReason: typeof o.powerReason === 'string' ? o.powerReason.slice(0, 80) : '',
     toughnessLook: clamp(num('toughnessLook'), 0, 1),
+    toughnessReason: typeof o.toughnessReason === 'string' ? o.toughnessReason.slice(0, 80) : '',
     speedLook: clamp(num('speedLook'), 0, 1),
+    speedReason: typeof o.speedReason === 'string' ? o.speedReason.slice(0, 80) : '',
     hpLook: clamp(num('hpLook'), 0, 1),
+    hpReason: typeof o.hpReason === 'string' ? o.hpReason.slice(0, 80) : '',
     name: typeof o.name === 'string' ? o.name.slice(0, 16) : '',
     flavor: typeof o.flavor === 'string' ? o.flavor.slice(0, 120) : '',
     revealNotes: notes,
