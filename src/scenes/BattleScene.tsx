@@ -7,6 +7,7 @@ import {
   cpuClashStance,
   koseiReady,
   moveCategory,
+  stanceMoveDef,
   archetypeLabel,
   getKosei,
   mulberry32,
@@ -95,6 +96,11 @@ export function BattleScene() {
   const [phase, setPhase] = useState<Phase>('choose-p1');
   const [p1Pick, setP1Pick] = useState<ClashStance | null>(null);
   const [lastPair, setLastPair] = useState<[ClashStance, ClashStance] | null>(null);
+  const [clashCut, setClashCut] = useState<{
+    a: ClashStance;
+    b: ClashStance;
+    winner: Side | null | 'pending';
+  } | null>(null);
   const [view, setView] = useState<View>({
     hp: [maxHp[0], maxHp[1]],
     statuses: [[], []],
@@ -179,22 +185,29 @@ export function BattleScene() {
       );
     };
 
+    let cutCleared = false;
     for (const ev of events) {
       switch (ev.t) {
         case 'reveal':
           step(() => {
-            v.banner = `${names[0]}「${STANCE_JP[ev.stances[0]]}」 × ${names[1]}「${STANCE_JP[ev.stances[1]]}」`;
+            setClashCut({ a: ev.stances[0], b: ev.stances[1], winner: 'pending' });
+            v.banner = 'せーの！';
             commit();
-          }, 620);
+          }, 900);
           break;
         case 'clash':
           step(() => {
+            setClashCut((c) => (c ? { ...c, winner: ev.winner } : c));
             v.banner = ev.winner === null ? '五分！' : `${names[ev.winner]} ${ev.note}`;
             commit();
-          }, 640);
+          }, 1150);
           break;
         case 'act':
           step(() => {
+            if (!cutCleared) {
+              setClashCut(null);
+              cutCleared = true;
+            }
             v.acting = ev.side;
             v.banner = `${names[ev.side]} → ${ev.moveName}`;
             commit();
@@ -267,6 +280,7 @@ export function BattleScene() {
     }
 
     step(() => {
+      setClashCut(null);
       setState(next);
       setView({
         hp: [next.combatants[0].hp, next.combatants[1].hp],
@@ -292,6 +306,7 @@ export function BattleScene() {
   return (
     <div className="scene" style={{ justifyContent: 'flex-start', paddingTop: 'clamp(.5rem,3vh,1.5rem)', gap: '0.8rem' }}>
       {pinch && <div className="pinch-vignette" />}
+      {clashCut && <ClashCut cut={clashCut} names={names} />}
 
       <div style={{ display: 'flex', gap: 'clamp(.6rem,3vw,1.5rem)', width: '100%', maxWidth: '48rem' }}>
         {[0, 1].map((s) => (
@@ -404,22 +419,23 @@ function StanceButtons({ onPick, me }: { onPick: (s: ClashStance) => void; me: C
   const kName = getKosei(me.koseiId).activeName;
   const canKosei = koseiReady(me);
 
-  const triBtn = (s: TriStance) => (
-    <button
-      key={s}
-      className="crayon-btn"
-      onClick={() => onPick(s)}
-      style={{ borderColor: BTN_COLOR[s], color: BTN_COLOR[s], minWidth: '6.5rem', fontWeight: 700 }}
-    >
-      {ICON[s]} {STANCE_JP[s]}
-      <span style={{ display: 'block', fontSize: '0.58em', opacity: 0.85, color: STANCE_COLOR[STANCE_BEATS[s]] }}>
-        {STANCE_JP[STANCE_BEATS[s]]}に かつ
-      </span>
-      <span style={{ display: 'block', fontSize: '0.55em', opacity: 0.6 }}>
-        {STANCE_JP[LOSES_TO[s]]}に よわい
-      </span>
-    </button>
-  );
+  const triBtn = (s: TriStance) => {
+    const mv = stanceMoveDef(me, s);
+    return (
+      <button
+        key={s}
+        className="crayon-btn"
+        onClick={() => onPick(s)}
+        style={{ borderColor: BTN_COLOR[s], color: BTN_COLOR[s], minWidth: '7rem', fontWeight: 700, padding: '0.35em 0.7em' }}
+      >
+        {ICON[s]} {STANCE_JP[s]}
+        <span style={{ display: 'block', fontSize: '0.62em', opacity: 0.95 }}>「{mv.name}」</span>
+        <span style={{ display: 'block', fontSize: '0.52em', opacity: 0.8, color: STANCE_COLOR[STANCE_BEATS[s]] }}>
+          {STANCE_JP[STANCE_BEATS[s]]}に かつ ／ {STANCE_JP[LOSES_TO[s]]}に よわい
+        </span>
+      </button>
+    );
+  };
 
   return (
     <div style={{ display: 'flex', gap: '0.55rem', flexWrap: 'wrap', justifyContent: 'center', width: '100%', maxWidth: '48rem' }}>
@@ -441,6 +457,111 @@ function StanceButtons({ onPick, me }: { onPick: (s: ClashStance) => void; me: C
           {canKosei ? kName : 'いま つかえない'}
         </span>
       </button>
+    </div>
+  );
+}
+
+/** 選んだ構えが画面中央で大きくぶつかる演出。 */
+function ClashCut({
+  cut,
+  names,
+}: {
+  cut: { a: ClashStance; b: ClashStance; winner: Side | null | 'pending' };
+  names: [string, string];
+}) {
+  const colorOf = (st: ClashStance) =>
+    st === 'kosei' ? 'var(--crayon-purple)' : STANCE_COLOR[st as TriStance];
+
+  const card = (st: ClashStance, side: Side) => {
+    const mode: 'pending' | 'win' | 'lose' | 'even' =
+      cut.winner === 'pending' ? 'pending' : cut.winner === null ? 'even' : cut.winner === side ? 'win' : 'lose';
+    const dir = side === 0 ? -1 : 1;
+    return (
+      <motion.div
+        initial={{ x: dir * 320, opacity: 0, rotate: dir * 14 }}
+        animate={
+          mode === 'pending'
+            ? { x: dir * 10, opacity: 1, rotate: 0, scale: [1, 1.05, 1] }
+            : mode === 'win'
+              ? { x: dir * 26, opacity: 1, rotate: 0, scale: 1.28 }
+              : mode === 'lose'
+                ? { x: dir * 150, opacity: 0.35, rotate: dir * 22, scale: 0.78 }
+                : { x: dir * 18, opacity: 1, rotate: 0, scale: 1 }
+        }
+        transition={{
+          type: 'spring',
+          stiffness: 260,
+          damping: 17,
+          scale: { repeat: mode === 'pending' ? Infinity : 0, duration: 0.5 },
+        }}
+        style={{
+          width: 'min(34vw, 160px)',
+          aspectRatio: '3 / 4',
+          display: 'grid',
+          placeItems: 'center',
+          gap: 2,
+          background: colorOf(st),
+          color: '#fff',
+          border: '4px solid #fff',
+          borderRadius: 14,
+          boxShadow: mode === 'win' ? '0 0 0 6px rgba(242,183,5,.9), 0 8px 24px rgba(0,0,0,.3)' : '0 8px 24px rgba(0,0,0,.25)',
+        }}
+      >
+        <div style={{ fontSize: 'clamp(2rem, 8vw, 3rem)', lineHeight: 1 }}>{ICON[st]}</div>
+        <div style={{ fontWeight: 900, fontSize: 'clamp(1rem,3.5vw,1.4rem)' }}>{STANCE_JP[st]}</div>
+      </motion.div>
+    );
+  };
+
+  const bigText =
+    cut.winner === 'pending' ? '' : cut.winner === null ? 'ごかく！' : `${names[cut.winner]} の かち！`;
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 30,
+        pointerEvents: 'none',
+        display: 'grid',
+        placeItems: 'center',
+        background: 'rgba(0,0,0,0.14)',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
+        {card(cut.a, 0)}
+        {cut.winner === 'pending' && (
+          <motion.div
+            animate={{ scale: [1, 1.35, 1], rotate: [0, 16, -16, 0] }}
+            transition={{ repeat: Infinity, duration: 0.6 }}
+            style={{ fontSize: 'clamp(1.6rem,6vw,2.4rem)', margin: '0 -0.6rem', zIndex: 2 }}
+          >
+            💥
+          </motion.div>
+        )}
+        {card(cut.b, 1)}
+      </div>
+      {bigText && (
+        <motion.div
+          initial={{ scale: 0.4, opacity: 0, y: 10 }}
+          animate={{ scale: 1, opacity: 1, y: 0 }}
+          style={{
+            position: 'absolute',
+            bottom: '30%',
+            fontFamily: 'var(--font-display)',
+            fontWeight: 900,
+            fontSize: 'clamp(1.3rem,5vw,1.9rem)',
+            color: 'var(--ink)',
+            background: '#fff',
+            border: '3px solid var(--ink)',
+            borderRadius: 10,
+            padding: '0.2em 0.8em',
+            boxShadow: '3px 4px 0 rgba(0,0,0,.2)',
+          }}
+        >
+          {bigText}
+        </motion.div>
+      )}
     </div>
   );
 }

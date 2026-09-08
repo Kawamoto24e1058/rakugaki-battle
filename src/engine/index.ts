@@ -14,6 +14,7 @@ export {
   effStat,
   koseiReady,
   moveCategory,
+  stanceMoveDef,
   STANCE_JP,
   STANCE_COLOR,
   STANCE_BEATS,

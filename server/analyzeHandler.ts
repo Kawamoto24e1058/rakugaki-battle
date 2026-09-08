@@ -60,6 +60,10 @@ function mockFeatures(req: AnalyzeRequest): Record<string, unknown> {
     colorCount: 1 + Math.floor(r(5) * 5),
     eyeCount: Math.floor(r(4) * 4),
     temperament: r(2) < 1 ? 'aggressive' : 'calm',
+    powerLook: r(10),
+    toughnessLook: r(10),
+    speedLook: r(10),
+    hpLook: r(10),
     name: `モック${Math.floor(r(1000) * 1000)}`,
     flavor: '(mock) てすとよう の キャラ。',
     revealNotes: [

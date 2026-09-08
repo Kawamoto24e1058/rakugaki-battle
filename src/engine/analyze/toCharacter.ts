@@ -11,7 +11,15 @@ export interface AnalysisOverrides {
   weapon?: Weapon;
   name?: string;
   flavor?: { name?: string; bio?: string };
+  /**
+   * AI が「絵を見て」付けたステータス印象（各 0..1）。
+   * あれば、形から計算したスコアとブレンドして反映する（AI 寄り 6:4）。
+   */
+  statLook?: { power: number; tough: number; speed: number; hp: number };
 }
+
+const mix = (a: number, b: number, t: number) => a * (1 - t) + b * t;
+const LOOK_WEIGHT = 0.6;
 
 // メイン3ステータス（こうげき・ぼうぎょ・すばやさ）の合計は「種族値」で 79〜101 に振れる。
 const MAIN_BASE = 90;
@@ -149,14 +157,23 @@ export function featuresToCharacter(
   const bstScale = 0.88 + bst01 * 0.24;
 
   // こうげき・ぼうぎょ・すばやさ（絵の特徴を強めに反映）
-  const atkScore = 12 + f.spikiness * 46 + (weapon === 'sword' ? 6 : 0);
-  const defScore = 12 + f.symmetry * 28 + f.fillDensity * 20 + (weapon === 'shield' ? 6 : 0);
-  const spdScore =
-    10 + clamp01(1 - f.aspect) * 36 + (1 - f.coverage) * 18 + (weapon === 'wing' ? 10 : 0);
+  const look = overrides.statLook;
+  let atkScore = 12 + f.spikiness * 46 + (weapon === 'sword' ? 6 : 0);
+  let defScore = 12 + f.symmetry * 28 + f.fillDensity * 20 + (weapon === 'shield' ? 6 : 0);
+  let spdScore = 10 + clamp01(1 - f.aspect) * 36 + (1 - f.coverage) * 18 + (weapon === 'wing' ? 10 : 0);
+  if (look) {
+    // AI が「見た印象」を 6割、形からの計算を 4割
+    atkScore = mix(atkScore, 12 + clamp01(look.power) * 48, LOOK_WEIGHT);
+    defScore = mix(defScore, 12 + clamp01(look.tough) * 48, LOOK_WEIGHT);
+    spdScore = mix(spdScore, 10 + clamp01(look.speed) * 44, LOOK_WEIGHT);
+  }
   const mainTotal = Math.round(MAIN_BASE * bstScale);
   const [atk, def, spd] = sharpenTriple(atkScore, defScore, spdScore, mainTotal);
 
-  const hpRaw = 52 + sharpen01(f.coverage / 0.35) * 58;
+  const hpBias = look
+    ? mix(sharpen01(f.coverage / 0.35), clamp01(look.hp), LOOK_WEIGHT)
+    : sharpen01(f.coverage / 0.35);
+  const hpRaw = 52 + hpBias * 58;
   const hp = Math.max(HP_MIN, Math.min(HP_MAX, Math.round(hpRaw * bstScale)));
 
   const luck = scaleTo(

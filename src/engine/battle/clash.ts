@@ -82,6 +82,8 @@ export interface ClashCombatant {
   hp: number;
   statuses: ActiveStatus[];
   cooldowns: Record<MoveId, number>;
+  /** 力／技／速さ の代表わざ（バトル開始時に確定・UI ボタンに表示・その構えで基本これが出る）。 */
+  stanceMoves: Record<TriStance, MoveId>;
   /** 直近のターンでこせいを撃って晒された（相手が力なら被ダメ+30%）。 */
   koseiExposed: boolean;
 }
@@ -125,6 +127,7 @@ function toCombatant(c: Character): ClashCombatant {
     hp: c.baseStats.hp,
     statuses: [],
     cooldowns: {},
+    stanceMoves: signatureMoves(c.moveIds),
     koseiExposed: false,
   };
 }
@@ -165,17 +168,6 @@ export function effStat(c: ClashCombatant, stat: keyof Stats): number {
 
 // ---------- カテゴリ別の持ち技 ----------
 
-function movesByCategory(c: ClashCombatant): Record<TriStance, MoveDef[]> {
-  const out: Record<TriStance, MoveDef[]> = { power: [], tech: [], speed: [] };
-  for (const id of c.moveIds) {
-    const m = MOVES_SAFE(id);
-    if (m) out[moveCategory(m)].push(m);
-  }
-  for (const cat of ['power', 'tech', 'speed'] as TriStance[]) {
-    if (out[cat].length === 0) out[cat].push(BASIC[cat]);
-  }
-  return out;
-}
 function MOVES_SAFE(id: MoveId): MoveDef | null {
   try {
     return getMove(id);
@@ -184,19 +176,14 @@ function MOVES_SAFE(id: MoveId): MoveDef | null {
   }
 }
 
-/** その構えで実際に出るわざを選ぶ（クールダウン外を優先、無ければ基本技）。 */
-function pickMove(c: ClashCombatant, cat: TriStance): MoveDef {
-  const pool = movesByCategory(c)[cat];
-  const ready = pool.filter((m) => (c.cooldowns[m.id] ?? 0) <= 0);
-  const list = ready.length > 0 ? ready : [BASIC[cat]];
-  if (cat === 'power') return [...list].sort((a, b) => b.power - a.power)[0];
-  // 速さ：先制わざを最優先、その中で威力が高いもの（＝弱い技を無理に選ばない）
+/** 各カテゴリで「一番いい技」の順に並べる（力＝威力／速さ＝先制優先／技＝効果）。 */
+function rankCategory(moveIds: MoveId[], cat: TriStance): MoveDef[] {
+  const pool = moveIds.map(MOVES_SAFE).filter((m): m is MoveDef => !!m && moveCategory(m) === cat);
+  if (pool.length === 0) return [BASIC[cat]];
+  if (cat === 'power') return [...pool].sort((a, b) => b.power - a.power);
   if (cat === 'speed') {
-    return [...list].sort(
-      (a, b) => Number(!!b.first) - Number(!!a.first) || b.power - a.power,
-    )[0];
+    return [...pool].sort((a, b) => Number(!!b.first) - Number(!!a.first) || b.power - a.power);
   }
-  // tech: 効果の大きそうなものを優先（雑にスコア）
   const score = (m: MoveDef) =>
     (m.cures === 'all' ? 3 : m.cures ? 2 : 0) +
     (m.heal ? m.heal / 12 : 0) +
@@ -205,7 +192,30 @@ function pickMove(c: ClashCombatant, cat: TriStance): MoveDef {
     (m.debuff ? 2 : 0) +
     (m.pierce ? 1 : 0) +
     m.power / 20;
-  return [...list].sort((a, b) => score(b) - score(a))[0];
+  return [...pool].sort((a, b) => score(b) - score(a));
+}
+
+/** キャラの「力／技／速さ の代表わざ」（バトル開始時に確定・UIのボタンに表示）。 */
+function signatureMoves(moveIds: MoveId[]): Record<TriStance, MoveId> {
+  return {
+    power: rankCategory(moveIds, 'power')[0].id,
+    tech: rankCategory(moveIds, 'tech')[0].id,
+    speed: rankCategory(moveIds, 'speed')[0].id,
+  };
+}
+
+/** その構えで実際に出るわざ：代表わざ → CD なら同カテゴリの別の技 → 基本技。 */
+function pickMove(c: ClashCombatant, cat: TriStance): MoveDef {
+  const ranked = rankCategory(c.moveIds, cat);
+  const sig = MOVES_SAFE(c.stanceMoves[cat]);
+  const order = sig ? [sig, ...ranked.filter((m) => m.id !== sig.id)] : ranked;
+  const ready = order.find((m) => (c.cooldowns[m.id] ?? 0) <= 0);
+  return ready ?? BASIC[cat];
+}
+
+/** UI 表示用：その構えの代表わざの名前（＋威力の目安）。 */
+export function stanceMoveDef(c: ClashCombatant, cat: TriStance): MoveDef {
+  return MOVES_SAFE(c.stanceMoves[cat]) ?? BASIC[cat];
 }
 
 // ---------- クラッシュ判定 ----------
@@ -672,6 +682,7 @@ function cloneC(c: ClashCombatant): ClashCombatant {
     moveIds: [...c.moveIds],
     statuses: c.statuses.map((s) => ({ ...s })),
     cooldowns: { ...c.cooldowns },
+    stanceMoves: { ...c.stanceMoves },
   };
 }
 
@@ -690,11 +701,9 @@ export function cpuClashStance(state: ClashState, side: Side, rng: Rng): ClashSt
     if (!offensive && myPct < 0.55 && rng() < 0.5) return 'kosei';
     if (offensive && state.turn >= 3 && rng() < 0.2) return 'kosei';
   }
-  // 得意カテゴリに寄せつつ、読まれないよう散らす
-  const counts = movesByCategory(me);
-  const best = (['power', 'tech', 'speed'] as TriStance[]).sort(
-    (a, b) => counts[b].length - counts[a].length,
-  )[0];
+  // 得意カテゴリ（代表わざの威力が高い所）に寄せつつ、読まれないよう散らす
+  const strength = (cat: TriStance) => rankCategory(me.moveIds, cat)[0].power;
+  const best = (['power', 'tech', 'speed'] as TriStance[]).sort((a, b) => strength(b) - strength(a))[0];
   const r = rng();
   if (r < 0.5) return best;
   if (r < 0.75) return 'power';

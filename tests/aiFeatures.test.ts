@@ -17,6 +17,10 @@ function ai(overrides: Partial<AiFeatures> = {}): AiFeatures {
     colorCount: 2,
     eyeCount: 2,
     temperament: 'calm',
+    powerLook: 0.5,
+    toughnessLook: 0.5,
+    speedLook: 0.5,
+    hpLook: 0.5,
     name: 'テストン',
     flavor: 'てすと。',
     revealNotes: [{ step: 'attribute', text: 'あかい！' }],
@@ -50,10 +54,20 @@ describe('AI Vision の特徴 → キャラ変換', () => {
   });
 
   it('トゲトゲ・大きい絵は こうげき／HP が上がる方向', () => {
-    const spiky = aiFeaturesToCharacter(ai({ spikiness: 1, coverage: 0.9 }), 42);
-    const round = aiFeaturesToCharacter(ai({ spikiness: 0, coverage: 0.2 }), 42);
+    const spiky = aiFeaturesToCharacter(ai({ spikiness: 1, coverage: 0.9, powerLook: 0.9, hpLook: 0.9 }), 42);
+    const round = aiFeaturesToCharacter(ai({ spikiness: 0, coverage: 0.2, powerLook: 0.1, hpLook: 0.1 }), 42);
     expect(spiky.baseStats.atk).toBeGreaterThan(round.baseStats.atk);
     expect(spiky.baseStats.hp).toBeGreaterThan(round.baseStats.hp);
+  });
+
+  it('AI の powerLook / speedLook / toughnessLook が「型」を左右する', () => {
+    const atkC = aiFeaturesToCharacter(ai({ powerLook: 0.95, toughnessLook: 0.1, speedLook: 0.1 }), 7);
+    const spdC = aiFeaturesToCharacter(ai({ powerLook: 0.1, toughnessLook: 0.1, speedLook: 0.95 }), 7);
+    const defC = aiFeaturesToCharacter(ai({ powerLook: 0.1, toughnessLook: 0.95, speedLook: 0.1 }), 7);
+    expect(atkC.baseStats.atk).toBeGreaterThan(atkC.baseStats.spd);
+    expect(atkC.baseStats.atk).toBeGreaterThan(atkC.baseStats.def);
+    expect(spdC.baseStats.spd).toBeGreaterThan(spdC.baseStats.atk);
+    expect(defC.baseStats.def).toBeGreaterThan(defC.baseStats.atk);
   });
 
   it('coerceAiFeatures：壊れた入力は null、範囲外はクランプ', () => {

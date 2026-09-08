@@ -10,7 +10,8 @@ export const AI_WEAPONS = ['sword', 'wand', 'shield', 'wing', 'none'] as const;
 const ALL_FIELDS = [
   'attribute', 'attributeReason', 'weapon', 'aspectRatio', 'coverage', 'spikiness',
   'symmetry', 'fillDensity', 'saturation', 'brightness', 'colorCount', 'eyeCount',
-  'temperament', 'name', 'flavor', 'revealNotes',
+  'temperament', 'powerLook', 'toughnessLook', 'speedLook', 'hpLook',
+  'name', 'flavor', 'revealNotes',
 ]
 
 /** Gemini generationConfig.responseSchema（OpenAPI 3.0 サブセット・型は大文字）。min/max は無視されるので説明文で伝える。 */
@@ -30,6 +31,10 @@ export const GEMINI_RESPONSE_SCHEMA = {
     colorCount: { type: 'INTEGER', description: '1〜6。目立つ色の数' },
     eyeCount: { type: 'INTEGER', description: '0〜6。はっきり描かれた目の数' },
     temperament: { type: 'STRING', enum: ['aggressive', 'calm'], description: '見た目の性格' },
+    powerLook: { type: 'NUMBER', description: '0〜1。この生き物は どれくらい「つよそう」に見えるか（するどい爪・牙・武器・攻撃的なポーズ・怒った顔ほど高い）。→ こうげき' },
+    toughnessLook: { type: 'NUMBER', description: '0〜1。どれくらい「かたそう・打たれ強そう」に見えるか（分厚い・鎧・甲羅・どっしり・盾ほど高い）。→ ぼうぎょ' },
+    speedLook: { type: 'NUMBER', description: '0〜1。どれくらい「すばやそう」に見えるか（細身・翼・長い脚・身軽・とがったシルエットほど高い）。→ すばやさ' },
+    hpLook: { type: 'NUMBER', description: '0〜1。どれくらい「タフ・体力ありそう」に見えるか（大きい・がっしり・ずんぐりほど高い）。→ HP' },
     name: { type: 'STRING', description: 'キャラの名前（カタカナ中心・4〜7字）' },
     flavor: { type: 'STRING', description: '図鑑の紹介文（子ども向け・一文）' },
     revealNotes: {
@@ -53,12 +58,15 @@ export const AI_SYSTEM_PROMPT = `あなたは子ども向けの「お絵かき�
 子どもが紙に描いた1体のキャラクターの写真を見て、指定のスキーマで見た目の特徴を JSON で報告してください。
 
 ルール:
-- ステータスの数値（こうげき等）は決めない。あなたは「絵をどう見たか」を報告するだけ。
+- ステータスの最終的な数値は決めない。「絵がどう見えるか」を 0〜1 で報告するだけ（ゲーム側が数値化する）。
 - どんな落書き・簡単な絵でも必ず推定する。拒否しない。抽象的な絵でも形・色から数値を出す。
-- スコア（0〜1）は素直に。トゲが多ければ spikiness を高く、線だけなら fillDensity を低く。
+- powerLook / toughnessLook / speedLook / hpLook は、その生き物の見た目の印象を素直に。
+  例：ムキムキで牙のあるドラゴン → powerLook 高・hpLook 高。細い鳥 → speedLook 高、他は低め。
+  まんまるでのんびりした生き物 → toughnessLook 中・speedLook 低。**4つが全部同じ値にならないように、メリハリをつける**。
+- spikiness / fillDensity などの形スコアも素直に。トゲが多ければ spikiness を高く、線だけなら fillDensity を低く。
 - attribute は紙のメインカラーと雰囲気で。えんぴつ・グレー・真っ黒の絵は dark。
 - name は毎回ユニークで、そのキャラらしいカタカナ名。
-- flavor と revealNotes は子ども向けのやさしい日本語で。
+- flavor と revealNotes は子ども向けのやさしい日本語で。revealNotes には「なぜ こうげきが高い/すばやい のか」も入れる。
 - 用紙のチェック欄（ヒント）が渡されたら、それを優先して合わせる。`;
 
 /** 出力が最低限の形をしているか（詳細な clamp はクライアント側 coerceAiFeatures）。 */

@@ -41,6 +41,16 @@ export interface AiFeatures {
   eyeCount: number;
   /** 性格。好戦的 or おだやか。 */
   temperament: 'aggressive' | 'calm';
+
+  // ---- 「この生き物はどう見えるか」＝ステータスの印象（各 0..1）。AI が絵を見て付ける ----
+  /** つよそう（するどい・武器・攻撃的なポーズ）。→ こうげき */
+  powerLook: number;
+  /** かたそう（分厚い・鎧・どっしり・盾）。→ ぼうぎょ */
+  toughnessLook: number;
+  /** すばやそう（細い・翼・とがった脚・身軽）。→ すばやさ */
+  speedLook: number;
+  /** タフそう（大きい・がっしり・体力ありそう）。→ HP */
+  hpLook: number;
   /** 名前（カタカナ中心・4〜7字くらい）。 */
   name: string;
   /** 図鑑の一文（子ども向け）。 */
@@ -79,17 +89,22 @@ export function aiToFeatureVector(ai: AiFeatures): FeatureVector {
   };
 }
 
-/** AI の特徴からキャラを生成（属性・持ち物・名前・図鑑文は AI の値を優先）。 */
+/** AI の特徴からキャラを生成（属性・持ち物・名前・図鑑文・ステータス印象は AI の値を優先）。 */
 export function aiFeaturesToCharacter(ai: AiFeatures, seed: number): Character {
   const fv = aiToFeatureVector(ai);
   const weapon = ai.weapon === 'none' ? undefined : ai.weapon;
-  const character = featuresToCharacter(fv, seed, {
+  return featuresToCharacter(fv, seed, {
     attribute: ai.attribute,
     weapon,
     name: ai.name?.trim() || undefined,
     flavor: { name: ai.name?.trim() || undefined, bio: ai.flavor?.trim() || undefined },
+    statLook: {
+      power: clamp(ai.powerLook, 0, 1),
+      tough: clamp(ai.toughnessLook, 0, 1),
+      speed: clamp(ai.speedLook, 0, 1),
+      hp: clamp(ai.hpLook, 0, 1),
+    },
   });
-  return character;
 }
 
 /** 受け取った JSON が AiFeatures として妥当か（AI の出力チェック）。壊れていたら null。 */
@@ -119,6 +134,10 @@ export function coerceAiFeatures(raw: unknown): AiFeatures | null {
     colorCount: clampInt(num('colorCount', 2), 1, 6),
     eyeCount: clampInt(num('eyeCount', 2), 0, 6),
     temperament: o.temperament === 'aggressive' ? 'aggressive' : 'calm',
+    powerLook: clamp(num('powerLook'), 0, 1),
+    toughnessLook: clamp(num('toughnessLook'), 0, 1),
+    speedLook: clamp(num('speedLook'), 0, 1),
+    hpLook: clamp(num('hpLook'), 0, 1),
     name: typeof o.name === 'string' ? o.name.slice(0, 16) : '',
     flavor: typeof o.flavor === 'string' ? o.flavor.slice(0, 120) : '',
     revealNotes: notes,
