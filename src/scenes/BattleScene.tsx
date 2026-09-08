@@ -74,7 +74,7 @@ const BTN_COLOR: Record<ClashStance, string> = {
   kosei: 'var(--crayon-purple)',
 };
 /** 大きく見せたい damage tag。 */
-const LOUD_TAGS = new Set(['クリティカル', 'カウンター']);
+const LOUD_TAGS = new Set(['クリティカル', 'カウンター', 'こんじょう', 'ばつぐん']);
 
 function catCounts(c: Character): Record<TriStance, number> {
   const out: Record<TriStance, number> = { power: 0, tech: 0, speed: 0 };
@@ -114,6 +114,8 @@ interface Beat {
   impact: string | null;
   /** この場面を見せる時間（ms）。過ぎたら自動で次へ。 */
   ms: number;
+  /** 勝利演出（決着の場面のみ）。 */
+  win?: Side;
 }
 
 type Phase = 'choose-p1' | 'handoff' | 'choose-p2' | 'animating' | 'over';
@@ -140,7 +142,7 @@ function buildBeats(
 
   const add = (
     banner: string,
-    opts: { cut?: Beat['cut']; flash?: boolean; impact?: string | null; ms?: number } = {},
+    opts: { cut?: Beat['cut']; flash?: boolean; impact?: string | null; ms?: number; win?: Side } = {},
   ) => {
     beats.push({
       view: {
@@ -155,6 +157,7 @@ function buildBeats(
       flash: !!opts.flash,
       impact: opts.impact ?? null,
       ms: opts.ms ?? 2000,
+      win: opts.win,
     });
   };
 
@@ -242,7 +245,11 @@ function buildBeats(
   ];
   hp = [next.combatants[0].hp, next.combatants[1].hp];
   if (next.done) {
-    add(next.winner === 'draw' ? 'ひきわけ！' : `${names[next.winner as Side]} の かち！`, { ms: 1600 });
+    if (next.winner === 'draw') {
+      add('ひきわけ！', { ms: 1800 });
+    } else {
+      add(`${names[next.winner as Side]} の かち！`, { ms: 3000, win: next.winner as Side });
+    }
   } else {
     add(`ターン ${next.turn} へ`, { ms: 1200 });
   }
@@ -317,7 +324,8 @@ export function BattleScene() {
 
   useEffect(() => {
     if (phase !== 'over') return;
-    const t = window.setTimeout(() => finishBattle(state.winner === 0), 1500);
+    // 勝利演出は最後の beat で見せ切っているので、ここは短く。
+    const t = window.setTimeout(() => finishBattle(state.winner === 0), 400);
     return () => window.clearTimeout(t);
   }, [phase, state.winner, finishBattle]);
 
@@ -412,6 +420,9 @@ export function BattleScene() {
         </motion.div>
       )}
       {curBeat?.cut && <ClashCut cut={curBeat.cut} names={names} />}
+      {curBeat?.win != null && (
+        <VictoryOverlay name={names[curBeat.win]} char={chars[curBeat.win]} image={images[curBeat.win]} />
+      )}
 
       <div style={{ display: 'flex', gap: 'clamp(.6rem,3vw,1.5rem)', width: '100%', maxWidth: '48rem' }}>
         {[0, 1].map((s) => (
@@ -667,6 +678,107 @@ function StanceButtons({ onPick, me }: { onPick: (s: ClashStance) => void; me: C
           <span style={{ fontSize: '0.72rem', opacity: 0.8 }}>{kosei.tagline}</span>
         </button>
       </div>
+    </div>
+  );
+}
+
+/** 勝利演出：紙吹雪 ＋ 大きな「かち！」＋ 勝者スプライトが跳ねる。 */
+function VictoryOverlay({ name, char, image }: { name: string; char: Character; image: string | null }) {
+  const COLORS = ['#e8503a', '#f2b705', '#1f9d63', '#3b82f6', '#7b5cf0', '#ec6a9c'];
+  const bits = useMemo(
+    () =>
+      Array.from({ length: 34 }, (_, i) => ({
+        id: i,
+        x: Math.random() * 100,
+        delay: Math.random() * 0.7,
+        dur: 1.6 + Math.random() * 1.4,
+        rot: Math.random() * 720 - 360,
+        color: COLORS[i % COLORS.length],
+        size: 8 + Math.random() * 8,
+      })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 45,
+        pointerEvents: 'none',
+        overflow: 'hidden',
+        display: 'grid',
+        placeItems: 'center',
+        background: 'radial-gradient(circle at 50% 40%, rgba(242,183,5,.28), rgba(0,0,0,.28))',
+      }}
+    >
+      {bits.map((b) => (
+        <motion.div
+          key={b.id}
+          initial={{ y: '-12vh', x: `${b.x}vw`, rotate: 0, opacity: 1 }}
+          animate={{ y: '110vh', rotate: b.rot, opacity: [1, 1, 0.6] }}
+          transition={{ duration: b.dur, delay: b.delay, repeat: Infinity, ease: 'linear' }}
+          style={{
+            position: 'absolute',
+            left: 0,
+            top: 0,
+            width: b.size,
+            height: b.size * 0.6,
+            background: b.color,
+            borderRadius: 2,
+          }}
+        />
+      ))}
+
+      <motion.div
+        initial={{ scale: 0.2, rotate: -12, opacity: 0 }}
+        animate={{ scale: [0.2, 1.25, 1], rotate: [-12, 6, 0], opacity: 1 }}
+        transition={{ type: 'spring', stiffness: 200, damping: 12 }}
+        style={{ display: 'grid', placeItems: 'center', gap: '0.8rem' }}
+      >
+        <motion.div
+          animate={{ y: [0, -16, 0] }}
+          transition={{ repeat: Infinity, duration: 0.7, ease: 'easeInOut' }}
+          style={{
+            width: 'min(40vw, 170px)',
+            aspectRatio: '1',
+            background: '#fff',
+            border: '4px solid var(--ink)',
+            borderRadius: 14,
+            padding: 8,
+            transform: 'rotate(-2deg)',
+            boxShadow: '0 0 0 8px rgba(242,183,5,.85), 0 14px 34px rgba(0,0,0,.35)',
+          }}
+        >
+          <CharacterSprite imageUrl={image} attribute={char.attribute} name={name} />
+        </motion.div>
+        <div
+          style={{
+            fontFamily: 'var(--font-display)',
+            fontWeight: 900,
+            fontSize: 'clamp(2rem, 9vw, 3.4rem)',
+            color: '#fff',
+            WebkitTextStroke: '4px var(--ink)',
+            paintOrder: 'stroke',
+          }}
+        >
+          {name} の かち！
+        </div>
+        <div
+          style={{
+            fontFamily: 'var(--font-display)',
+            fontSize: 'clamp(1rem, 3.6vw, 1.4rem)',
+            color: 'var(--ink)',
+            background: '#fff',
+            border: '3px solid var(--ink)',
+            borderRadius: 10,
+            padding: '0.15em 0.9em',
+            boxShadow: '3px 4px 0 rgba(0,0,0,.2)',
+          }}
+        >
+          🎉 おめでとう 🎉
+        </div>
+      </motion.div>
     </div>
   );
 }

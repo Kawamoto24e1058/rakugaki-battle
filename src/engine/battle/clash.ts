@@ -594,7 +594,11 @@ function dealDamage(
   if (target.koseiExposed) dmg *= 1.3;
 
   const hpPct = actor.hp / actor.maxHp;
-  if (hpPct < 0.35) dmg *= 1 + (0.35 - hpPct) * (effStat(actor, 'heart') / 45);
+  if (hpPct < 0.35) {
+    const guts = 1 + (0.35 - hpPct) * (effStat(actor, 'heart') / 45);
+    dmg *= guts;
+    if (guts >= 1.12 && !tag) tag = 'こんじょう';
+  }
 
   dmg *= 0.92 + rng() * 0.16;
 

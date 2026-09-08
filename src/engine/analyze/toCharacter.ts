@@ -304,21 +304,26 @@ function buildReasons(
     detected: sr.hp || (f.coverage > 0.22 ? '大きく描いてある' : '小さめに描いてある'),
     effect: `HP ${stats.hp}`,
   });
-  r.push({
-    key: 'eyes',
-    label: '目・表情',
-    detected: f.eyeSpots >= 2 ? 'はっきりした目' : '目が よく分からない',
-    effect:
-      f.eyeSpots >= 2 || personality === 'calm'
-        ? 'こんじょう が高い（状態異常・回復が強い）'
-        : 'こんじょう ふつう',
-  });
-  r.push({
-    key: 'colors',
-    label: '色のかず',
-    detected: f.colorCount >= 4 ? 'カラフル' : f.colorCount >= 2 ? '数色' : '一色',
-    effect: f.colorCount >= 3 || f.saturation > 0.6 ? 'きゅうしょ に当たりやすい' : 'きゅうしょ ふつう',
-  });
+  {
+    const high = stats.heart >= 22;
+    const src = f.eyeSpots >= 2 ? 'はっきりした目' : personality === 'calm' ? 'おだやかな顔つき' : '目が よく分からない';
+    r.push({
+      key: 'eyes',
+      label: 'こんじょう',
+      detected: `${src} → ${high ? 'ピンチで ねばる・かいふくと 状態異常が つよい' : 'ピンチねばり・かいふくは ふつう'}`,
+      effect: `こんじょう ${stats.heart}`,
+    });
+  }
+  {
+    const high = stats.luck >= 22;
+    const src = f.colorCount >= 4 ? 'カラフル' : f.colorCount >= 2 ? '数色' : '一色';
+    r.push({
+      key: 'colors',
+      label: 'きゅうしょ',
+      detected: `${src} → ${high ? 'クリティカルが 出やすい・状態異常を はねかえす' : 'クリティカルは ときどき'}`,
+      effect: `きゅうしょ ${stats.luck}`,
+    });
+  }
   r.push({ key: 'weapon', label: '体つき・持ち物', detected: WEAPON_JP[weapon], effect: 'それに合ったわざを習得' });
   const shownTags = tags.filter((t) => TAG_JP[t]).slice(0, 3);
   if (shownTags.length > 0) {
