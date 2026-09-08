@@ -60,7 +60,7 @@ const BTN_COLOR: Record<ClashStance, string> = {
 };
 const LOSES_TO: Record<TriStance, TriStance> = { power: 'speed', tech: 'power', speed: 'tech' };
 /** 大きく見せたい damage tag。 */
-const LOUD_TAGS = new Set(['ばつぐん', 'いまひとつ', 'クリティカル', 'こんしん', 'カウンター']);
+const LOUD_TAGS = new Set(['クリティカル', 'カウンター']);
 
 function catCounts(c: Character): Record<TriStance, number> {
   const out: Record<TriStance, number> = { power: 0, tech: 0, speed: 0 };
@@ -116,9 +116,10 @@ export function BattleScene() {
     const m = attributeMatchup(chars[0].attribute, chars[1].attribute);
     const j0 = ATTRIBUTE_META[chars[0].attribute].jp;
     const j1 = ATTRIBUTE_META[chars[1].attribute].jp;
-    if (m === 'strong') return `${j0} は ${j1} に つよい！（${names[0]} 有利）`;
-    if (m === 'weak') return `${j1} は ${j0} に つよい！（${names[1]} 有利）`;
-    return `${j0} と ${j1}：属性の 有利不利なし`;
+    // 属性はダメージではなく「状態異常の入りやすさ」に効く。
+    if (m === 'strong') return `${j0}の技は ${j1}に 状態異常が 入りやすい！（${names[0]}）`;
+    if (m === 'weak') return `${j1}の技は ${j0}に 状態異常が 入りやすい！（${names[1]}）`;
+    return `${j0} と ${j1}：属性の 得意・苦手なし`;
   }, [chars, names]);
 
   const [phase, setPhase] = useState<Phase>('choose-p1');
@@ -281,10 +282,15 @@ export function BattleScene() {
           break;
         case 'status-apply':
           step(() => {
-            v.banner = `${names[ev.side]} は ${STATUS_META[ev.kind].jp}！`;
-            addFloat(ev.side, STATUS_META[ev.kind].jp, 'info');
+            const jp = STATUS_META[ev.kind].jp;
+            v.banner = `${names[ev.side]} は ${jp}！`;
+            addFloat(ev.side, jp, 'info');
             commit();
-          }, 460);
+            if (STATUS_META[ev.kind].kind === 'debuff') {
+              setImpact(`${jp}！`);
+              at(() => setImpact(null), 800);
+            }
+          }, 520);
           break;
         case 'status-resist':
           step(() => {

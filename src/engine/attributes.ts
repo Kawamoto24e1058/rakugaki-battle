@@ -27,9 +27,13 @@ const STRONG_AGAINST: Partial<Record<Attribute, Attribute>> = {
   water: 'fire',
 };
 
-export const AFFINITY_STRONG = 1.5;
-export const AFFINITY_WEAK = 0.7;
-export const AFFINITY_NEUTRAL = 1;
+/**
+ * 属性はダメージ倍率を持たない（生成で有利不利が固定されないため）。
+ * かわりに「属性が合っていると状態異常が入りやすい／逆だと入りにくい」で効かせる。
+ */
+export const ATTR_STATUS_STRONG = 1.6;
+export const ATTR_STATUS_WEAK = 0.4;
+export const ATTR_STATUS_EVEN = 1;
 
 /** attacker の属性が defender に有利／不利／五分 か（バトル開始の相性表示用）。 */
 export function attributeMatchup(attacker: Attribute, defender: Attribute): 'strong' | 'weak' | 'even' {
@@ -38,16 +42,8 @@ export function attributeMatchup(attacker: Attribute, defender: Attribute): 'str
   return 'even';
 }
 
-/** attacker属性 が defender属性 に与えるダメージ倍率。 */
-export function affinityMultiplier(attacker: Attribute, defender: Attribute): number {
-  if (STRONG_AGAINST[attacker] === defender) return AFFINITY_STRONG;
-  if (STRONG_AGAINST[defender] === attacker) return AFFINITY_WEAK;
-  return AFFINITY_NEUTRAL;
-}
-
-/** 相性関係を人が読める文字列に（リビール・バトルログ用）。 */
-export function affinityLabel(mult: number): 'こうかばつぐん' | 'いまひとつ' | 'ふつう' {
-  if (mult >= AFFINITY_STRONG) return 'こうかばつぐん';
-  if (mult <= AFFINITY_WEAK) return 'いまひとつ';
-  return 'ふつう';
+/** 属性技の状態異常成功率にかかる倍率（moveAttr が defenderAttr に得意なら上がる）。 */
+export function attributeStatusMult(moveAttr: Attribute, defenderAttr: Attribute): number {
+  const m = attributeMatchup(moveAttr, defenderAttr);
+  return m === 'strong' ? ATTR_STATUS_STRONG : m === 'weak' ? ATTR_STATUS_WEAK : ATTR_STATUS_EVEN;
 }

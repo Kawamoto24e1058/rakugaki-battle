@@ -12,7 +12,7 @@
  * プロトタイプで手触りを確認してから移行する。
  */
 import type { Attribute, Character, StatusKind, Stats } from '../types';
-import { affinityMultiplier, affinityLabel } from '../attributes';
+import { attributeStatusMult } from '../attributes';
 import { STATUS_META, type ActiveStatus } from '../status';
 import { getMove, moveCategory, type MoveDef, type MoveId } from '../moves';
 import { koseiOrDefault, type Kosei } from '../personalities';
@@ -560,10 +560,8 @@ function dealDamage(
   const target = state.combatants[1 - side as Side];
 
   const hasAttr = move.attribute != null;
-  const affMult = hasAttr ? affinityMultiplier(move.attribute as Attribute, target.attribute) : 1;
-  const affLbl = affinityLabel(affMult);
 
-  // きめ（かすり/ふつう/クリティカル）
+  // きめ（かすり/ふつう/クリティカル）。属性はダメージに影響しない。
   const luck = effStat(actor, 'luck');
   let kimeMult = 1;
   let tag: string | null = opts.tag ?? null;
@@ -575,11 +573,9 @@ function dealDamage(
     kimeMult = 1.75;
     tag = 'クリティカル';
   }
-  if (!tag && affLbl === 'こうかばつぐん') tag = 'ばつぐん';
-  else if (!tag && affLbl === 'いまひとつ') tag = 'いまひとつ';
 
   const atkTerm = 0.95 + effStat(actor, 'atk') / 42;
-  let dmg = move.power * opts.clashMult * kimeMult * atkTerm * affMult;
+  let dmg = move.power * opts.clashMult * kimeMult * atkTerm;
 
   if (hasAttr && move.attribute === 'bolt' && has(target, 'wet')) dmg *= 1.6;
 
@@ -616,9 +612,15 @@ function dealDamage(
     const s = move.status;
     const victim = s.toSelf ? actor : target;
     const vside = (s.toSelf ? side : (1 - side)) as Side;
+    // 属性が相手に得意なら状態異常が入りやすい／不利なら入りにくい（相手に効くときだけ）。
+    const attrMult = hasAttr && !s.toSelf ? attributeStatusMult(move.attribute as Attribute, victim.attribute) : 1;
     const chance = Math.max(
-      0.05,
-      Math.min(1, s.chance * (opts.statusMult ?? 1) * (0.85 + effStat(actor, 'heart') / 60) - effStat(victim, 'luck') / 200),
+      0.03,
+      Math.min(
+        0.97,
+        s.chance * (opts.statusMult ?? 1) * attrMult * (0.85 + effStat(actor, 'heart') / 60) -
+          effStat(victim, 'luck') / 200,
+      ),
     );
     if (rng() < chance && applyStatus(victim, s.kind)) log.push({ t: 'status-apply', side: vside, kind: s.kind });
     else log.push({ t: 'status-resist', side: vside, kind: s.kind });
