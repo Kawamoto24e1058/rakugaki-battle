@@ -1,5 +1,5 @@
 /**
- * AI（Gemini Vision）に投げるスキーマ / システムプロンプト。
+ * AI Vision（Groq / Gemini など）に投げるスキーマ / システムプロンプト。
  * サーバー専用。依存ゼロ（エンジンを import しない）。
  * クライアント側の型・変換は src/engine/analyze/aiFeatures.ts。
  */
@@ -13,6 +13,21 @@ const ALL_FIELDS = [
   'temperament', 'powerLook', 'toughnessLook', 'speedLook', 'hpLook',
   'name', 'flavor', 'revealNotes',
 ]
+
+/** プロンプトで JSON を強制する用（Groq など responseSchema が使えない/弱いプロバイダ）。 */
+export const AI_JSON_INSTRUCTION = `出力は次のキーだけを持つ JSON オブジェクトのみ（前後に文章やコードフェンスを付けない）:
+- attribute: "fire" | "water" | "wood" | "bolt" | "dark"
+- attributeReason: string（属性の理由・一文）
+- weapon: "sword" | "wand" | "shield" | "wing" | "none"
+- aspectRatio: number 0.3〜2.0（横幅÷高さ）
+- coverage, spikiness, symmetry, fillDensity, saturation, brightness: number 0〜1
+- colorCount: integer 1〜6
+- eyeCount: integer 0〜6
+- temperament: "aggressive" | "calm"
+- powerLook, toughnessLook, speedLook, hpLook: number 0〜1（見た目の印象。4つが同値にならないよう）
+- name: string（カタカナ中心 4〜7字）
+- flavor: string（図鑑の一文）
+- revealNotes: [{ "step": string, "text": string }] を4〜6個`
 
 /** Gemini generationConfig.responseSchema（OpenAPI 3.0 サブセット・型は大文字）。min/max は無視されるので説明文で伝える。 */
 export const GEMINI_RESPONSE_SCHEMA = {

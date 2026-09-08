@@ -7,7 +7,7 @@
 
 > **大改修中（2026-09〜）**
 > - バトルを **わざリール → 「力/技/速さ」三すくみ** に刷新済み（`わざリール`・`ルーレット構え`・`こんしん` は廃止）
-> - 解析を **AI Vision（Google Gemini）** に。実装済み：Vite の `/api/analyze` ミドルウェア（`server/`）。
+> - 解析を **AI Vision（Groq / Gemini）** に。実装済み：Vite の `/api/analyze` ミドルウェア（`server/`）。
 >   キー未設定・ネット断のときは**ローカルのピクセル解析にフォールバック**
 > - まだ React + Vite。SvelteKit + Rails への移行は次フェーズ（`/api/analyze` の中身＝`server/` はそのまま移せる）
 
@@ -15,7 +15,7 @@
 
 ```bash
 npm install
-cp .env.example .env.local   # GEMINI_API_KEY を入れると AI 解析が有効に（省略時はピクセル解析）
+cp .env.example .env.local   # GROQ_API_KEY を入れると AI 解析が有効に（省略時はピクセル解析）
 npm run dev      # 開発サーバー（http://localhost:5273 固定。5173 は別プロジェクト用）
 npm run build    # 本番ビルド（tsc + vite build、dist/ に PWA 出力）
 npm run preview  # ビルド結果をローカル配信（/api/analyze も動く）
@@ -24,12 +24,12 @@ npx vitest       # エンジンのテスト（解析・バトル・AI変換・�
 
 ### AI 解析（画像 → ステータス）
 
-- 撮影/選択した画像を `/api/analyze` に送る → **Gemini が「絵の特徴」を構造化 JSON で返す**（数値は返さない）
+- 撮影/選択した画像を `/api/analyze` に送る → **AI（Groq / Gemini）が「絵の特徴」を構造化 JSON で返す**（数値は返さない）
   → 既存の `featuresToCharacter`（ピクセル解析と同じ下流）がキャラに変換
-- キー取得：<https://aistudio.google.com/apikey>（無料）。`.env.local` に `GEMINI_API_KEY=AIza...`
+- キー取得：<https://console.groq.com>（無料・カード不要）。`.env.local` に `GROQ_API_KEY=gsk_...`
 - キー未設定・API エラー・レート超過・ネット断 → **`analyzeImageData`（ピクセル解析）にフォールバック**
-- `GEMINI_API_KEY=mock`（または `RAKUGAKI_AI_MOCK=1`）で、画像を見ずに擬似特徴を返す（通しの動作確認用）
-- モデルは `RAKUGAKI_AI_MODEL`（省略時 `gemini-2.5-flash`）
+- `GROQ_API_KEY=mock`（または `RAKUGAKI_AI_MOCK=1`）で、画像を見ずに擬似特徴を返す（通しの動作確認用）
+- モデルは `RAKUGAKI_AI_MODEL`（省略時 Groq=llama-4-scout / Gemini=gemini-2.5-flash）
 
 ## 構成
 
@@ -94,23 +94,21 @@ Rails API（--api）        「画像 → AI → 構造化特徴JSON」「ジョ
 
 ## いまの状態
 
-### 既存（React + Vite・動く）
+### 実装済み（React + Vite）
 
-- [x] エンジン（ピクセル解析・わざリール・バトル・報酬）＋ Vitest 25ケース
+- [x] エンジン（`src/engine/`、Vitest 32ケース）
 - [x] 一連の流れ：撮影（カメラ／ファイル）→ 解析リビール → バトル → 報酬ループ → 図鑑
-- [x] バトル画面（Slay the Spire風・横並び）：左右に大きくキャラ、太いHPバー＋大きな数字、6ステータスのミニ表示、状態異常は残りターン付きチップ、攻撃時のふみこみ／被弾シェイク／大きなダメージ数字、けっかカード
-- [x] こせい（特殊スキル）60種：常時パッシブ＋専用アクティブ。絵の特徴で自動割り当て（決定論）
-- [x] ソロ（テストCPU戦・強化ループ）／ふたり（ホットシート）
-- [x] PWA
+- [x] **バトルを「力/技/速さ」三すくみに刷新**（わざリール・ルーレット・こんしん 廃止）。構えボタンに技名＋威力＋ホバー詳細、クラッシュ演出、三すくみガイド常時表示、ホットシートの「せーの！」
+- [x] **AI Vision 解析**（`server/` ＋ Vite `/api/analyze` ミドルウェア）。AI は「絵の特徴（0..1スコア・見た目印象）」を返し、既存 `featuresToCharacter` がキャラ化。キー無し／エラー／ネット断は**ピクセル解析にフォールバック**
+- [x] リビールのステータスゲージ演出（発表と同時に0からギュン）
+- [x] こせい60種／ソロ・ふたり（ホットシート）／PWA
 
-### 次フェーズ：大改修（2026-09-07 設計確定・未着手）
+### 次フェーズ
 
-- [ ] **React + Vite → SvelteKit へ移行**（`src/engine/` は TS のまま流用）
-- [ ] **Rails API（--api）＋ SolidQueue ＋ Postgres**：`/api/analyze`（画像 → AI → 特徴JSON → ジョブ → キャッシュ）
-- [ ] **解析を AI Vision に**（`analyze/` のピクセル特徴抽出を差し替え、`toCharacter` 以降は不変）。フォールバック＝現行ピクセル解析
-- [ ] **段階リビール**（スキャン中 → 属性 → ステータス → スキル → 名前 を順にめくる）
-- [ ] **バトルを「力/技/速さ」三すくみに刷新**：わざリール・ルーレット構え撤去、`Stance` 差し替え、技に 力/技/速さ カテゴリ付与、色分けUI＋1ターン目コーチ、こんしん、非対称サドンデス
-- [ ] 力/技/速さ の遊べるプロトタイプで手触り確認（実装の前）
+- [ ] **React + Vite → SvelteKit へ移行**（`src/engine/`・`server/` はそのまま流用）
+- [ ]（必要なら）Rails API 化。SolidQueue でジョブ化・画像ハッシュでキャッシュ・原画保存
+- [ ] AI プロンプト調整（実キーで属性/ステータスの一致を確認しながら）
+- [ ] バトル数値の実プレイ調整（三すくみの勝率magnitude・テンポ）
 
 ### 以前からの残タスク
 
