@@ -2,7 +2,6 @@ export * from './types';
 export * from './attributes';
 export * from './status';
 export * from './rng';
-export * from './growth';
 export * from './analyze';
 export * from './moves';
 export * from './personalities';

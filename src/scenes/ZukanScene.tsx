@@ -29,9 +29,6 @@ export function ZukanScene() {
               HP{c.baseStats.hp} こうげき{c.baseStats.atk} ぼうぎょ{c.baseStats.def}
               <br />すばやさ{c.baseStats.spd} きゅうしょ{c.baseStats.luck} こんじょう{c.baseStats.heart}
             </span>
-            <span style={{ fontSize: '0.72rem', color: 'var(--ink-soft)' }}>
-              {c.wins}しょう {c.losses}はい
-            </span>
           </div>
         ))}
       </div>

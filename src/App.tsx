@@ -5,7 +5,6 @@ import { RevealScene } from './scenes/RevealScene';
 import { LoadoutScene } from './scenes/LoadoutScene';
 import { OpponentScene } from './scenes/OpponentScene';
 import { BattleScene } from './scenes/BattleScene';
-import { RewardScene } from './scenes/RewardScene';
 import { ResultScene } from './scenes/ResultScene';
 import { ZukanScene } from './scenes/ZukanScene';
 
@@ -25,8 +24,6 @@ export default function App() {
       return <OpponentScene />;
     case 'battle':
       return <BattleScene />;
-    case 'reward':
-      return <RewardScene />;
     case 'result':
       return <ResultScene />;
     case 'zukan':

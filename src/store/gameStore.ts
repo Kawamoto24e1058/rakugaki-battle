@@ -1,7 +1,6 @@
 import { create } from 'zustand';
 import type { Character } from '../engine/types';
 import type { AnalyzeResult } from '../engine/analyze';
-import { rewardOptions, applyReward, type RewardOption } from '../engine/growth';
 import { makeCpuRoster } from '../data/cpuRoster';
 import { loadZukan, saveZukan } from './zukan';
 
@@ -12,7 +11,6 @@ export type Screen =
   | 'loadout'
   | 'opponent'
   | 'battle'
-  | 'reward'
   | 'result'
   | 'zukan';
 
@@ -39,8 +37,8 @@ interface GameState {
   pendingChallenger: CapturedSlot | null;
 
   runWins: number;
+  runBattles: number;
   lastWon: boolean | null;
-  rewardChoices: RewardOption[];
 
   zukan: Character[];
   cpuRoster: Character[];
@@ -59,7 +57,6 @@ interface GameState {
   confirmLoadout: (moveIds: string[]) => void;
   chooseCpu: (character: Character) => void;
   finishBattle: (won: boolean) => void;
-  chooseReward: (option: RewardOption) => void;
   nextRound: () => void;
   savePlayerToZukan: () => void;
 }
@@ -71,8 +68,8 @@ export const useGame = create<GameState>((set, get) => ({
   opponent: null,
   pendingChallenger: null,
   runWins: 0,
+  runBattles: 0,
   lastWon: null,
-  rewardChoices: [],
   zukan: loadZukan(),
   cpuRoster: makeCpuRoster(),
 
@@ -83,13 +80,14 @@ export const useGame = create<GameState>((set, get) => ({
       opponent: null,
       pendingChallenger: null,
       runWins: 0,
+      runBattles: 0,
       lastWon: null,
-      rewardChoices: [],
     }),
 
-  startSolo: () => set({ mode: 'solo', screen: 'capture', player: null, pendingChallenger: null, runWins: 0 }),
+  startSolo: () =>
+    set({ mode: 'solo', screen: 'capture', player: null, pendingChallenger: null, runWins: 0, runBattles: 0 }),
   startVersus: () =>
-    set({ mode: 'versus', screen: 'capture', player: null, pendingChallenger: null, runWins: 0 }),
+    set({ mode: 'versus', screen: 'capture', player: null, pendingChallenger: null, runWins: 0, runBattles: 0 }),
 
   openZukan: () => set({ screen: 'zukan', zukan: loadZukan() }),
 
@@ -148,35 +146,13 @@ export const useGame = create<GameState>((set, get) => ({
     set({ opponent: { character, imageUrl: null, isCpu: true }, screen: 'battle' }),
 
   finishBattle: (won) => {
-    const { mode, player } = get();
-    if (mode === 'versus') {
-      set({ lastWon: won, screen: 'result' });
-      return;
-    }
-    if (!player) return;
-    const recorded: CapturedSlot = {
-      ...player,
-      character: {
-        ...player.character,
-        wins: player.character.wins + (won ? 1 : 0),
-        losses: player.character.losses + (won ? 0 : 1),
-      },
-    };
-    const choices = rewardOptions(recorded.character, won);
-    set({
-      player: recorded,
+    // キャラは強化しない・記録も変えない。勝敗数はセッション内のカウントだけ。
+    set((s) => ({
       lastWon: won,
-      runWins: won ? get().runWins + 1 : get().runWins,
-      rewardChoices: choices,
-      screen: 'reward',
-    });
-  },
-
-  chooseReward: (option) => {
-    const { player } = get();
-    if (!player) return;
-    const grown = applyReward(player.character, option);
-    set({ player: { ...player, character: grown }, screen: 'opponent', opponent: null });
+      runWins: won ? s.runWins + 1 : s.runWins,
+      runBattles: s.runBattles + 1,
+      screen: 'result',
+    }));
   },
 
   nextRound: () => set({ screen: 'opponent', opponent: null }),
