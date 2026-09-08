@@ -47,7 +47,7 @@ export const STANCE_BEATS: Record<TriStance, TriStance> = {
 };
 
 const SUDDEN_DEATH_TURN = 12;
-const CLASH_WIN_MULT = 1.3;
+const CLASH_WIN_MULT = 1.24;
 const CLASH_LOSE_MULT = 0.62;
 /** 速さで力を「中断」したときの、力側のさらなる減衰（振りかぶりを潰す）。 */
 const INTERRUPT_MULT = 0.82;
@@ -55,7 +55,7 @@ const INTERRUPT_MULT = 0.82;
 const OVERPOWER_STATUS_MULT = 0.5;
 /** 技で速さを「見切った」ときのカウンターの基礎ダメージ（防御無視・回避不可）。 */
 const COUNTER_BASE = 8;
-const PER_HIT_CAP_PCT = 0.55;
+const PER_HIT_CAP_PCT = 0.42;
 
 // ---------- わざのカテゴリ分け（力／技／速さ）----------
 // moveCategory 本体は moves/data.ts（上で re-export）。
@@ -567,14 +567,17 @@ function dealDamage(
   let tag: string | null = opts.tag ?? null;
   const roll = rng();
   const critChance = Math.max(0.04, Math.min(0.34, 0.06 + luck / 130));
-  if (roll < 0.12) {
-    kimeMult = 0.6;
+  // 大振りな技（riskShift）は「かすり」になりやすい＝強い一撃のリスク。
+  const grazeChance = 0.12 + (move.riskShift ?? 0) / 90;
+  if (roll < grazeChance) {
+    kimeMult = 0.55;
+    if (!tag) tag = 'かすった';
   } else if (roll > 1 - critChance) {
-    kimeMult = 1.75;
-    tag = 'クリティカル';
+    kimeMult = 1.7;
+    if (!tag) tag = 'クリティカル';
   }
 
-  const atkTerm = 0.95 + effStat(actor, 'atk') / 42;
+  const atkTerm = 0.95 + effStat(actor, 'atk') / 46;
   let dmg = move.power * opts.clashMult * kimeMult * atkTerm;
 
   if (hasAttr && move.attribute === 'bolt' && has(target, 'wet')) dmg *= 1.6;

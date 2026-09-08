@@ -95,10 +95,10 @@ export const MOVES: Record<MoveId, MoveDef> = Object.fromEntries(
       // ===== 共通（だれでも） =====
       atk('c_scratch', 'ひっかき', 10, ['common'], '威力ひかえめ。手数を稼ぐ小技。', {}),
       atk('c_tackle', 'たいあたり', 20, ['common'], '威力ふつう。クセのない体当たり。', {}),
-      atk('c_bite', 'かみつき', 32, ['common'], '威力大。クールダウン1。', { cooldown: 1 }),
+      atk('c_bite', 'かみつき', 30, ['common'], '威力大。クールダウン1。', { cooldown: 1 }),
       sup('c_guard', 'ガード', 0, ['common'], 'このターン、受けるダメージを大きく減らす。クールダウン1。', { cooldown: 1, guardPct: 55 }),
       sup('c_focus', 'きあいだめ', 0, ['common'], 'こうげきアップ（2ターン）＋ひっさつゲージ。', { buff: { stat: 'atk', turns: 2 }, gauge: 22 }),
-      atk('c_gamble', 'ギャンブルアタック', 42, ['common'], '威力特大。外れ・かすりが多い。クールダウン1。', { cooldown: 1, riskShift: 16 }),
+      atk('c_gamble', 'ギャンブルアタック', 35, ['common'], '威力特大。外れ・かすりが多い。クールダウン1。', { cooldown: 1, riskShift: 16 }),
 
       // ===== 属性ライン（3段階・進化で上がる） =====
       ...attrLine('fire', ['ひのこ', 'かえん', 'ごうか'], 'burn'),
@@ -108,9 +108,9 @@ export const MOVES: Record<MoveId, MoveDef> = Object.fromEntries(
       ...attrLine('dark', ['かげぬい', 'やみのやいば', 'あんこく'], 'curse'),
 
       // 属性シグネチャー（強力な切り札）＋ 属性の補助
-      atk('fire_sig', 'フレアバスター', 40, ['attr:fire', 'mood:fierce'], '威力特大。ぼうぎょ無視。必ずやけど。クールダウン3。', { attribute: 'fire', cooldown: 3, pierce: true, riskShift: 6, status: { kind: 'burn', chance: 1 } }),
+      atk('fire_sig', 'フレアバスター', 36, ['attr:fire', 'mood:fierce'], '威力特大。ぼうぎょ無視。必ずやけど。クールダウン3。', { attribute: 'fire', cooldown: 3, pierce: true, riskShift: 6, status: { kind: 'burn', chance: 1 } }),
       sup('fire_dry', 'ねっぷう', 0, ['attr:fire'], 'ぬれ・こおりを吹き飛ばして少し回復。', { cooldown: 1, cures: 'one', heal: 12 }),
-      atk('water_sig', 'アクアカノン', 40, ['attr:water', 'weapon:wand'], '威力特大。ぼうぎょ無視。必ずぬれ。クールダウン3。', { attribute: 'water', cooldown: 3, pierce: true, status: { kind: 'wet', chance: 1 } }),
+      atk('water_sig', 'アクアカノン', 36, ['attr:water', 'weapon:wand'], '威力特大。ぼうぎょ無視。必ずぬれ。クールダウン3。', { attribute: 'water', cooldown: 3, pierce: true, status: { kind: 'wet', chance: 1 } }),
       sup('water_wash', 'みずであらう', 0, ['attr:water', 'mood:calm'], 'やけど・どくを洗い流して中回復。', { cooldown: 2, cures: 'all', heal: 16 }),
       atk('wood_sig', 'ジャングルバインド', 34, ['attr:wood', 'shape:big'], '威力大。必ずからまり（動きを止める）。クールダウン3。', { attribute: 'wood', cooldown: 3, status: { kind: 'bind', chance: 1 } }),
       sup('wood_root', 'ねをはる', 0, ['attr:wood'], 'ぼうぎょアップ（3ターン）＋毎ターン少し回復。', { cooldown: 2, buff: { stat: 'def', turns: 3 }, heal: 10 }),
@@ -135,12 +135,12 @@ export const MOVES: Record<MoveId, MoveDef> = Object.fromEntries(
       sup('ta_look', 'みおろす', 0, ['shape:tall'], 'すばやさアップ（2ターン）。', { buff: { stat: 'spd', turns: 2 } }),
 
       // ===== 形：よこ広 =====
-      atk('wi_slam', 'のしかかり', 38, ['shape:wide', 'shape:big'], '威力特大。高確率でひるみ。クールダウン2。', { cooldown: 2, status: { kind: 'flinch', chance: 0.6 } }),
+      atk('wi_slam', 'のしかかり', 34, ['shape:wide', 'shape:big'], '威力特大。高確率でひるみ。クールダウン2。', { cooldown: 2, status: { kind: 'flinch', chance: 0.6 } }),
       sup('wi_stance', 'どっしりかまえ', 0, ['shape:wide'], 'このターン、ダメージを大きく減らす。クールダウン1。', { cooldown: 1, guardPct: 55 }),
       atk('wi_don', 'たいあたりドン', 30, ['shape:wide'], '威力大。全体重の体当たり。クールダウン1。', { cooldown: 1 }),
 
       // ===== 形：大きい =====
-      atk('bg_press', 'グランドプレス', 44, ['shape:big'], '威力特大。当てにくい。クールダウン2。', { cooldown: 2, riskShift: 6 }),
+      atk('bg_press', 'グランドプレス', 36, ['shape:big'], '威力特大。当てにくい。クールダウン2。', { cooldown: 2, riskShift: 6 }),
       atk('bg_body', 'ボディブロー', 30, ['shape:big'], '威力大。ずしんと効く一発。クールダウン1。', { cooldown: 1 }),
       sup('bg_weight', 'おもみ', 0, ['shape:big'], 'ぼうぎょアップ（2ターン）＋ひっさつゲージ。', { buff: { stat: 'def', turns: 2 }, gauge: 15 }),
 
@@ -172,7 +172,7 @@ export const MOVES: Record<MoveId, MoveDef> = Object.fromEntries(
       sup('wg_soar', 'まいあがる', 0, ['part:wings'], 'すばやさアップ（回避も上がる）。', { buff: { stat: 'spd', turns: 2 } }),
 
       // ===== 雰囲気：好戦的 =====
-      atk('fi_rampage', 'あばれる', 36, ['mood:fierce'], '威力特大。少し反動を受ける。クールダウン1。', { cooldown: 1, recoil: 15 }),
+      atk('fi_rampage', 'あばれる', 34, ['mood:fierce'], '威力特大。少し反動を受ける。クールダウン1。', { cooldown: 1, recoil: 15 }),
       atk('fi_charge', 'とっしん', 26, ['mood:fierce'], '威力ふつう。必ず先制。クールダウン1。', { first: true, cooldown: 1 }),
       sup('fi_anger', 'いかり', 0, ['mood:fierce'], 'こうげきを大きく上げる（少し自分もやけど）。クールダウン2。', { cooldown: 2, buff: { stat: 'atk', turns: 2 }, status: { kind: 'burn', chance: 0.3, toSelf: true } }),
       atk('fi_finish', 'とどめのキバ', 28, ['mood:fierce'], '威力大。弱った相手にとくに効く。クールダウン1。', { cooldown: 1 }),
@@ -197,12 +197,12 @@ export const MOVES: Record<MoveId, MoveDef> = Object.fromEntries(
       // ===== 持ち物：剣 =====
       atk('sw_cut', 'きりつける', 28, ['weapon:sword'], '威力大。鋭く斬る。クールダウン1。', { cooldown: 1 }),
       atk('sw_rapid', 'れんぞくぎり', 14, ['weapon:sword'], '威力ひかえめ。素早く連続で斬る。', {}),
-      atk('sw_great', 'だいせつだん', 46, ['weapon:sword'], '威力最大級。大振りで当てにくい。クールダウン2。', { cooldown: 2, riskShift: 10 }),
+      atk('sw_great', 'だいせつだん', 37, ['weapon:sword'], '威力最大級。大振りで当てにくい。クールダウン2。', { cooldown: 2, riskShift: 10 }),
 
       // ===== 持ち物：杖 =====
       atk('wd_bolt', 'まほうだん', 22, ['weapon:wand'], '威力ふつう。ぼうぎょ無視の魔法弾。', { pierce: true }),
       sup('wd_charge', 'チャージ', 0, ['weapon:wand'], 'こうげきアップ（2ターン）＋ひっさつゲージ大。', { buff: { stat: 'atk', turns: 2 }, gauge: 28 }),
-      atk('wd_mega', 'メガチャージ', 42, ['weapon:wand'], '威力特大。ぼうぎょ無視。当てにくい。クールダウン2。', { cooldown: 2, pierce: true, riskShift: 6 }),
+      atk('wd_mega', 'メガチャージ', 35, ['weapon:wand'], '威力特大。ぼうぎょ無視。当てにくい。クールダウン2。', { cooldown: 2, pierce: true, riskShift: 6 }),
 
       // ===== 持ち物：盾 =====
       atk('sh_bash', 'シールドバッシュ', 18, ['weapon:shield'], '威力ひかえめ。殴りつつ少し身を守る。', { guardPct: 25 }),
@@ -248,6 +248,13 @@ export function moveStars(m: MoveDef): 1 | 2 | 3 {
     (m.reflect ?? 0) > 0;
   return mid ? 2 : 1;
 }
+
+/** 編成コスト＝強さ星（1〜3）。プレイヤーは合計 LOADOUT_BUDGET まで技を選べる。 */
+export function moveCost(m: MoveDef): 1 | 2 | 3 {
+  return moveStars(m);
+}
+/** 技セットの★予算（全員同じ固定）。 */
+export const LOADOUT_BUDGET = 6;
 
 /** 三すくみのカテゴリ。力＝重い一撃／技＝搦め手・補助／速さ＝軽い・先制。 */
 export type MoveCategory3 = 'power' | 'tech' | 'speed';

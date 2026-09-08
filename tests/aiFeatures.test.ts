@@ -39,8 +39,8 @@ describe('AI Vision の特徴 → キャラ変換', () => {
       const c = aiFeaturesToCharacter(ai({ attribute: (['fire', 'water', 'wood', 'bolt', 'dark'] as const)[seed % 5], name: `キャラ${seed}` }), seed * 101 + 7);
       expect(c.attribute).toBe((['fire', 'water', 'wood', 'bolt', 'dark'] as const)[seed % 5]);
       expect(c.name).toBe(`キャラ${seed}`);
-      expect(c.moveIds.length).toBeGreaterThanOrEqual(5);
-      expect(c.moveIds.length).toBeLessThanOrEqual(9);
+      expect(c.movePool.length).toBeGreaterThanOrEqual(6);
+      expect(c.moveIds.length).toBeGreaterThanOrEqual(1);
       expect(() => getKosei(c.koseiId)).not.toThrow();
       const { hp, atk, def, spd } = c.baseStats;
       expect(hp).toBeGreaterThanOrEqual(40);

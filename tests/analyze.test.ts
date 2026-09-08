@@ -60,7 +60,7 @@ describe('特徴抽出とキャラ生成', () => {
     });
     expect(character.attribute).toBe('dark');
     expect(character.weapon).toBe('shield');
-    // 闇の属性技が入っている
-    expect(character.moveIds.some((m) => m.startsWith('dark'))).toBe(true);
+    // 闇の属性技が候補に入っている
+    expect(character.movePool.some((m) => m.startsWith('dark'))).toBe(true);
   });
 });

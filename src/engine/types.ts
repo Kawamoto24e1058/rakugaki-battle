@@ -65,8 +65,10 @@ export interface Character {
   weapon: Weapon;
   personality: 'aggressive' | 'calm';
   baseStats: Stats;
-  /** 覚えている技のID（5〜8個）。属性技は skillLevel でどの段階が入るか決まる。 */
+  /** バトルで使う技セット（プレイヤーが movePool から★予算内で選んだもの）。図鑑もこれを表示。 */
   moveIds: string[];
+  /** 絵から出た技の候補（この中から moveIds を選ぶ）。育成報酬でここに増える。 */
+  movePool: string[];
   /** こせい（パッシブ＋専用アクティブ）のID。絵の特徴で決まる。 */
   koseiId: string;
   /** 属性技の段階 1〜3（進化で上がる）。 */

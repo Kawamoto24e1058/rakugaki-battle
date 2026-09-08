@@ -11,7 +11,12 @@ export function loadZukan(): Character[] {
     const raw = localStorage.getItem(KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? (parsed as Character[]) : [];
+    if (!Array.isArray(parsed)) return [];
+    // 旧データ互換：movePool が無ければ moveIds を候補プールとして流用
+    return (parsed as Character[]).map((c) => ({
+      ...c,
+      movePool: Array.isArray(c.movePool) && c.movePool.length ? c.movePool : [...(c.moveIds ?? [])],
+    }));
   } catch {
     return [];
   }

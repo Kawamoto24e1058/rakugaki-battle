@@ -1,6 +1,37 @@
 import type { Character, Stats } from './types';
 import { mulberry32, randInt } from './rng';
-import { getMove, attrMove, movesByTag, activeTags, type MoveId } from './moves';
+import { getMove, attrMove, movesByTag, activeTags, moveCost, LOADOUT_BUDGET, type MoveId } from './moves';
+
+const cost = (id: MoveId) => {
+  try {
+    return moveCost(getMove(id));
+  } catch {
+    return 2;
+  }
+};
+const loadoutCost = (ids: MoveId[]) => ids.reduce((s, id) => s + cost(id), 0);
+const isCure = (id: MoveId) => {
+  try {
+    const m = getMove(id);
+    return !!m.cures || !!m.heal;
+  } catch {
+    return false;
+  }
+};
+/** newId を予算内に収まるよう loadout に足す（あふれたら 最安の非治療技を1つ外す）。 */
+function fitInto(ids: MoveId[], newId: MoveId): MoveId[] {
+  if (ids.includes(newId)) return ids;
+  let out = [...ids, newId];
+  while (loadoutCost(out) > LOADOUT_BUDGET && out.length > 1) {
+    const removable = out
+      .filter((id) => id !== newId && !isCure(id))
+      .sort((a, b) => cost(a) - cost(b));
+    const drop = removable[0] ?? out.find((id) => id !== newId);
+    if (!drop) break;
+    out = out.filter((id) => id !== drop);
+  }
+  return out;
+}
 
 export type RewardOption =
   | { kind: 'stat'; stat: keyof Stats; amount: number; label: string; description: string }
@@ -44,9 +75,9 @@ export function rewardOptions(character: Character, won: boolean): RewardOption[
     });
   }
 
-  // 3) 新わざ習得（勝った時・枠に空きがあれば）
-  if (won && character.moveIds.length < 8) {
-    const known = new Set(character.moveIds);
+  // 3) 新わざ習得（勝った時）
+  if (won && character.movePool.length < 16) {
+    const known = new Set([...character.movePool, ...character.moveIds]);
     const tags = activeTags({
       features: {} as never,
       attribute: character.attribute,
@@ -84,6 +115,7 @@ export function applyReward(character: Character, option: RewardOption): Charact
     ...character,
     baseStats: { ...character.baseStats },
     moveIds: [...character.moveIds],
+    movePool: [...character.movePool],
   };
   switch (option.kind) {
     case 'stat':
@@ -93,15 +125,18 @@ export function applyReward(character: Character, option: RewardOption): Charact
       const oldMove = attrMove(character.attribute, character.skillLevel);
       next.skillLevel = Math.min(3, character.skillLevel + 1);
       const newMove = attrMove(character.attribute, next.skillLevel);
-      const idx = next.moveIds.indexOf(oldMove);
-      if (idx >= 0) next.moveIds[idx] = newMove;
-      else if (!next.moveIds.includes(newMove)) next.moveIds.push(newMove);
+      for (const arr of [next.movePool, next.moveIds]) {
+        const idx = arr.indexOf(oldMove);
+        if (idx >= 0) arr[idx] = newMove;
+        else if (!arr.includes(newMove)) arr.push(newMove);
+      }
+      // 進化で★が増えて予算超過したら最安の非治療技を外す
+      next.moveIds = fitInto(next.moveIds.filter((id) => id !== newMove), newMove);
       break;
     }
     case 'learn':
-      if (!next.moveIds.includes(option.moveId) && next.moveIds.length < 8) {
-        next.moveIds.push(option.moveId);
-      }
+      if (!next.movePool.includes(option.moveId)) next.movePool.push(option.moveId);
+      next.moveIds = fitInto(next.moveIds, option.moveId);
       break;
   }
   return next;

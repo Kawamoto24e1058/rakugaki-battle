@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { getKosei, KOSEI_LIST } from '../src/engine';
+import { getMove, moveCost, LOADOUT_BUDGET } from '../src/engine/moves';
 import { analyzeImageData } from '../src/engine/analyze';
 import { rectImage } from './helpers';
 
@@ -11,19 +12,23 @@ function drawn(color: [number, number, number], w = 80, h = 90) {
 }
 
 describe('生成キャラの技セット・こせい', () => {
-  it('キャラは5〜8個の技を持つ', () => {
+  it('技候補プールは7個以上、初期おまかせ編成は★予算内', () => {
     for (let seed = 0; seed < 30; seed++) {
       const c = drawn([(seed * 53) % 256, (seed * 97) % 256, (seed * 29) % 256], 40 + (seed % 60), 50 + (seed % 60));
-      expect(c.moveIds.length).toBeGreaterThanOrEqual(5);
-      expect(c.moveIds.length).toBeLessThanOrEqual(9); // カテゴリ保証で最大 +1
+      expect(c.movePool.length).toBeGreaterThanOrEqual(7);
+      expect(c.moveIds.length).toBeGreaterThanOrEqual(1);
+      const cost = c.moveIds.reduce((s, id) => s + moveCost(getMove(id)), 0);
+      expect(cost).toBeLessThanOrEqual(LOADOUT_BUDGET);
+      // 編成は必ず候補プールの部分集合
+      for (const id of c.moveIds) expect(c.movePool).toContain(id);
     }
   });
 
-  it('技セットに治療系のわざが必ず入る', () => {
+  it('候補プールに治療系のわざが必ず入る', () => {
     const cures = ['ca_breath', 'ca_song', 'water_wash', 'fire_dry', 'u_detox', 'u_endure', 'ca_heal'];
     for (let seed = 0; seed < 40; seed++) {
       const c = drawn([(seed * 53) % 256, (seed * 97) % 256, (seed * 29) % 256], 50 + (seed % 50), 60 + (seed % 60));
-      expect(c.moveIds.some((m) => cures.includes(m))).toBe(true);
+      expect(c.movePool.some((m) => cures.includes(m))).toBe(true);
     }
   });
 

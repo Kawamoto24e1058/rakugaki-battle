@@ -2,6 +2,7 @@ import { useGame } from './store/gameStore';
 import { TitleScene } from './scenes/TitleScene';
 import { CaptureScene } from './scenes/CaptureScene';
 import { RevealScene } from './scenes/RevealScene';
+import { LoadoutScene } from './scenes/LoadoutScene';
 import { OpponentScene } from './scenes/OpponentScene';
 import { BattleScene } from './scenes/BattleScene';
 import { RewardScene } from './scenes/RewardScene';
@@ -18,6 +19,8 @@ export default function App() {
       return <CaptureScene />;
     case 'reveal':
       return <RevealScene />;
+    case 'loadout':
+      return <LoadoutScene />;
     case 'opponent':
       return <OpponentScene />;
     case 'battle':

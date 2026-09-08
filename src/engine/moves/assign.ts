@@ -1,7 +1,17 @@
 import type { Attribute, Weapon } from '../types';
 import type { FeatureVector } from '../analyze/features';
 import { mulberry32, type Rng } from '../rng';
-import { attrMove, getMove, moveCategory, movesByTag, type MoveCategory3, type MoveId, type UnlockTag } from './data';
+import {
+  attrMove,
+  getMove,
+  moveCategory,
+  moveCost,
+  movesByTag,
+  LOADOUT_BUDGET,
+  type MoveCategory3,
+  type MoveId,
+  type UnlockTag,
+} from './data';
 
 export interface AssignInput {
   features: FeatureVector;
@@ -45,15 +55,16 @@ export function activeTags(input: AssignInput): UnlockTag[] {
   return tags.map((t) => t[0]);
 }
 
-/** 技セットの下限・上限（キャラごとに数が変わる）。 */
-export const MOVESET_MIN = 5;
-export const MOVESET_MAX = 8;
+/** 技候補プールの下限・上限。プレイヤーはこの中から★予算ぶん選ぶ。 */
+export const MOVESET_MIN = 7;
+export const MOVESET_MAX = 13;
 
 /**
- * キャラの技セット（5〜8）を決める。数は「絵の描き込み具合」で変わる。
+ * キャラの「技の候補プール」（7〜13）を決める。数は「絵の描き込み具合」で変わる。
  * 核（たいあたり・属性技・ガード・治療）＋ 属性の特殊 ＋ 特徴タグごとに1つ。
+ * この中からプレイヤーが★予算内で使う技を選ぶ（autoLoadout が初期値）。
  */
-export function assignMoves(input: AssignInput, seed: number): MoveId[] {
+export function assignMovePool(input: AssignInput, seed: number): MoveId[] {
   const rng: Rng = mulberry32((seed ^ 0x51ed270b) >>> 0);
   const chosen: MoveId[] = [];
   const take = (id: MoveId) => {
@@ -73,10 +84,10 @@ export function assignMoves(input: AssignInput, seed: number): MoveId[] {
   };
 
   const tags = activeTags(input);
-  // 技数：核5 ＋ 特徴の多さと乱数で 0〜3 追加 → 5〜8（描き込みが多いほど技も多い）
+  // 候補数：核7 ＋ 特徴の多さと乱数で 0〜6 追加 → 7〜13（描き込みが多いほど候補も多い）
   const extra = Math.min(
     MOVESET_MAX - MOVESET_MIN,
-    Math.max(0, Math.round((tags.length - 5) * 0.6 + rng() * 1.3)),
+    Math.max(0, Math.round((tags.length - 4) * 0.9 + rng() * 2.2)),
   );
   const targetCount = MOVESET_MIN + extra;
 
@@ -108,13 +119,80 @@ export function assignMoves(input: AssignInput, seed: number): MoveId[] {
     if (chosen.length >= targetCount) break;
     takeFromTag(tag, 1);
   }
-  const fillers: MoveId[] = ['c_bite', 'c_scratch', 'c_focus', 'c_gamble'];
+  const fillers: MoveId[] = ['c_bite', 'c_scratch', 'c_focus', 'c_gamble', 'c_tackle', 'c_guard'];
   for (const id of fillers) {
     if (chosen.length >= Math.max(MOVESET_MIN, targetCount)) break;
     take(id);
   }
+  // 6) 安い技（★1）が最低2つは候補にあるように（予算内で組めるよう）
+  const cheap = chosen.filter((id) => safeCost(id) === 1).length;
+  for (const id of ['c_scratch', 'sm_jab', 'ta_stretch', 'c_tackle'] as MoveId[]) {
+    if (cheap + chosen.filter((c) => safeCost(c) === 1).length >= 2) break;
+    if (chosen.length < MOVESET_MAX) take(id);
+  }
 
   return chosen;
+}
+
+/** 後方互換：候補プールの別名。 */
+export const assignMoves = assignMovePool;
+
+function safeCost(id: MoveId): number {
+  try {
+    return moveCost(getMove(id));
+  } catch {
+    return 2;
+  }
+}
+function safeCat(id: MoveId): MoveCategory3 | null {
+  try {
+    return moveCategory(getMove(id));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 候補プールから「初期おまかせ編成」を作る（★予算内・治療1つ・なるべく3すくみを散らす）。
+ * プレイヤーが編成画面で自由に組み替える。CPU もこれを使う。
+ */
+export function autoLoadout(pool: MoveId[], seed: number, budget = LOADOUT_BUDGET): MoveId[] {
+  const rng = mulberry32((seed ^ 0x9e3d71b1) >>> 0);
+  const picked: MoveId[] = [];
+  let spent = 0;
+  const canAfford = (id: MoveId) => spent + safeCost(id) <= budget;
+  const add = (id: MoveId) => {
+    if (!id || picked.includes(id) || !canAfford(id)) return false;
+    picked.push(id);
+    spent += safeCost(id);
+    return true;
+  };
+
+  // 1) 治療を1つ（安いものを優先）
+  const cures = pool.filter((id) => hasCureEffect(id)).sort((a, b) => safeCost(a) - safeCost(b));
+  if (cures[0]) add(cures[0]);
+
+  // 2) 力・技・速さ を1つずつ（各カテゴリの中くらいのコストを優先）
+  for (const cat of ['power', 'speed', 'tech'] as MoveCategory3[]) {
+    if (picked.some((id) => safeCat(id) === cat)) continue;
+    const cands = pool
+      .filter((id) => !picked.includes(id) && safeCat(id) === cat)
+      .sort((a, b) => safeCost(b) - safeCost(a)); // 予算がある内は強い方から
+    for (const id of cands) if (add(id)) break;
+  }
+
+  // 3) 残り予算を、強い技優先＋少し乱数でうめる
+  const rest = pool
+    .filter((id) => !picked.includes(id))
+    .sort((a, b) => safeCost(b) - safeCost(a) + (rng() - 0.5));
+  for (const id of rest) {
+    if (spent >= budget) break;
+    add(id);
+  }
+
+  // 4) 最低1つ
+  if (picked.length === 0 && pool[0]) picked.push(pool[0]);
+  return picked;
 }
 
 function hasCureEffect(id: MoveId): boolean {

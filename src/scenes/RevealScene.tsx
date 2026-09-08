@@ -187,7 +187,10 @@ export function RevealScene() {
           transition={{ delay: 0.25 + STAT_ORDER.length * 0.16 + 0.35 }}
           style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap', justifyContent: 'center' }}
         >
-          {character.moveIds.map((m) => {
+          <span style={{ width: '100%', textAlign: 'center', fontSize: '0.74rem', color: 'var(--ink-soft)' }}>
+            わざの こうほ（つぎの がめんで えらぶ）
+          </span>
+          {character.movePool.map((m) => {
             const mv = MOVES[m];
             const stars = mv ? moveStars(mv) : 1;
             return (
@@ -215,7 +218,7 @@ export function RevealScene() {
         style={{ marginTop: '0.8rem' }}
         onClick={confirmReveal}
       >
-        けってい！
+        わざを えらぶ →
       </motion.button>
     </div>
   );
