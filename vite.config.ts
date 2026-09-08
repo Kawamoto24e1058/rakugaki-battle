@@ -46,7 +46,7 @@ export default defineConfig(({ mode }) => {
   // .env / .env.local の（VITE_ 以外も含む）変数をサーバー側 process.env へ。
   // ANTHROPIC_API_KEY などをミドルウェアで読めるようにする。
   const env = loadEnv(mode, process.cwd(), '')
-  for (const k of ['ANTHROPIC_API_KEY', 'RAKUGAKI_AI_MODEL', 'RAKUGAKI_AI_MOCK']) {
+  for (const k of ['GEMINI_API_KEY', 'GOOGLE_API_KEY', 'ANTHROPIC_API_KEY', 'RAKUGAKI_AI_MODEL', 'RAKUGAKI_AI_MOCK']) {
     if (env[k] && !process.env[k]) process.env[k] = env[k]
   }
 

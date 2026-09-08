@@ -7,7 +7,7 @@
 
 > **大改修中（2026-09〜）**
 > - バトルを **わざリール → 「力/技/速さ」三すくみ** に刷新済み（`わざリール`・`ルーレット構え`・`こんしん` は廃止）
-> - 解析を **AI Vision（Claude）** に。実装済み：Vite の `/api/analyze` ミドルウェア（`server/`）。
+> - 解析を **AI Vision（Google Gemini）** に。実装済み：Vite の `/api/analyze` ミドルウェア（`server/`）。
 >   キー未設定・ネット断のときは**ローカルのピクセル解析にフォールバック**
 > - まだ React + Vite。SvelteKit + Rails への移行は次フェーズ（`/api/analyze` の中身＝`server/` はそのまま移せる）
 
@@ -15,7 +15,7 @@
 
 ```bash
 npm install
-cp .env.example .env.local   # ANTHROPIC_API_KEY を入れると AI 解析が有効に（省略時はピクセル解析）
+cp .env.example .env.local   # GEMINI_API_KEY を入れると AI 解析が有効に（省略時はピクセル解析）
 npm run dev      # 開発サーバー（http://localhost:5273 固定。5173 は別プロジェクト用）
 npm run build    # 本番ビルド（tsc + vite build、dist/ に PWA 出力）
 npm run preview  # ビルド結果をローカル配信（/api/analyze も動く）
@@ -24,11 +24,12 @@ npx vitest       # エンジンのテスト（解析・バトル・AI変換・�
 
 ### AI 解析（画像 → ステータス）
 
-- 撮影/選択した画像を `/api/analyze` に送る → **Claude が「絵の特徴」を構造化 JSON で返す**（数値は返さない）
+- 撮影/選択した画像を `/api/analyze` に送る → **Gemini が「絵の特徴」を構造化 JSON で返す**（数値は返さない）
   → 既存の `featuresToCharacter`（ピクセル解析と同じ下流）がキャラに変換
-- `ANTHROPIC_API_KEY` 未設定・API エラー・ネット断 → **`analyzeImageData`（ピクセル解析）にフォールバック**
-- `ANTHROPIC_API_KEY=mock`（または `RAKUGAKI_AI_MOCK=1`）で、画像を見ずに擬似特徴を返す（通しの動作確認用）
-- モデルは `RAKUGAKI_AI_MODEL`（省略時 `claude-sonnet-5`）
+- キー取得：<https://aistudio.google.com/apikey>（無料）。`.env.local` に `GEMINI_API_KEY=AIza...`
+- キー未設定・API エラー・レート超過・ネット断 → **`analyzeImageData`（ピクセル解析）にフォールバック**
+- `GEMINI_API_KEY=mock`（または `RAKUGAKI_AI_MOCK=1`）で、画像を見ずに擬似特徴を返す（通しの動作確認用）
+- モデルは `RAKUGAKI_AI_MODEL`（省略時 `gemini-2.5-flash`）
 
 ## 構成
 

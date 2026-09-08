@@ -1,13 +1,13 @@
 /**
- * 画像 → AI Vision（Claude）→ 構造化した特徴（AiFeatures の生 JSON）。
+ * 画像 → AI Vision（Google Gemini）→ 構造化した特徴（AiFeatures の生 JSON）。
  * いまは Vite のミドルウェアから呼ばれる。将来 Rails API に移すときもこのファイルごと移せる。
  *
  * 環境変数:
- *   ANTHROPIC_API_KEY  … 必須。'mock' で擬似データ（キー無しでも通しで動作確認できる）
- *   RAKUGAKI_AI_MODEL  … 省略時 'claude-sonnet-5'
- *   RAKUGAKI_AI_MOCK=1 … 擬似データを強制
+ *   GEMINI_API_KEY      … 必須（ANTHROPIC_API_KEY も後方互換で見る）。'mock' で擬似データ
+ *   RAKUGAKI_AI_MODEL   … 省略時 'gemini-2.5-flash'
+ *   RAKUGAKI_AI_MOCK=1  … 擬似データを強制
  */
-import { AI_FEATURES_TOOL, AI_SYSTEM_PROMPT, looksLikeAiFeatures } from './aiContract.ts';
+import { AI_SYSTEM_PROMPT, GEMINI_RESPONSE_SCHEMA, looksLikeAiFeatures } from './aiContract.ts';
 
 export interface AnalyzeRequest {
   /** data: プレフィックス無しの base64。 */
@@ -25,13 +25,15 @@ export interface AnalyzeResponse {
   via?: 'ai' | 'mock';
 }
 
-const API_URL = 'https://api.anthropic.com/v1/messages';
+function apiKey(): string | undefined {
+  return process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.ANTHROPIC_API_KEY;
+}
 
 function hintText(hints?: AnalyzeRequest['hints']): string {
   const parts: string[] = [];
   if (hints?.attribute && hints.attribute !== 'auto') parts.push(`用紙のチェック欄：属性は「${hints.attribute}」`);
   if (hints?.weapon && hints.weapon !== 'auto') parts.push(`用紙のチェック欄：持ち物は「${hints.weapon}」`);
-  const base = 'この絵のキャラクターを report_drawing ツールで報告してください。';
+  const base = 'この絵のキャラクターの特徴を JSON で報告してください。';
   return parts.length ? `${base}\n${parts.join('\n')}` : base;
 }
 
@@ -68,61 +70,75 @@ function mockFeatures(req: AnalyzeRequest): Record<string, unknown> {
   };
 }
 
-async function callClaude(req: AnalyzeRequest, apiKey: string, repairHint?: string): Promise<unknown> {
-  const model = process.env.RAKUGAKI_AI_MODEL || 'claude-sonnet-5';
-  const res = await fetch(API_URL, {
+function stripFences(s: string): string {
+  const m = s.match(/```(?:json)?\s*([\s\S]*?)```/);
+  return (m ? m[1] : s).trim();
+}
+
+async function callGemini(req: AnalyzeRequest, key: string, repairHint?: string): Promise<unknown> {
+  const model = process.env.RAKUGAKI_AI_MODEL || 'gemini-2.5-flash';
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+  const res = await fetch(url, {
     method: 'POST',
-    headers: {
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'content-type': 'application/json',
-    },
+    headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
     body: JSON.stringify({
-      model,
-      max_tokens: 1200,
-      temperature: 0,
-      system: AI_SYSTEM_PROMPT,
-      tools: [AI_FEATURES_TOOL],
-      tool_choice: { type: 'tool', name: AI_FEATURES_TOOL.name },
-      messages: [
+      systemInstruction: { parts: [{ text: AI_SYSTEM_PROMPT }] },
+      contents: [
         {
           role: 'user',
-          content: [
-            { type: 'image', source: { type: 'base64', media_type: req.mediaType, data: req.imageBase64 } },
+          parts: [
+            { inlineData: { mimeType: req.mediaType, data: req.imageBase64 } },
             {
-              type: 'text',
               text: hintText(req.hints) + (repairHint ? `\n\n（前回エラー：${repairHint}。今度は必ず有効な値で）` : ''),
             },
           ],
         },
       ],
+      generationConfig: {
+        temperature: 0,
+        responseMimeType: 'application/json',
+        responseSchema: GEMINI_RESPONSE_SCHEMA,
+      },
     }),
   });
   if (!res.ok) {
     const body = await res.text().catch(() => '');
-    throw new Error(`AI API ${res.status}: ${body.slice(0, 200)}`);
+    throw new Error(`Gemini ${res.status}: ${body.slice(0, 240)}`);
   }
-  const json = (await res.json()) as { content?: { type: string; input?: unknown }[] };
-  return json.content?.find((c) => c.type === 'tool_use')?.input ?? null;
+  const json = (await res.json()) as {
+    candidates?: { content?: { parts?: { text?: string }[] }; finishReason?: string }[];
+    promptFeedback?: { blockReason?: string };
+  };
+  if (json.promptFeedback?.blockReason) throw new Error(`Gemini blocked: ${json.promptFeedback.blockReason}`);
+  const cand = json.candidates?.[0];
+  const text = (cand?.content?.parts ?? []).map((p) => p.text ?? '').join('').trim();
+  if (!text) throw new Error(`Gemini 空レスポンス (finishReason=${cand?.finishReason ?? '?'})`);
+  return JSON.parse(stripFences(text));
 }
 
 export async function analyzeImage(req: AnalyzeRequest): Promise<AnalyzeResponse> {
   if (!req?.imageBase64 || !req?.mediaType) {
     return { ok: false, error: 'imageBase64 / mediaType が必要', fallback: true };
   }
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const key = apiKey();
 
-  if (apiKey === 'mock' || process.env.RAKUGAKI_AI_MOCK === '1') {
+  if (key === 'mock' || process.env.RAKUGAKI_AI_MOCK === '1') {
     return { ok: true, ai: mockFeatures(req), via: 'mock' };
   }
-  if (!apiKey) {
-    return { ok: false, error: 'ANTHROPIC_API_KEY 未設定', fallback: true };
+  if (!key) {
+    return { ok: false, error: 'GEMINI_API_KEY 未設定', fallback: true };
   }
 
   try {
-    let raw = await callClaude(req, apiKey);
+    let raw: unknown = null;
+    try {
+      raw = await callGemini(req, key);
+    } catch (e) {
+      // JSON 解析失敗や一時エラーは1回だけリトライ
+      raw = await callGemini(req, key, e instanceof Error ? e.message.slice(0, 80) : '出力が不正');
+    }
     if (!looksLikeAiFeatures(raw)) {
-      raw = await callClaude(req, apiKey, '必須項目が欠けている / 値が不正');
+      raw = await callGemini(req, key, '必須項目が欠けている / 値が不正');
     }
     if (!looksLikeAiFeatures(raw)) {
       return { ok: false, error: 'AI の出力を解釈できなかった', fallback: true };
