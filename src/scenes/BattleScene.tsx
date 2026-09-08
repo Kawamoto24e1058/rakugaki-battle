@@ -438,13 +438,13 @@ export function BattleScene() {
       </div>
 
       {phase === 'animating' ? (
-        <div style={{ display: 'grid', placeItems: 'center', gap: '0.5rem', width: '100%' }}>
+        <div style={{ display: 'grid', placeItems: 'center', gap: '0.5rem', width: '100%', position: 'relative', zIndex: 40 }}>
           <div style={{ fontSize: '0.72rem', color: 'var(--ink-soft)' }}>
             {beatIdx + 1} / {beats.length}
           </div>
           <button
             className="crayon-btn primary big"
-            style={{ minWidth: '13rem', fontSize: '1.2rem', padding: '0.6em 1.4em' }}
+            style={{ minWidth: '13rem', fontSize: '1.2rem', padding: '0.6em 1.4em', position: 'relative', zIndex: 40 }}
             onClick={advance}
           >
             {tapLabel}
@@ -662,11 +662,18 @@ function ClashCut({
   names: [string, string];
 }) {
   const [resolved, setResolved] = useState(false);
+  const [gone, setGone] = useState(false);
   useEffect(() => {
     setResolved(false);
-    const t = window.setTimeout(() => setResolved(true), 650);
-    return () => window.clearTimeout(t);
+    setGone(false);
+    const t1 = window.setTimeout(() => setResolved(true), 650);
+    const t2 = window.setTimeout(() => setGone(true), 1900);
+    return () => {
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+    };
   }, [cut]);
+  if (gone) return null;
 
   const colorOf = (st: ClashStance) => (st === 'kosei' ? 'var(--crayon-purple)' : STANCE_COLOR[st as TriStance]);
 
@@ -714,7 +721,20 @@ function ClashCut({
   const bigText = !resolved ? '' : cut.winner === null ? 'ごかく！' : `${names[cut.winner]} の かち！`;
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 30, pointerEvents: 'none', display: 'grid', placeItems: 'center', background: 'rgba(0,0,0,0.16)' }}>
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 30,
+        pointerEvents: 'none',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'flex-start',
+        paddingTop: 'clamp(3rem, 16vh, 9rem)',
+        background: 'rgba(0,0,0,0.14)',
+      }}
+    >
       <div style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
         {card(cut.a, 0)}
         {!resolved && (
@@ -733,8 +753,7 @@ function ClashCut({
           initial={{ scale: 0.4, opacity: 0, y: 10 }}
           animate={{ scale: 1, opacity: 1, y: 0 }}
           style={{
-            position: 'absolute',
-            bottom: '28%',
+            marginTop: '1.1rem',
             fontFamily: 'var(--font-display)',
             fontWeight: 900,
             fontSize: 'clamp(1.4rem,5.5vw,2rem)',
