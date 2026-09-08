@@ -27,9 +27,16 @@ const STRONG_AGAINST: Partial<Record<Attribute, Attribute>> = {
   water: 'fire',
 };
 
-export const AFFINITY_STRONG = 1.4;
-export const AFFINITY_WEAK = 0.8;
+export const AFFINITY_STRONG = 1.5;
+export const AFFINITY_WEAK = 0.7;
 export const AFFINITY_NEUTRAL = 1;
+
+/** attacker の属性が defender に有利／不利／五分 か（バトル開始の相性表示用）。 */
+export function attributeMatchup(attacker: Attribute, defender: Attribute): 'strong' | 'weak' | 'even' {
+  if (STRONG_AGAINST[attacker] === defender) return 'strong';
+  if (STRONG_AGAINST[defender] === attacker) return 'weak';
+  return 'even';
+}
 
 /** attacker属性 が defender属性 に与えるダメージ倍率。 */
 export function affinityMultiplier(attacker: Attribute, defender: Attribute): number {

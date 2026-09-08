@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useGame } from '../store/gameStore';
 import { AttributeBadge, AnimatedStatBar, STAT_MAX, STAT_LABEL_JP as STAT_JP, CharacterSprite } from '../components/bits';
@@ -28,6 +29,9 @@ const STAT_ORDER: (keyof Stats)[] = ['hp', 'atk', 'def', 'spd', 'luck', 'heart']
 export function RevealScene() {
   const player = useGame((s) => s.player);
   const confirmReveal = useGame((s) => s.confirmReveal);
+  const renamePlayer = useGame((s) => s.renamePlayer);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
 
   if (!player) return null;
   const { character, imageUrl, analyzedBy } = player;
@@ -38,13 +42,57 @@ export function RevealScene() {
 
   return (
     <div className="scene" style={{ justifyContent: 'flex-start', paddingTop: 'clamp(1rem,4vh,2rem)' }}>
-      <motion.h2
+      <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        style={{ fontSize: '1.7rem', color: 'var(--crayon-blue)', textAlign: 'center' }}
+        style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'center' }}
       >
-        「{character.name}」の たんじょう！
-      </motion.h2>
+        {editing ? (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              renamePlayer(draft);
+              setEditing(false);
+            }}
+            style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}
+          >
+            <input
+              autoFocus
+              value={draft}
+              maxLength={12}
+              onChange={(e) => setDraft(e.target.value)}
+              style={{
+                fontFamily: 'var(--font-display)',
+                fontSize: '1.4rem',
+                width: 'min(11rem, 60vw)',
+                textAlign: 'center',
+                border: '2.5px solid var(--ink)',
+                borderRadius: 10,
+                padding: '0.1rem 0.5rem',
+              }}
+            />
+            <button type="submit" className="crayon-btn" style={{ fontSize: '0.9rem' }}>
+              けってい
+            </button>
+          </form>
+        ) : (
+          <>
+            <h2 style={{ fontSize: '1.7rem', color: 'var(--crayon-blue)', textAlign: 'center', margin: 0 }}>
+              「{character.name}」の たんじょう！
+            </h2>
+            <button
+              className="crayon-btn"
+              onClick={() => {
+                setDraft(character.name);
+                setEditing(true);
+              }}
+              style={{ fontSize: '0.8rem', padding: '0.15rem 0.6rem' }}
+            >
+              ✏️ なまえをかえる
+            </button>
+          </>
+        )}
+      </motion.div>
       <div
         style={{
           fontSize: '0.72rem',

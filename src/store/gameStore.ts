@@ -51,6 +51,8 @@ interface GameState {
   openZukan: () => void;
   devQuickBattle: (mode: Mode) => void;
   setCaptured: (slot: CapturedSlot) => void;
+  /** リビール画面で名前を手直しする。 */
+  renamePlayer: (name: string) => void;
   confirmReveal: () => void;
   chooseCpu: (character: Character) => void;
   finishBattle: (won: boolean) => void;
@@ -101,6 +103,14 @@ export const useGame = create<GameState>((set, get) => ({
   },
 
   setCaptured: (slot) => set({ player: slot, screen: 'reveal' }),
+
+  renamePlayer: (name) => {
+    const { player } = get();
+    if (!player) return;
+    const trimmed = name.trim().slice(0, 12);
+    if (!trimmed || trimmed === player.character.name) return;
+    set({ player: { ...player, character: { ...player.character, name: trimmed } } });
+  },
 
   confirmReveal: () => {
     const { mode, player, pendingChallenger } = get();
