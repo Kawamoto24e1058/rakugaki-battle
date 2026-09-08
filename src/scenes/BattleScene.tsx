@@ -112,6 +112,8 @@ interface Beat {
   cut: { a: ClashStance; b: ClashStance; winner: Side | null } | null;
   flash: boolean;
   impact: string | null;
+  /** この場面を見せる時間（ms）。過ぎたら自動で次へ。 */
+  ms: number;
 }
 
 type Phase = 'choose-p1' | 'handoff' | 'choose-p2' | 'animating' | 'over';
@@ -138,7 +140,7 @@ function buildBeats(
 
   const add = (
     banner: string,
-    opts: { cut?: Beat['cut']; flash?: boolean; impact?: string | null } = {},
+    opts: { cut?: Beat['cut']; flash?: boolean; impact?: string | null; ms?: number } = {},
   ) => {
     beats.push({
       view: {
@@ -152,6 +154,7 @@ function buildBeats(
       cut: opts.cut ?? null,
       flash: !!opts.flash,
       impact: opts.impact ?? null,
+      ms: opts.ms ?? 2000,
     });
   };
 
@@ -165,13 +168,17 @@ function buildBeats(
         break;
       case 'clash':
         add(
-          ev.winner === null ? 'おなじ かまえ！ どうじに うごく' : `${names[ev.winner]} が さきに うごく！`,
-          { cut: pending ? { a: pending[0], b: pending[1], winner: ev.winner } : null },
+          ev.winner === null ? 'おなじ かまえ！ どうじに うごく' : `${names[ev.winner]} が よんだ！ あいては うごけない`,
+          { cut: pending ? { a: pending[0], b: pending[1], winner: ev.winner } : null, ms: 2400 },
         );
         break;
       case 'act':
-        acting = ev.side;
-        add(`${names[ev.side]} の こうげき ―「${ev.moveName}」！`);
+        if (ev.moveName.startsWith('（')) {
+          add(`${names[ev.side]} は ${ev.moveName.replace(/[（）]/g, '')}`);
+        } else {
+          acting = ev.side;
+          add(`${names[ev.side]} の こうげき ―「${ev.moveName}」！`);
+        }
         break;
       case 'damage': {
         const loud = !!ev.tag && LOUD_TAGS.has(ev.tag);
@@ -235,9 +242,9 @@ function buildBeats(
   ];
   hp = [next.combatants[0].hp, next.combatants[1].hp];
   if (next.done) {
-    add(next.winner === 'draw' ? 'ひきわけ！' : `${names[next.winner as Side]} の かち！`);
+    add(next.winner === 'draw' ? 'ひきわけ！' : `${names[next.winner as Side]} の かち！`, { ms: 1600 });
   } else {
-    add(`ターン ${next.turn} へ`);
+    add(`ターン ${next.turn} へ`, { ms: 1200 });
   }
   return beats;
 }
@@ -296,6 +303,16 @@ export function BattleScene() {
     setFlash(true);
     const t = window.setTimeout(() => setFlash(false), 150);
     return () => window.clearTimeout(t);
+  }, [phase, beatIdx, beats]);
+
+  // 演出は各場面を beat.ms だけ見せて、自動で次へ切り替わる。
+  useEffect(() => {
+    if (phase !== 'animating') return;
+    const b = beats[beatIdx];
+    if (!b) return;
+    const t = window.setTimeout(() => advance(), b.ms);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, beatIdx, beats]);
 
   useEffect(() => {
@@ -365,12 +382,6 @@ export function BattleScene() {
   const chooser: ClashCombatant = phase === 'choose-p2' ? state.combatants[1] : state.combatants[0];
   const impact = curBeat?.impact ?? null;
 
-  const tapLabel = !lastBeat
-    ? '▶ つぎ'
-    : pendingNext.current?.done
-      ? 'けっかを みる ▶'
-      : 'つぎのターン ▶';
-
   return (
     <div className="scene" style={{ justifyContent: 'flex-start', paddingTop: 'clamp(.4rem,2vh,1rem)', gap: '0.7rem' }}>
       {pinch && <div className="pinch-vignette" />}
@@ -421,6 +432,7 @@ export function BattleScene() {
 
       <div
         className="sketch-card"
+        onClick={phase === 'animating' ? advance : undefined}
         style={{
           width: '100%',
           maxWidth: '48rem',
@@ -432,23 +444,29 @@ export function BattleScene() {
           fontWeight: 700,
           fontSize: phase === 'animating' ? '1.05rem' : '1rem',
           padding: '0.5rem 1rem',
+          cursor: phase === 'animating' ? 'pointer' : 'default',
         }}
       >
         {cur.banner}
       </div>
 
       {phase === 'animating' ? (
-        <div style={{ display: 'grid', placeItems: 'center', gap: '0.5rem', width: '100%', position: 'relative', zIndex: 40 }}>
-          <div style={{ fontSize: '0.72rem', color: 'var(--ink-soft)' }}>
-            {beatIdx + 1} / {beats.length}
+        <div style={{ display: 'grid', placeItems: 'center', gap: '0.35rem', width: '100%', position: 'relative', zIndex: 40 }}>
+          {/* 自動再生の進み具合 */}
+          <div style={{ display: 'flex', gap: 5 }}>
+            {beats.map((_, i) => (
+              <span
+                key={i}
+                style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: 99,
+                  background: i <= beatIdx ? 'var(--crayon-blue)' : 'var(--border)',
+                }}
+              />
+            ))}
           </div>
-          <button
-            className="crayon-btn primary big"
-            style={{ minWidth: '13rem', fontSize: '1.2rem', padding: '0.6em 1.4em', position: 'relative', zIndex: 40 }}
-            onClick={advance}
-          >
-            {tapLabel}
-          </button>
+          <div style={{ fontSize: '0.7rem', color: 'var(--ink-soft)' }}>じどうで すすむ（タップで はやく）</div>
         </div>
       ) : phase === 'over' ? (
         <div style={{ fontSize: '0.9rem', opacity: 0.7 }}>けっかへ…</div>
@@ -667,7 +685,7 @@ function ClashCut({
     setResolved(false);
     setGone(false);
     const t1 = window.setTimeout(() => setResolved(true), 650);
-    const t2 = window.setTimeout(() => setGone(true), 1900);
+    const t2 = window.setTimeout(() => setGone(true), 2200);
     return () => {
       window.clearTimeout(t1);
       window.clearTimeout(t2);

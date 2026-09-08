@@ -69,6 +69,22 @@ describe('力・技・速さ 三すくみ（プロトタイプ）', () => {
     }
   });
 
+  it('三すくみに負けた側は 技を発動できない（見切られる）', () => {
+    const l = drawn([210, 40, 30]);
+    const r = drawn([30, 90, 210]);
+    // side0=力、side1=速さ → 速さが勝ち、力（side0）は発動できない
+    const st = resolveClashTurn(createClashState(l, r, 21), ['power', 'speed']);
+    const evs = st.log.slice(0);
+    const act0 = evs.find((e) => e.t === 'act' && e.side === 0);
+    expect(act0 && act0.t === 'act' && act0.moveName.startsWith('（')).toBe(true);
+    // side1（速さ・勝者）は普通に行動し、side0 にダメージが入る
+    const dmgToLoser = evs.some((e) => e.t === 'damage' && e.side === 0 && e.amount > 0);
+    expect(dmgToLoser).toBe(true);
+    // 勝者（速さ）はこのターン ノーダメージ（力は発動していないので）
+    const dmgFromLoser = evs.some((e) => e.t === 'damage' && e.side === 1 && (e.tag === null || e.tag === 'かすった' || e.tag === 'クリティカル' || e.tag === 'ばつぐん'));
+    expect(dmgFromLoser).toBe(false);
+  });
+
   it('サイクル：速さ→力→技→速さ が正しい', () => {
     expect(STANCE_BEATS.speed).toBe('power');
     expect(STANCE_BEATS.power).toBe('tech');

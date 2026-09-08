@@ -47,8 +47,9 @@ export const STANCE_BEATS: Record<TriStance, TriStance> = {
 };
 
 const SUDDEN_DEATH_TURN = 12;
-const CLASH_WIN_MULT = 1.24;
-const CLASH_LOSE_MULT = 0.62;
+// クラッシュ勝ち＝相手は行動できない（発動不可）。勝者側の上乗せは控えめに。
+const CLASH_WIN_MULT = 1.15;
+const CLASH_LOSE_MULT = 0.62; // 現在は未使用（負け＝行動なし）。五分・こせい経路の保険で残す。
 /** 速さで力を「中断」したときの、力側のさらなる減衰（振りかぶりを潰す）。 */
 const INTERRUPT_MULT = 0.82;
 /** 力で技を「ぶち抜いた」ときの、技側の状態異常成功率の低下。 */
@@ -288,17 +289,23 @@ export function resolveClashTurn(
   for (const side of order) {
     if (next.winner !== null) break;
     const foe = eff[(1 - side) as Side];
-    act(next, side, eff[side], foe, clashResult(eff[side], foe), rng, log);
+    const res = clashResult(eff[side], foe);
+    if (res === 'lose') {
+      // 三すくみに負けた側は 発動できない（見切られた）。カウンター等は勝者側の act で処理。
+      log.push({ t: 'act', side, stance: eff[side], moveName: '（見切られて うごけない）' });
+      continue;
+    }
+    act(next, side, eff[side], foe, res, rng, log);
     checkFaint(next);
   }
 
-  // クラッシュ負け側の小さな慰め（連敗が苦行にならないように）
+  // クラッシュ負け側の慰め（発動できないぶん、連敗が苦行にならないように）
   if (next.winner === null) {
     for (const side of [0, 1] as Side[]) {
       if (clashResult(eff[side], eff[1 - side as Side]) === 'lose') {
         const c = next.combatants[side];
         if (c.hp > 0 && c.hp < c.maxHp) {
-          const amt = Math.max(3, Math.round(c.maxHp * 0.05));
+          const amt = Math.max(4, Math.round(c.maxHp * 0.08));
           c.hp = Math.min(c.maxHp, c.hp + amt);
           log.push({ t: 'consolation', side, amount: amt });
         }
@@ -428,7 +435,7 @@ function act(
   // 力が「速さ」に中断されたら、振りかぶりを潰されてさらに弱くなる
   if (stance === 'power' && foeStance === 'speed') clashMult *= INTERRUPT_MULT;
   // 力 vs 技 は「ぶち抜く」だけで、殴り合いの大差はつけない（読み外し1回で試合が終わらないよう）
-  if (stance === 'power' && result === 'win' && foeStance === 'tech') clashMult = 1.12;
+  if (stance === 'power' && result === 'win' && foeStance === 'tech') clashMult = 1.05;
   // 技が「力」にぶち抜かれたら、状態異常が入りにくくなる。技が勝てば逆に入りやすい。
   let statusMult = 1;
   if (stance === 'tech' && result === 'lose' && foeStance === 'power') statusMult = OVERPOWER_STATUS_MULT;
