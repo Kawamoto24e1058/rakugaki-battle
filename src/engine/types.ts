@@ -41,7 +41,9 @@ export type StatusKind =
   | 'atkDown'
   | 'defDown'
   | 'spdDown'
-  | 'flinch';
+  | 'flinch'
+  | 'guard'
+  | 'thorns';
 
 /** 持ち物（用紙のチェック欄／解析）。 */
 export type Weapon = 'sword' | 'wand' | 'shield' | 'wing';

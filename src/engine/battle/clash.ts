@@ -195,11 +195,9 @@ function rankCategory(moveIds: MoveId[], cat: TriStance): MoveDef[] {
   return [...pool].sort((a, b) => score(b) - score(a));
 }
 
-/** そのカテゴリで実際に出るわざ：強い順 → CD なら次 → 基本技。 */
+/** そのカテゴリで実際に出るわざ：強い順の先頭 → なければ基本技。 */
 function pickMove(c: ClashCombatant, cat: TriStance): MoveDef {
-  const ranked = rankCategory(c.moveIds, cat);
-  const ready = ranked.find((m) => (c.cooldowns[m.id] ?? 0) <= 0);
-  return ready ?? BASIC[cat];
+  return rankCategory(c.moveIds, cat)[0] ?? BASIC[cat];
 }
 
 /** キャラがそのカテゴリの技を1つでも編成しているか（0なら その構えは選べない）。 */
@@ -274,8 +272,11 @@ export function resolveClashTurn(
     log.push({ t: 'clash', winner: null, note: '五分！' });
   }
 
-  // 行動順：クラッシュ勝者 → 「速さ」構え → すばやさ
-  const order = decideOrder(next, eff, clashWinner, rng);
+  // 行動順：こせいは必ず先制 → クラッシュ勝者 → 「速さ」構え → すばやさ
+  let order: Side[];
+  if (eff[0] === 'kosei' && eff[1] !== 'kosei') order = [0, 1];
+  else if (eff[1] === 'kosei' && eff[0] !== 'kosei') order = [1, 0];
+  else order = decideOrder(next, eff, clashWinner, rng);
 
   for (const side of order) {
     if (next.winner !== null) break;
@@ -367,10 +368,10 @@ function resolveChoice(c: ClashCombatant, choice: ClashChoice): { stance: ClashS
   }
   // 技ID 指定
   const m = MOVES_SAFE(choice);
-  if (m && c.moveIds.includes(m.id) && (c.cooldowns[m.id] ?? 0) <= 0) {
+  if (m && c.moveIds.includes(m.id)) {
     return { stance: moveCategory(m), move: m };
   }
-  // 指定技が使えない（CD中／未編成）→ 同カテゴリの使える技 or 基本技
+  // 未編成の技ID → 同カテゴリの代表技 or 基本技
   const cat = m ? moveCategory(m) : 'power';
   return { stance: cat, move: pickMove(c, cat) };
 }
@@ -422,7 +423,7 @@ function act(
   }
 
   const move = chosenMove ?? pickMove(c, stance);
-  if (move.cooldown > 0 && !move.id.startsWith('basic_')) c.cooldowns[move.id] = move.cooldown + 1;
+  // 通常わざにクールダウンなし（回数制限は こせい だけ）。
   log.push({ t: 'act', side, stance, moveName: move.name });
 
   // 技で速さを「見切った」→ 補助わざでも当たるカウンター（防御無視・回避不可）
@@ -462,6 +463,14 @@ function applySupport(state: ClashState, side: Side, move: MoveDef, log: ClashEv
     const k = map[move.buff.stat] ?? 'atkUp';
     applyStatus(c, k, move.buff.turns);
     log.push({ t: 'status-apply', side, kind: k });
+  }
+  if (move.guardPct) {
+    applyStatus(c, 'guard');
+    log.push({ t: 'status-apply', side, kind: 'guard' });
+  }
+  if (move.reflect) {
+    applyStatus(c, 'thorns');
+    log.push({ t: 'status-apply', side, kind: 'thorns' });
   }
   if (move.heal) {
     const amt = Math.round(move.heal * (1 + effStat(c, 'heart') / 55));
@@ -534,7 +543,8 @@ function applyKosei(state: ClashState, side: Side, rng: Rng, log: ClashEvent[]):
       healSelf(a.pct, true);
       break;
     case 'fortress':
-      if (applyStatus(c, 'defUp', 2)) log.push({ t: 'status-apply', side, kind: 'defUp' });
+      if (applyStatus(c, 'guard', 3)) log.push({ t: 'status-apply', side, kind: 'guard' });
+      if (applyStatus(c, 'thorns', 3)) log.push({ t: 'status-apply', side, kind: 'thorns' });
       break;
     case 'warcry':
       if (applyStatus(c, 'atkUp', 3)) log.push({ t: 'status-apply', side, kind: 'atkUp' });
@@ -597,7 +607,11 @@ function dealDamage(
   if (hasAttr && move.attribute === 'bolt' && has(target, 'wet')) dmg *= 1.6;
 
   if (!move.pierce) dmg *= 40 / (40 + effStat(target, 'def'));
-  if (has(target, 'curse')) dmg *= STATUS_META.curse.incomingMult;
+  // 状態異常による被ダメ倍率（のろい＋・ガード−・ぼうぎょ↑↓ …）。ガードは貫通でも効く。
+  for (const s of target.statuses) {
+    const im = STATUS_META[s.kind].incomingMult;
+    if (im !== 1) dmg *= im;
+  }
 
   const hpPct = actor.hp / actor.maxHp;
   if (hpPct < 0.35) {
@@ -613,6 +627,17 @@ function dealDamage(
 
   target.hp = Math.max(0, target.hp - final);
   log.push({ t: 'damage', side: (1 - side) as Side, amount: final, hpAfter: target.hp, tag });
+
+  // トゲ：攻撃してきた actor に一部を返す
+  if (final > 0) {
+    let reflect = 0;
+    for (const s of target.statuses) reflect = Math.max(reflect, STATUS_META[s.kind].reflectPct ?? 0);
+    if (reflect > 0) {
+      const back = Math.max(1, Math.round(final * reflect));
+      actor.hp = Math.max(0, actor.hp - back);
+      log.push({ t: 'damage', side, amount: back, hpAfter: actor.hp, tag: 'トゲ' });
+    }
+  }
 
   // ドレイン
   if (move.drain && final > 0) {

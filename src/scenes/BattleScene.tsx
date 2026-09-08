@@ -42,13 +42,14 @@ function moveDetailLines(m: MoveDef): string[] {
   }
   if (m.cures) out.push(m.cures === 'all' ? '状態異常を ぜんぶ なおす' : '状態異常を 1つ なおす');
   if (m.heal) out.push(`HP ${m.heal} かいふく`);
-  if (m.buff) out.push(`${STAT_JP[m.buff.stat]} アップ（${m.buff.turns}ターン）`);
-  if (m.debuff) out.push(`あいての ${STAT_JP[m.debuff.stat]} ダウン`);
-  if (m.guardPct) out.push(`このターン 被ダメ -${m.guardPct}%`);
-  if (m.reflect) out.push(`受けたダメージを ${m.reflect}% 返す`);
+  if (m.buff?.stat === 'def') out.push('3ターン、うけるダメージ -25%');
+  else if (m.buff) out.push(`${STAT_JP[m.buff.stat]} アップ（${m.buff.turns}ターン）`);
+  if (m.debuff?.stat === 'def') out.push('あいての うけるダメージ +30%');
+  else if (m.debuff) out.push(`あいての ${STAT_JP[m.debuff.stat]} ダウン`);
+  if (m.guardPct) out.push('2ターン、うけるダメージが 半分');
+  if (m.reflect) out.push('2ターン、うけたダメージの 3わり を返す');
   if (m.drain) out.push(`与ダメの ${m.drain}% 回復`);
   if (m.recoil) out.push(`反動 ${m.recoil}%`);
-  if (m.cooldown > 0) out.push(`クールダウン ${m.cooldown}`);
   return out;
 }
 
@@ -56,8 +57,11 @@ function moveDetailLines(m: MoveDef): string[] {
 function moveGist(m: MoveDef): string | null {
   if (m.heal || m.cures) return 'かいふく';
   if (m.status && !m.status.toSelf) return `${STATUS_META[m.status.kind].jp}をねらう`;
-  if (m.guardPct) return 'ダメージを へらす';
+  if (m.guardPct) return 'ダメージ 半分（2ターン）';
+  if (m.reflect) return 'ダメージ 3わり返す（2ターン）';
+  if (m.buff?.stat === 'def') return 'ダメージ -25%（3ターン）';
   if (m.buff) return `${STAT_JP[m.buff.stat]}アップ`;
+  if (m.debuff?.stat === 'def') return 'あいて ダメージ +30%';
   if (m.debuff) return `あいて ${STAT_JP[m.debuff.stat]}ダウン`;
   if (m.drain) return 'すいとり';
   if (m.first) return 'かならず せんせい';
@@ -679,7 +683,6 @@ function MoveButtons({ onPick, me }: { onPick: (c: ClashChoice) => void; me: Cla
 
   const moveBtn = (m: MoveDef) => {
     const s = moveCategory(m);
-    const cd = me.cooldowns[m.id] ?? 0;
     const gist = moveGist(m);
     return (
       <div key={m.id} style={{ position: 'relative', display: 'flex' }}>
@@ -688,18 +691,16 @@ function MoveButtons({ onPick, me }: { onPick: (c: ClashChoice) => void; me: Cla
         )}
         <button
           className="crayon-btn"
-          disabled={cd > 0}
           onClick={() => onPick(m.id)}
           onMouseEnter={() => setOpen(m.id)}
           onMouseLeave={() => setOpen(null)}
-          style={{ ...shell, borderColor: BTN_COLOR[s], color: 'var(--ink)', opacity: cd > 0 ? 0.4 : 1 }}
+          style={{ ...shell, borderColor: BTN_COLOR[s], color: 'var(--ink)' }}
         >
           <span style={{ fontFamily: 'var(--font-display)', fontSize: '1.15rem', color: BTN_COLOR[s] }}>
             「{m.name}」
           </span>
           <span style={{ fontSize: '0.92rem', fontWeight: 700 }}>
             {m.category === 'attack' ? `いりょく ${m.power}` : 'ほじょわざ'}
-            {cd > 0 ? `（あと${cd}）` : ''}
           </span>
           {gist && <span style={{ fontSize: '0.76rem', opacity: 0.85 }}>{gist}</span>}
           <span style={{ fontSize: '0.72rem', color: BTN_COLOR[s], opacity: 0.9 }}>

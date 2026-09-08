@@ -242,6 +242,58 @@ describe('力・技・速さ 三すくみ（プロトタイプ）', () => {
     expect(act1 && act1.t === 'act' && !act1.moveName.startsWith('（')).toBe(true);
   });
 
+  it('ガード（guardPct技）は 受けるダメージを大きく減らす', () => {
+    // side1 が ガード → 次に side0 の攻撃ダメージが素の半分くらいになる
+    const atkr = drawn([210, 40, 30]);
+    const gd = drawn([30, 90, 210]);
+    atkr.moveIds = ['c_tackle', 'c_scratch', 'sm_jab'];
+    gd.moveIds = ['c_guard', 'c_tackle', 'sm_jab'];
+
+    const dmgOn = (guardFirst: boolean) => {
+      let st = createClashState(drawn([210, 40, 30]), drawn([30, 90, 210]), 4);
+      st.combatants[0].moveIds = [...atkr.moveIds];
+      st.combatants[1].moveIds = [...gd.moveIds];
+      if (guardFirst) {
+        // side1 が 技(ガード) で 速さ に勝って ガードを張る
+        st = resolveClashTurn(st, ['sm_jab', 'c_guard']);
+      }
+      const n = st.log.length;
+      const before = st.combatants[1].hp;
+      // 力 vs 力 の五分 → 両者行動 → side0 の たいあたり が side1 に当たる
+      st = resolveClashTurn(st, ['c_tackle', 'c_tackle']);
+      const dmg = st.log.slice(n).find((e) => e.t === 'damage' && e.side === 1);
+      return dmg && dmg.t === 'damage' ? dmg.amount : before - st.combatants[1].hp;
+    };
+    const plain = dmgOn(false);
+    const guarded = dmgOn(true);
+    expect(guarded).toBeLessThan(plain * 0.7);
+  });
+
+  it('こせいは必ず先制（相手より先に行動する）', () => {
+    const l = drawn([210, 40, 30]);
+    const r = drawn([30, 90, 210]);
+    const st = resolveClashTurn(createClashState(l, r, 8), ['kosei', 'power']);
+    const acts = st.log.filter((e): e is Extract<typeof e, { t: 'act' }> => e.t === 'act');
+    expect(acts[0]?.side).toBe(0);
+    expect(acts[0]?.stance).toBe('kosei');
+  });
+
+  it('通常わざにクールダウンは無い（同じ技を連発できる）', () => {
+    const a = drawn([210, 40, 30]);
+    const b = drawn([30, 90, 210]);
+    const bite = getMove('c_bite'); // 旧 cooldown 1
+    a.moveIds = [bite.id, 'c_scratch', 'sm_jab'];
+    let st = createClashState(a, b, 2);
+    for (let i = 0; i < 3 && !st.done; i++) {
+      const before = st.log.length;
+      st = resolveClashTurn(st, [bite.id, 'speed']);
+      const acted = st.log.slice(before).some((e) => e.t === 'act' && e.side === 0 && e.moveName === bite.name);
+      // 力 vs 速さ で負けなければ bite が出続ける（CD で別技/基本技に落ちない）
+      const lost = st.log.slice(before).some((e) => e.t === 'act' && e.side === 0 && e.moveName.startsWith('（'));
+      expect(acted || lost).toBe(true);
+    }
+  });
+
   it('こせい構え：発動してクールダウン/回数を消費する', () => {
     const l = drawn([210, 40, 30]);
     const r = drawn([30, 90, 210]);

@@ -19,6 +19,8 @@ export interface StatusMeta {
   /** バフ：対象ステータスと倍率。 */
   buffStat?: keyof Stats;
   buffMult?: number;
+  /** トゲ：攻撃してきた相手に、与ダメの pct% を返す。 */
+  reflectPct?: number;
   duration: number;
   description: string;
 }
@@ -43,14 +45,17 @@ export const STATUS_META: Record<StatusKind, StatusMeta> = {
   curse: meta({ id: 'curse', jp: 'のろい', kind: 'debuff', incomingMult: 1.25, duration: 3, description: '受けるダメージが増える。' }),
   poison: meta({ id: 'poison', jp: 'どく', kind: 'debuff', dotPercent: 0.04, duration: 5, description: '毎ターン、だんだん強くなるダメージ。' }),
   confuse: meta({ id: 'confuse', jp: 'こんらん', kind: 'debuff', selfHitChance: 0.33, duration: 2, description: 'ときどき自分を攻撃してしまう。' }),
-  atkUp: meta({ id: 'atkUp', jp: 'こうげき↑', kind: 'buff', buffStat: 'atk', buffMult: 1.3, duration: 2, description: 'こうげきが上がっている。' }),
-  defUp: meta({ id: 'defUp', jp: 'ぼうぎょ↑', kind: 'buff', buffStat: 'def', buffMult: 1.4, duration: 2, description: 'ぼうぎょが上がっている。' }),
-  spdUp: meta({ id: 'spdUp', jp: 'すばやさ↑', kind: 'buff', buffStat: 'spd', buffMult: 1.4, duration: 2, description: 'すばやさが上がっている。' }),
-  luckUp: meta({ id: 'luckUp', jp: 'きゅうしょ↑', kind: 'buff', buffStat: 'luck', buffMult: 1.5, duration: 3, description: 'きゅうしょに当たりやすい。' }),
-  atkDown: meta({ id: 'atkDown', jp: 'こうげき↓', kind: 'debuff', buffStat: 'atk', buffMult: 0.75, duration: 2, description: 'こうげきが下がっている。' }),
-  defDown: meta({ id: 'defDown', jp: 'ぼうぎょ↓', kind: 'debuff', buffStat: 'def', buffMult: 0.7, duration: 2, description: 'ぼうぎょが下がっている。' }),
-  spdDown: meta({ id: 'spdDown', jp: 'すばやさ↓', kind: 'debuff', buffStat: 'spd', buffMult: 0.65, duration: 2, description: 'すばやさが下がっている。' }),
+  atkUp: meta({ id: 'atkUp', jp: 'こうげき↑', kind: 'buff', buffStat: 'atk', buffMult: 1.3, duration: 2, description: 'こうげきが 3わり上がる。' }),
+  // ぼうぎょ↑↓ は「受けるダメージの倍率」で分かりやすく（stat には触らない）。
+  defUp: meta({ id: 'defUp', jp: 'ぼうぎょ↑', kind: 'buff', incomingMult: 0.75, duration: 3, description: '受けるダメージが 25% へる（3ターン）。' }),
+  spdUp: meta({ id: 'spdUp', jp: 'すばやさ↑', kind: 'buff', buffStat: 'spd', buffMult: 1.4, duration: 2, description: 'すばやさが 4わり上がる。' }),
+  luckUp: meta({ id: 'luckUp', jp: 'きゅうしょ↑', kind: 'buff', buffStat: 'luck', buffMult: 1.5, duration: 3, description: 'きゅうしょに 当たりやすい。' }),
+  atkDown: meta({ id: 'atkDown', jp: 'こうげき↓', kind: 'debuff', buffStat: 'atk', buffMult: 0.75, duration: 2, description: 'こうげきが 25% 下がる。' }),
+  defDown: meta({ id: 'defDown', jp: 'ぼうぎょ↓', kind: 'debuff', incomingMult: 1.3, duration: 2, description: '受けるダメージが 30% ふえる（2ターン）。' }),
+  spdDown: meta({ id: 'spdDown', jp: 'すばやさ↓', kind: 'debuff', buffStat: 'spd', buffMult: 0.65, duration: 2, description: 'すばやさが 35% 下がる。' }),
   flinch: meta({ id: 'flinch', jp: 'ひるみ', kind: 'debuff', duration: 1, description: 'つぎの攻撃が「かすり」になる。' }),
+  guard: meta({ id: 'guard', jp: 'ガード', kind: 'buff', incomingMult: 0.5, duration: 2, description: '受けるダメージが 半分に なる（2ターン）。' }),
+  thorns: meta({ id: 'thorns', jp: 'トゲ', kind: 'buff', reflectPct: 0.33, duration: 2, description: '攻撃してきた相手に ダメージの 3わり を返す（2ターン）。' }),
 };
 
 export interface ActiveStatus {
