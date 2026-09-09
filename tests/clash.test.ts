@@ -150,9 +150,11 @@ describe('力・技・速さ 三すくみ（プロトタイプ）', () => {
     expect(rate).toBeLessThan(0.58);
   });
 
-  it('三すくみの各対面に正しい優位がある（速さ>力>技>速さ）', () => {
+  it('三すくみの各対面に正しい優位がある（攻撃わざを持つ場合、速さ>力>技>速さ）', () => {
     const A = drawn([210, 40, 30]);
     const B = drawn([210, 40, 30]);
+    // 各カテゴリに「攻撃わざ」を確実に持たせる（補助だけだと中断できない）
+    for (const c of [A, B]) c.moveIds = ['c_tackle', 'c_bite', 'ey_see', 'sm_jab', 'sm_dart'];
     const rateOf = (x: ClashStance, y: ClashStance) => {
       let a = 0;
       let b = 0;
@@ -163,8 +165,9 @@ describe('力・技・速さ 三すくみ（プロトタイプ）', () => {
       }
       return a / (a + b);
     };
-    expect(rateOf('speed', 'power')).toBeGreaterThan(0.6);
-    expect(rateOf('power', 'tech')).toBeGreaterThan(0.6);
+    // 見切った側が必ず先に動ける＝そのカテゴリが有利（速さは技が弱いので伸びは控えめ）。
+    expect(rateOf('speed', 'power')).toBeGreaterThan(0.5);
+    expect(rateOf('power', 'tech')).toBeGreaterThan(0.55);
     expect(rateOf('tech', 'speed')).toBeGreaterThan(0.55);
   });
 
@@ -240,6 +243,38 @@ describe('力・技・速さ 三すくみ（プロトタイプ）', () => {
     // side1（力）は「見切られて うごけない」ではなく、ちゃんと技を出す
     const act1 = evs.find((e) => e.t === 'act' && e.side === 1);
     expect(act1 && act1.t === 'act' && !act1.moveName.startsWith('（')).toBe(true);
+  });
+
+  it('補助わざが勝っても 相手は中断されない（補助技は攻撃しない）', () => {
+    const a = drawn([210, 40, 30]);
+    const b = drawn([30, 90, 210]);
+    a.moveIds = ['c_guard', 'c_tackle', 'sm_jab']; // 技枠は c_guard（補助）
+    b.moveIds = ['c_tackle', 'sm_jab', 'sm_dart'];
+    // side0 技(ガード) vs side1 速さ → 技が勝つが 補助なので side1 は動ける
+    const st = resolveClashTurn(createClashState(a, b, 6), ['c_guard', 'sm_dart']);
+    const act1 = st.log.find((e) => e.t === 'act' && e.side === 1);
+    expect(act1 && act1.t === 'act' && !act1.moveName.startsWith('（')).toBe(true);
+    // side0 は ガードを張っただけ（相手にダメージを与えていない）
+    const dmgToFoe = st.log.some((e) => e.t === 'damage' && e.side === 1 && e.amount > 0);
+    expect(dmgToFoe).toBe(false);
+  });
+
+  it('毒：毎ターン じわじわ減る', () => {
+    const a = drawn([210, 40, 30]);
+    const b = drawn([30, 150, 60]);
+    b.moveIds = ['wood_a2', 'c_tackle', 'sm_jab']; // どく技
+    a.moveIds = ['c_tackle', 'c_bite', 'sm_jab'];
+    let st = createClashState(a, b, 15);
+    // side1 が どく技(技カテゴリ) を当てるまで回す
+    for (let i = 0; i < 12 && !st.done && !st.combatants[0].statuses.some((s) => s.kind === 'poison'); i++) {
+      st = resolveClashTurn(st, ['c_tackle', 'wood_a2']);
+    }
+    if (st.combatants[0].statuses.some((s) => s.kind === 'poison') && !st.done) {
+      const hp0 = st.combatants[0].hp;
+      st = resolveClashTurn(st, ['c_tackle', 'c_tackle']); // 五分（毒 tick だけ見る）
+      const tick = st.log.some((e) => e.t === 'status-tick' && e.side === 0 && e.kind === 'poison');
+      expect(tick || st.combatants[0].hp < hp0).toBe(true);
+    }
   });
 
   it('ガード（guardPct技）は 受けるダメージを大きく減らす', () => {

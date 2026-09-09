@@ -84,14 +84,14 @@ function attrLine(a: Attribute, names: [string, string, string], status: StatusK
 }
 
 const STATUS_JP: Record<string, string> = {
-  burn: 'やけど', shock: 'しびれ', wet: 'ぬれ', bind: 'からまり', curse: 'のろい',
+  burn: 'やけど', paralysis: 'まひ', freeze: 'こおり', sleep: 'ねむり',
   poison: 'どく', confuse: 'こんらん', flinch: 'ひるみ' };
 
 export const MOVES: Record<MoveId, MoveDef> = Object.fromEntries(
   (
     [
       // ===== 共通（だれでも） =====
-      atk('c_scratch', 'ひっかき', 10, ['common'], '威力ひかえめ。手数を稼ぐ小技。', {}),
+      atk('c_scratch', 'ひっかき', 13, ['common'], '威力ひかえめ。手数を稼ぐ小技。', {}),
       atk('c_tackle', 'たいあたり', 20, ['common'], '威力ふつう。クセのない体当たり。', {}),
       atk('c_bite', 'かみつき', 30, ['common'], '威力大。', { }),
       sup('c_guard', 'ガード', 0, ['common'], '2ターン、受けるダメージが 半分に なる。', { guardPct: 55 }),
@@ -100,20 +100,20 @@ export const MOVES: Record<MoveId, MoveDef> = Object.fromEntries(
 
       // ===== 属性ライン（3段階・進化で上がる） =====
       ...attrLine('fire', ['ひのこ', 'かえん', 'ごうか'], 'burn'),
-      ...attrLine('water', ['みずでっぽう', 'すいりゅう', 'だくりゅう'], 'wet'),
-      ...attrLine('wood', ['つるむち', 'いばらムチ', 'もりのいかり'], 'bind'),
-      ...attrLine('bolt', ['でんげき', 'いなずま', 'かみなり'], 'shock'),
-      ...attrLine('dark', ['かげぬい', 'やみのやいば', 'あんこく'], 'curse'),
+      ...attrLine('water', ['みずでっぽう', 'すいりゅう', 'だくりゅう'], 'freeze'),
+      ...attrLine('wood', ['つるむち', 'いばらムチ', 'もりのいかり'], 'poison'),
+      ...attrLine('bolt', ['でんげき', 'いなずま', 'かみなり'], 'paralysis'),
+      ...attrLine('dark', ['かげぬい', 'やみのやいば', 'あんこく'], 'confuse'),
 
       // 属性シグネチャー（強力な切り札）＋ 属性の補助
       atk('fire_sig', 'フレアバスター', 36, ['attr:fire', 'mood:fierce'], '威力特大。ぼうぎょ無視。必ずやけど。', { attribute: 'fire', pierce: true, riskShift: 6, status: { kind: 'burn', chance: 1 } }),
-      sup('fire_dry', 'ねっぷう', 0, ['attr:fire'], 'ぬれ・こおりを吹き飛ばして少し回復。', { cures: 'one', heal: 12 }),
-      atk('water_sig', 'アクアカノン', 36, ['attr:water', 'weapon:wand'], '威力特大。ぼうぎょ無視。必ずぬれ。', { attribute: 'water', pierce: true, status: { kind: 'wet', chance: 1 } }),
+      sup('fire_dry', 'ねっぷう', 0, ['attr:fire'], 'こおり などを 吹き飛ばして 少し回復。', { cures: 'one', heal: 12 }),
+      atk('water_sig', 'アクアカノン', 36, ['attr:water', 'weapon:wand'], '威力特大。ぼうぎょ無視。必ず こおり。', { attribute: 'water', pierce: true, status: { kind: 'freeze', chance: 1 } }),
       sup('water_wash', 'みずであらう', 0, ['attr:water', 'mood:calm'], 'やけど・どくを洗い流して中回復。', { cures: 'all', heal: 16 }),
-      atk('wood_sig', 'ジャングルバインド', 34, ['attr:wood', 'shape:big'], '威力大。必ずからまり（動きを止める）。', { attribute: 'wood', status: { kind: 'bind', chance: 1 } }),
+      atk('wood_sig', 'ジャングルバインド', 34, ['attr:wood', 'shape:big'], '威力大。必ず どく。', { attribute: 'wood', status: { kind: 'poison', chance: 1 } }),
       sup('wood_root', 'ねをはる', 0, ['attr:wood'], '3ターン、受けるダメージ 25%減＋少し回復。', { buff: { stat: 'def', turns: 3 }, heal: 10 }),
-      atk('bolt_sig', 'サンダーレイド', 34, ['attr:bolt', 'part:wings'], '威力大。必ず先制。ぬれた相手に大ダメージ。', { attribute: 'bolt', first: true, status: { kind: 'shock', chance: 0.9 } }),
-      atk('dark_sig', 'ドレインバイト', 32, ['attr:dark', 'mood:fierce'], '威力大。与ダメージの半分を回復。', { attribute: 'dark', drain: 55, status: { kind: 'curse', chance: 0.5 } }),
+      atk('bolt_sig', 'サンダーレイド', 34, ['attr:bolt', 'part:wings'], '威力大。必ず先制。高い確率で まひ。', { attribute: 'bolt', first: true, status: { kind: 'paralysis', chance: 0.9 } }),
+      atk('dark_sig', 'ドレインバイト', 32, ['attr:dark', 'mood:fierce'], '威力大。与ダメージの半分を回復。ときどき こんらん。', { attribute: 'dark', drain: 55, status: { kind: 'confuse', chance: 0.5 } }),
       sup('dark_veil', 'やみのベール', 0, ['attr:dark'], 'すばやさアップ（2ターン）＋回避が上がる。', { buff: { stat: 'spd', turns: 2 } }),
 
       // ===== 形：トゲトゲ =====
@@ -128,7 +128,7 @@ export const MOVES: Record<MoveId, MoveDef> = Object.fromEntries(
       sup('ro_puff', 'ふくらむ', 0, ['shape:round'], '3ターン、受けるダメージが 25% へる。', { buff: { stat: 'def', turns: 2 } }),
 
       // ===== 形：たて長 =====
-      atk('ta_stretch', 'のびパンチ', 16, ['shape:tall'], '威力ひかえめ。必ず先制。', { first: true }),
+      atk('ta_stretch', 'のびパンチ', 18, ['shape:tall'], '威力ひかえめ。必ず先制。', { first: true }),
       atk('ta_kick', 'ハイキック', 28, ['shape:tall'], '威力大。', { }),
       sup('ta_look', 'みおろす', 0, ['shape:tall'], 'すばやさアップ（2ターン）。', { buff: { stat: 'spd', turns: 2 } }),
 
@@ -143,8 +143,8 @@ export const MOVES: Record<MoveId, MoveDef> = Object.fromEntries(
       sup('bg_weight', 'おもみ', 0, ['shape:big'], '3ターン、受けるダメージが 25% へる。', { buff: { stat: 'def', turns: 2 } }),
 
       // ===== 形：小さい =====
-      atk('sm_jab', 'クイックジャブ', 12, ['shape:small'], '威力ひかえめ。小さく素早い一撃。', {}),
-      atk('sm_dart', 'スニークムーブ', 14, ['shape:small'], '威力ひかえめ。必ず先制。', { first: true }),
+      atk('sm_jab', 'クイックジャブ', 16, ['shape:small'], '威力ひかえめ。小さく素早い一撃。', {}),
+      atk('sm_dart', 'スニークムーブ', 17, ['shape:small'], '威力ひかえめ。必ず先制。', { first: true }),
       sup('sm_slip', 'すりぬけ', 0, ['shape:small'], 'すばやさアップ（回避も上がる）。', { buff: { stat: 'spd', turns: 2 } }),
 
       // ===== 形：左右対称 =====
@@ -153,7 +153,7 @@ export const MOVES: Record<MoveId, MoveDef> = Object.fromEntries(
       atk('sy_balance', 'バランスアタック', 22, ['shape:symmetric'], '威力ふつう。くずれない構えから打つ。', {}),
 
       // ===== 形：非対称 =====
-      atk('as_trick', 'トリッキー', 20, ['shape:asymmetric'], '威力ふつう。ときどきこんらん。', { status: { kind: 'confuse', chance: 0.35 } }),
+      atk('as_trick', 'トリッキー', 20, ['shape:asymmetric'], '威力ふつう。ときどき ねむらせる。', { status: { kind: 'sleep', chance: 0.35 } }),
       atk('as_swap', 'いれかわり', 18, ['shape:asymmetric'], '威力ひかえめ。不意をつく一撃。', {}),
       atk('as_weird', 'へんそくアタック', 24, ['shape:asymmetric'], '威力ふつう。クセのある一撃。', { }),
 

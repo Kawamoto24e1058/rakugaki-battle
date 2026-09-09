@@ -198,6 +198,8 @@ function buildBeats(
           });
         } else if (ev.moveName.startsWith('（')) {
           add(`${names[ev.side]} は ${ev.moveName.replace(/[（）]/g, '')}`);
+        } else if (ev.support) {
+          add(`${names[ev.side]} は ほじょわざ ―「${ev.moveName}」`);
         } else {
           acting = ev.side;
           add(`${names[ev.side]} の こうげき ―「${ev.moveName}」！`);
@@ -1097,6 +1099,16 @@ function FighterPanel({
         {low && <span style={{ color: 'var(--crayon-red)', fontWeight: 700, fontSize: '0.8rem' }}>ピンチ！</span>}
       </div>
       <div style={{ fontSize: '0.7rem', opacity: 0.7 }}>{archetypeLabel(char.baseStats)}</div>
+      {(() => {
+        const k = getKosei(char.koseiId);
+        return (
+          <div style={{ fontSize: '0.66rem', color: 'var(--crayon-purple)', lineHeight: 1.25, marginTop: 1 }}>
+            ★{char.koseiTitle ?? ''}{k.name}
+            <br />
+            <span style={{ color: 'var(--ink-soft)' }}>パッシブ：{k.passiveJp}</span>
+          </div>
+        );
+      })()}
 
       <motion.div
         animate={

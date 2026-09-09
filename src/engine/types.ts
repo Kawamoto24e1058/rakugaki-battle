@@ -27,13 +27,14 @@ export interface Stats {
 
 /** 状態異常の種類。 */
 export type StatusKind =
-  | 'burn'
-  | 'shock'
-  | 'wet'
-  | 'bind'
-  | 'curse'
-  | 'poison'
-  | 'confuse'
+  // ポケモン定番6つ
+  | 'burn' // やけど
+  | 'paralysis' // まひ
+  | 'freeze' // こおり
+  | 'sleep' // ねむり
+  | 'poison' // どく
+  | 'confuse' // こんらん
+  // バフ・デバフ・構え
   | 'atkUp'
   | 'defUp'
   | 'spdUp'

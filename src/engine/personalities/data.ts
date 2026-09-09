@@ -67,7 +67,7 @@ function passiveText(p: KoseiPassive): string {
 }
 function jpStatus(s: StatusKind): string {
   const m: Partial<Record<StatusKind, string>> = {
-    burn: 'やけど', shock: 'しびれ', wet: 'ぬれ', bind: 'からまり', curse: 'のろい',
+    burn: 'やけど', paralysis: 'まひ', freeze: 'こおり', sleep: 'ねむり',
     poison: 'どく', confuse: 'こんらん', flinch: 'ひるみ',
   };
   return m[s] ?? s;
@@ -78,7 +78,7 @@ const N = (n: number): KoseiLimit => ({ kind: 'count', n });
 
 // 属性ごとの状態異常（攻撃系こせいの既定）
 const ATTR_ST: Record<Attribute, StatusKind> = {
-  fire: 'burn', water: 'wet', wood: 'bind', bolt: 'shock', dark: 'curse',
+  fire: 'burn', water: 'freeze', wood: 'poison', bolt: 'paralysis', dark: 'confuse',
 };
 const ATTR_WORD: Record<Attribute, string> = {
   fire: 'ほのお', water: 'みず', wood: 'もり', bolt: 'いかずち', dark: 'やみ',

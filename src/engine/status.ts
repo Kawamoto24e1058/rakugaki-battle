@@ -4,16 +4,22 @@ export interface StatusMeta {
   id: StatusKind;
   jp: string;
   kind: 'debuff' | 'buff';
-  /** 毎ターン終了時のダメージ（最大HP割合）。poison は turnsElapsed で増える。 */
+  /** 毎ターン終了時のダメージ（最大HP割合）。 */
   dotPercent: number;
   /** ちから倍率（やけど）。 */
   atkMult: number;
-  /** すばやさ倍率（からまり）。 */
+  /** すばやさ倍率（まひ）。 */
   spdMult: number;
-  /** 被ダメージ倍率（のろい）。 */
+  /** 被ダメージ倍率（ぼうぎょ↑↓など）。 */
   incomingMult: number;
-  /** 行動不能の確率（しびれ）。 */
+  /** 行動不能の確率（まひ）。 */
   skipChance: number;
+  /** 完全に行動不能（こおり・ねむり）。 */
+  fullSkip?: boolean;
+  /** 毎ターン、自然に治る確率（こおり）。 */
+  wakeChance?: number;
+  /** ダメージを受けたとき治る確率（ねむり）。 */
+  wakeOnHit?: number;
   /** 自分を攻撃する確率（こんらん）。 */
   selfHitChance: number;
   /** バフ：対象ステータスと倍率。 */
@@ -38,13 +44,13 @@ function meta(p: Partial<StatusMeta> & Pick<StatusMeta, 'id' | 'jp' | 'kind' | '
 }
 
 export const STATUS_META: Record<StatusKind, StatusMeta> = {
-  burn: meta({ id: 'burn', jp: 'やけど', kind: 'debuff', dotPercent: 0.05, atkMult: 0.8, duration: 3, description: '毎ターン少しダメージ。こうげきダウン。' }),
-  shock: meta({ id: 'shock', jp: 'しびれ', kind: 'debuff', skipChance: 0.25, duration: 3, description: 'ときどき動けない。' }),
-  wet: meta({ id: 'wet', jp: 'ぬれ', kind: 'debuff', duration: 3, description: '単体では無害。雷わざで大ダメージ＋しびれ。' }),
-  bind: meta({ id: 'bind', jp: 'からまり', kind: 'debuff', spdMult: 0.5, dotPercent: 0.02, duration: 3, description: 'すばやさダウン。先制・回避できない。' }),
-  curse: meta({ id: 'curse', jp: 'のろい', kind: 'debuff', incomingMult: 1.25, duration: 3, description: '受けるダメージが増える。' }),
-  poison: meta({ id: 'poison', jp: 'どく', kind: 'debuff', dotPercent: 0.04, duration: 5, description: '毎ターン、だんだん強くなるダメージ。' }),
-  confuse: meta({ id: 'confuse', jp: 'こんらん', kind: 'debuff', selfHitChance: 0.33, duration: 2, description: 'ときどき自分を攻撃してしまう。' }),
+  // ── ポケモン定番6つ ──
+  burn: meta({ id: 'burn', jp: 'やけど', kind: 'debuff', dotPercent: 1 / 16, atkMult: 0.7, duration: 4, description: '毎ターン ダメージ。こうげきが 3わり さがる。' }),
+  paralysis: meta({ id: 'paralysis', jp: 'まひ', kind: 'debuff', skipChance: 0.3, spdMult: 0.5, duration: 4, description: '30% で 動けない。すばやさが 半分に なる。' }),
+  freeze: meta({ id: 'freeze', jp: 'こおり', kind: 'debuff', fullSkip: true, wakeChance: 0.28, duration: 3, description: '動けない。毎ターン とけることがある。ほのお技で すぐ とける。' }),
+  sleep: meta({ id: 'sleep', jp: 'ねむり', kind: 'debuff', fullSkip: true, wakeOnHit: 0.55, duration: 2, description: '2ターンくらい 動けない。攻撃されると 目をさますことがある。' }),
+  poison: meta({ id: 'poison', jp: 'どく', kind: 'debuff', dotPercent: 1 / 12, duration: 5, description: '毎ターン 最大HPの 8分の1くらい ダメージ。' }),
+  confuse: meta({ id: 'confuse', jp: 'こんらん', kind: 'debuff', selfHitChance: 0.33, duration: 3, description: 'ときどき 自分を 攻撃してしまう。' }),
   atkUp: meta({ id: 'atkUp', jp: 'こうげき↑', kind: 'buff', buffStat: 'atk', buffMult: 1.3, duration: 2, description: 'こうげきが 3わり上がる。' }),
   // ぼうぎょ↑↓ は「受けるダメージの倍率」で分かりやすく（stat には触らない）。
   defUp: meta({ id: 'defUp', jp: 'ぼうぎょ↑', kind: 'buff', incomingMult: 0.75, duration: 3, description: '受けるダメージが 25% へる（3ターン）。' }),
@@ -68,14 +74,14 @@ export interface ActiveStatus {
 /** 属性 → その属性の攻撃わざが与える状態異常。 */
 export const ATTRIBUTE_STATUS: Record<Attribute, StatusKind> = {
   fire: 'burn',
-  bolt: 'shock',
-  water: 'wet',
-  wood: 'bind',
-  dark: 'curse',
+  bolt: 'paralysis',
+  water: 'freeze',
+  wood: 'poison',
+  dark: 'confuse',
 };
 
 export const DEBUFFS: StatusKind[] = [
-  'burn', 'shock', 'wet', 'bind', 'curse', 'poison', 'confuse',
+  'burn', 'paralysis', 'freeze', 'sleep', 'poison', 'confuse',
   'atkDown', 'defDown', 'spdDown', 'flinch',
 ];
 

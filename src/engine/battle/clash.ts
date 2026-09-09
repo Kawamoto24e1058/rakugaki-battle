@@ -51,16 +51,9 @@ export const STANCE_BEATS: Record<TriStance, TriStance> = {
   tech: 'speed',
 };
 
-const SUDDEN_DEATH_TURN = 12;
+const SUDDEN_DEATH_TURN = 14;
 // クラッシュ勝ち＝相手は行動できない（発動不可）。勝者側の上乗せは控えめに。
-const CLASH_WIN_MULT = 1.15;
-const CLASH_LOSE_MULT = 0.62; // 現在は未使用（負け＝行動なし）。五分・こせい経路の保険で残す。
-/** 速さで力を「中断」したときの、力側のさらなる減衰（振りかぶりを潰す）。 */
-const INTERRUPT_MULT = 0.82;
-/** 力で技を「ぶち抜いた」ときの、技側の状態異常成功率の低下。 */
-const OVERPOWER_STATUS_MULT = 0.5;
-/** 技で速さを「見切った」ときのカウンターの基礎ダメージ（防御無視・回避不可）。 */
-const COUNTER_BASE = 8;
+const CLASH_WIN_MULT = 1.25;
 const PER_HIT_CAP_PCT = 0.42;
 
 // ---------- わざのカテゴリ分け（力／技／速さ）----------
@@ -69,7 +62,7 @@ const PER_HIT_CAP_PCT = 0.42;
 /** どのキャラも各カテゴリに1つは持てるよう保証する基本技。 */
 const BASIC: Record<TriStance, MoveDef> = {
   power: { id: 'basic_power', name: 'たいあたり', category: 'attack', attribute: null, power: 15, cooldown: 0, target: 'enemy', unlock: [], desc: '' },
-  speed: { id: 'basic_speed', name: 'はやわざ', category: 'attack', attribute: null, power: 9, cooldown: 0, target: 'enemy', unlock: [], desc: '', first: true },
+  speed: { id: 'basic_speed', name: 'はやわざ', category: 'attack', attribute: null, power: 12, cooldown: 0, target: 'enemy', unlock: [], desc: '', first: true },
   tech: { id: 'basic_tech', name: 'けんせい', category: 'attack', attribute: null, power: 8, cooldown: 0, target: 'enemy', unlock: [], desc: '', status: { kind: 'flinch', chance: 0.3 } },
 };
 
@@ -94,7 +87,7 @@ export type ClashEvent =
   | { t: 'turn'; turn: number }
   | { t: 'reveal'; stances: [ClashStance, ClashStance] }
   | { t: 'clash'; winner: Side | null; note: string }
-  | { t: 'act'; side: Side; stance: ClashStance; moveName: string }
+  | { t: 'act'; side: Side; stance: ClashStance; moveName: string; support?: boolean }
   | { t: 'damage'; side: Side; amount: number; hpAfter: number; tag: string | null }
   | { t: 'heal'; side: Side; amount: number; hpAfter: number }
   | { t: 'status-apply'; side: Side; kind: StatusKind }
@@ -162,7 +155,7 @@ export function effStat(c: ClashCombatant, stat: keyof Stats): number {
     if (m.buffStat === stat && m.buffMult) v *= m.buffMult;
   }
   if (stat === 'atk' && has(c, 'burn')) v *= STATUS_META.burn.atkMult;
-  if (stat === 'spd' && has(c, 'bind')) v *= STATUS_META.bind.spdMult;
+  if (stat === 'spd' && has(c, 'paralysis')) v *= STATUS_META.paralysis.spdMult;
   return Math.max(1, v);
 }
 
@@ -282,12 +275,15 @@ export function resolveClashTurn(
     if (next.winner !== null) break;
     const foe = eff[(1 - side) as Side];
     const res = clashResult(eff[side], foe);
-    if (res === 'lose') {
-      // 三すくみに負けた側は 発動できない（見切られた）。カウンター等は勝者側の act で処理。
+    // 三すくみに負けた側は「見切られて」発動できない。
+    // ただし 勝った側が 補助わざ のときは中断できない（相手はふつうに行動する）。
+    const winnerMove = chosenMoves[(1 - side) as Side];
+    const interrupted = res === 'lose' && !!winnerMove && winnerMove.category === 'attack';
+    if (interrupted) {
       log.push({ t: 'act', side, stance: eff[side], moveName: '（見切られて うごけない）' });
       continue;
     }
-    act(next, side, eff[side], chosenMoves[side], foe, res, rng, log);
+    act(next, side, eff[side], chosenMoves[side], foe, res === 'lose' ? 'even' : res, rng, log);
     checkFaint(next);
   }
 
@@ -333,8 +329,8 @@ export function resolveClashTurn(
     const p1 = next.combatants[1].hp / next.combatants[1].maxHp;
     const leader: Side = p0 === p1 ? (rng() < 0.5 ? 0 : 1) : p0 > p1 ? 0 : 1;
     const trailer = (1 - leader) as Side;
-    const chipLeader = Math.ceil(step * 16);
-    const chipTrailer = Math.ceil(step * 7);
+    const chipLeader = Math.ceil(step * 11);
+    const chipTrailer = Math.ceil(step * 4);
     log.push({ t: 'sudden-death', leader, chipLeader, chipTrailer });
     next.combatants[leader].hp = Math.max(0, next.combatants[leader].hp - chipLeader);
     checkFaint(next);
@@ -404,11 +400,29 @@ function act(
 ): void {
   const c = state.combatants[side];
 
-  // しびれ／こんらん
-  if (has(c, 'shock') && rng() < STATUS_META.shock.skipChance) {
-    log.push({ t: 'act', side, stance, moveName: '（しびれてうごけない）' });
+  // こおり：とけるか？（とけなければ行動不能）
+  const frozen = c.statuses.find((s) => s.kind === 'freeze');
+  if (frozen) {
+    if (rng() < (STATUS_META.freeze.wakeChance ?? 0.25)) {
+      c.statuses = c.statuses.filter((s) => s.kind !== 'freeze');
+      log.push({ t: 'status-end', side, kind: 'freeze' });
+    } else {
+      log.push({ t: 'act', side, stance, moveName: '（こおって うごけない）' });
+      return;
+    }
+  }
+  // ねむり：起きるか？（duration が尽きたら起きる。それまでは行動不能）
+  const asleep = c.statuses.find((s) => s.kind === 'sleep');
+  if (asleep) {
+    log.push({ t: 'act', side, stance, moveName: '（ぐうぐう ねむっている）' });
     return;
   }
+  // まひ：ときどき動けない
+  if (has(c, 'paralysis') && rng() < STATUS_META.paralysis.skipChance) {
+    log.push({ t: 'act', side, stance, moveName: '（まひして うごけない）' });
+    return;
+  }
+  // こんらん：ときどき自分を攻撃
   if (has(c, 'confuse') && rng() < STATUS_META.confuse.selfHitChance) {
     const dmg = Math.max(2, Math.round(c.maxHp * 0.06));
     c.hp = Math.max(0, c.hp - dmg);
@@ -423,31 +437,20 @@ function act(
   }
 
   const move = chosenMove ?? pickMove(c, stance);
-  // 通常わざにクールダウンなし（回数制限は こせい だけ）。
-  log.push({ t: 'act', side, stance, moveName: move.name });
+  const isSupport = move.category === 'support';
+  log.push({ t: 'act', side, stance, moveName: move.name, support: isSupport });
 
-  // 技で速さを「見切った」→ 補助わざでも当たるカウンター（防御無視・回避不可）
-  if (stance === 'tech' && result === 'win' && foeStance === 'speed') {
-    const foe = state.combatants[(1 - side) as Side];
-    const dmg = Math.max(1, Math.round(COUNTER_BASE + effStat(c, 'heart') / 3));
-    foe.hp = Math.max(0, foe.hp - dmg);
-    log.push({ t: 'damage', side: (1 - side) as Side, amount: dmg, hpAfter: foe.hp, tag: 'カウンター' });
-  }
-
-  if (move.category === 'support') {
+  if (isSupport) {
     applySupport(state, side, move, log);
     return;
   }
 
-  let clashMult = result === 'win' ? CLASH_WIN_MULT : result === 'lose' ? CLASH_LOSE_MULT : 1;
-  // 力が「速さ」に中断されたら、振りかぶりを潰されてさらに弱くなる
-  if (stance === 'power' && foeStance === 'speed') clashMult *= INTERRUPT_MULT;
-  // 力 vs 技 は「ぶち抜く」だけで、殴り合いの大差はつけない（読み外し1回で試合が終わらないよう）
+  // 勝ち＝相手は行動できないので上乗せは控えめ。五分は等倍。
+  let clashMult = result === 'win' ? CLASH_WIN_MULT : 1;
+  // 力 vs 技 は「ぶち抜く」だけで殴り合いの大差はつけない
   if (stance === 'power' && result === 'win' && foeStance === 'tech') clashMult = 1.05;
-  // 技が「力」にぶち抜かれたら、状態異常が入りにくくなる。技が勝てば逆に入りやすい。
-  let statusMult = 1;
-  if (stance === 'tech' && result === 'lose' && foeStance === 'power') statusMult = OVERPOWER_STATUS_MULT;
-  else if (stance === 'tech' && result === 'win') statusMult = 1.35;
+  // 技が勝てば 状態異常が入りやすい
+  const statusMult = stance === 'tech' && result === 'win' ? 1.35 : 1;
   dealDamage(state, side, move, { clashMult, statusMult }, rng, log);
 }
 
@@ -593,7 +596,10 @@ function dealDamage(
   const critChance = Math.max(0.04, Math.min(0.34, 0.06 + luck / 130));
   // 大振りな技（riskShift）は「かすり」になりやすい＝強い一撃のリスク。
   const grazeChance = 0.12 + (move.riskShift ?? 0) / 90;
-  if (roll < grazeChance) {
+  // ひるみ：次の攻撃が かすり になる（1回で消える）
+  const flinched = has(actor, 'flinch');
+  if (flinched) actor.statuses = actor.statuses.filter((s) => s.kind !== 'flinch');
+  if (flinched || roll < grazeChance) {
     kimeMult = 0.55;
     if (!tag) tag = 'かすった';
   } else if (roll > 1 - critChance) {
@@ -604,7 +610,8 @@ function dealDamage(
   const atkTerm = 0.95 + effStat(actor, 'atk') / 46;
   let dmg = move.power * opts.clashMult * kimeMult * atkTerm;
 
-  if (hasAttr && move.attribute === 'bolt' && has(target, 'wet')) dmg *= 1.6;
+  // こおった相手に ほのお技 → 大ダメージ（このあと とかす）
+  if (hasAttr && move.attribute === 'fire' && has(target, 'freeze')) dmg *= 1.5;
 
   if (!move.pierce) dmg *= 40 / (40 + effStat(target, 'def'));
   // 状態異常による被ダメ倍率（のろい＋・ガード−・ぼうぎょ↑↓ …）。ガードは貫通でも効く。
@@ -670,10 +677,18 @@ function dealDamage(
     if (rng() < chance && applyStatus(victim, s.kind)) log.push({ t: 'status-apply', side: vside, kind: s.kind });
     else log.push({ t: 'status-resist', side: vside, kind: s.kind });
   }
-  // ぬれ×雷：ぬれを消してしびれ
-  if (hasAttr && move.attribute === 'bolt' && has(target, 'wet') && final > 0) {
-    target.statuses = target.statuses.filter((s) => s.kind !== 'wet');
-    if (applyStatus(target, 'shock')) log.push({ t: 'status-apply', side: (1 - side) as Side, kind: 'shock' });
+
+  if (final > 0) {
+    // ほのお技で こおり が とける
+    if (hasAttr && move.attribute === 'fire' && has(target, 'freeze')) {
+      target.statuses = target.statuses.filter((s) => s.kind !== 'freeze');
+      log.push({ t: 'status-end', side: (1 - side) as Side, kind: 'freeze' });
+    }
+    // ダメージを受けて ねむり から 目をさます
+    if (has(target, 'sleep') && rng() < (STATUS_META.sleep.wakeOnHit ?? 0.5)) {
+      target.statuses = target.statuses.filter((s) => s.kind !== 'sleep');
+      log.push({ t: 'status-end', side: (1 - side) as Side, kind: 'sleep' });
+    }
   }
 }
 
@@ -688,14 +703,10 @@ function applyStatus(c: ClashCombatant, kind: StatusKind, durationOverride?: num
 
 function tickStatuses(state: ClashState, side: Side, log: ClashEvent[]): void {
   const c = state.combatants[side];
-  const bind = has(c, 'bind');
   for (const s of [...c.statuses]) {
-    const meta = STATUS_META[s.kind];
-    let dot = meta.dotPercent;
-    if (s.kind === 'poison') dot = 0.03 + s.age * 0.02;
+    const dot = STATUS_META[s.kind].dotPercent;
     if (dot > 0) {
-      let dmg = Math.max(1, Math.round(c.maxHp * dot));
-      if (s.kind === 'burn' && bind) dmg = Math.round(dmg * 1.4);
+      const dmg = Math.max(1, Math.round(c.maxHp * dot));
       c.hp = Math.max(0, c.hp - dmg);
       log.push({ t: 'status-tick', side, kind: s.kind, amount: dmg, hpAfter: c.hp });
       if (c.hp <= 0) break;
