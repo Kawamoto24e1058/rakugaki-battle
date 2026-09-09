@@ -95,7 +95,7 @@ export const MOVES: Record<MoveId, MoveDef> = Object.fromEntries(
       atk('c_tackle', 'たいあたり', 20, ['common'], '威力ふつう。クセのない体当たり。', {}),
       atk('c_bite', 'かみつき', 30, ['common'], '威力大。', { }),
       sup('c_guard', 'ガード', 0, ['common'], '2ターン、受けるダメージが 半分に なる。', { guardPct: 55 }),
-      sup('c_focus', 'きあいだめ', 0, ['common'], 'こうげきアップ（2ターン）＋ひっさつゲージ。', { buff: { stat: 'atk', turns: 2 }, gauge: 22 }),
+      sup('c_focus', 'きあいだめ', 0, ['common'], '3ターン、こうげきが 3わり上がる。', { buff: { stat: 'atk', turns: 3 } }),
       atk('c_gamble', 'ギャンブルアタック', 35, ['common'], '威力特大。外れ・かすりが多い。', { riskShift: 16 }),
 
       // ===== 属性ライン（3段階・進化で上がる） =====
@@ -199,7 +199,7 @@ export const MOVES: Record<MoveId, MoveDef> = Object.fromEntries(
 
       // ===== 持ち物：杖 =====
       atk('wd_bolt', 'まほうだん', 22, ['weapon:wand'], '威力ふつう。ぼうぎょ無視の魔法弾。', { pierce: true }),
-      sup('wd_charge', 'チャージ', 0, ['weapon:wand'], 'こうげきアップ（2ターン）＋ひっさつゲージ大。', { buff: { stat: 'atk', turns: 2 }, gauge: 28 }),
+      sup('wd_charge', 'チャージ', 0, ['weapon:wand'], '3ターン、こうげきが 3わり上がる。', { buff: { stat: 'atk', turns: 3 } }),
       atk('wd_mega', 'メガチャージ', 35, ['weapon:wand'], '威力特大。ぼうぎょ無視。当てにくい。', { pierce: true, riskShift: 6 }),
 
       // ===== 持ち物：盾 =====
