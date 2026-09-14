@@ -5,6 +5,7 @@ export * from './rng';
 export * from './analyze';
 export * from './moves';
 export * from './personalities';
+export * from './scan';
 export {
   createClashState,
   resolveClashTurn,

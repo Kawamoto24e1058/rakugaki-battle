@@ -1,5 +1,6 @@
 import { useGame } from './store/gameStore';
 import { TitleScene } from './scenes/TitleScene';
+import { PrintTemplateScene } from './scenes/PrintTemplateScene';
 import { CaptureScene } from './scenes/CaptureScene';
 import { RevealScene } from './scenes/RevealScene';
 import { LoadoutScene } from './scenes/LoadoutScene';
@@ -14,6 +15,8 @@ export default function App() {
   switch (screen) {
     case 'title':
       return <TitleScene />;
+    case 'print':
+      return <PrintTemplateScene />;
     case 'capture':
       return <CaptureScene />;
     case 'reveal':

@@ -12,6 +12,7 @@ import {
 import { hashBytes } from '../engine/rng';
 import type { Attribute, Weapon } from '../engine/types';
 import { ATTRIBUTE_META } from '../engine/attributes';
+import { scanDrawing } from '../engine/scan';
 
 /** 画像を最大 640px の JPEG に。ImageData（フォールバック解析＋シード用）と base64 を返す。 */
 function prepareImage(img: HTMLImageElement): { imageData: ImageData; base64: string; mediaType: string } {
@@ -61,7 +62,43 @@ async function analyzeWithAI(
   return { result: analyzeImageData(imageData, overrides), via: 'local' };
 }
 
-type Stage = 'camera' | 'preview';
+type Stage = 'camera' | 'scanning' | 'preview';
+
+function loadImageEl(url: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('画像を よみこめませんでした'));
+    img.src = url;
+  });
+}
+
+/** 撮影/選択した画像から したがき用紙を検出 → 傾き補正＋背景を透明化した PNG を作る。 */
+async function scanCapturedImage(rawUrl: string): Promise<{ url: string; cornersFound: boolean }> {
+  const img = await loadImageEl(rawUrl);
+  const srcW = img.naturalWidth || img.width;
+  const srcH = img.naturalHeight || img.height;
+  const maxDim = 1000;
+  const scale = Math.min(1, maxDim / Math.max(srcW, srcH));
+  const w = Math.max(1, Math.round(srcW * scale));
+  const h = Math.max(1, Math.round(srcH * scale));
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
+  ctx.drawImage(img, 0, 0, w, h);
+  const imageData = ctx.getImageData(0, 0, w, h);
+  const { output, cornersFound } = scanDrawing(imageData, { outSize: 640 });
+  // scanDrawing は Node(Vitest)でも動くよう { data, width, height } を返すだけ。
+  // 本物の ImageData に包み直さないと putImageData に弾かれる。
+  const realImageData = new ImageData(output.data, output.width, output.height);
+  const outCanvas = document.createElement('canvas');
+  outCanvas.width = output.width;
+  outCanvas.height = output.height;
+  outCanvas.getContext('2d')!.putImageData(realImageData, 0, 0);
+  return { url: outCanvas.toDataURL('image/png'), cornersFound };
+}
 
 const WEAPON_LABEL: Record<Weapon, string> = {
   sword: 'つるぎ/ツメ',
@@ -79,6 +116,7 @@ export function CaptureScene() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [stage, setStage] = useState<Stage>('camera');
   const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [cornersFound, setCornersFound] = useState<boolean | null>(null);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [attr, setAttr] = useState<Attribute | 'auto'>('auto');
   const [weapon, setWeapon] = useState<Weapon | 'auto'>('auto');
@@ -110,28 +148,43 @@ export function CaptureScene() {
     };
   }, [stage]);
 
+  async function runScan(rawUrl: string) {
+    setStage('scanning');
+    try {
+      // 1フレーム待って「よみとりちゅう」表示を先に出す
+      await new Promise((r) => setTimeout(r, 30));
+      const { url, cornersFound: found } = await scanCapturedImage(rawUrl);
+      setImageUrl(url);
+      setCornersFound(found);
+      setStage('preview');
+    } catch {
+      // スキャン失敗時は元の写真をそのまま使う
+      setImageUrl(rawUrl);
+      setCornersFound(false);
+      setStage('preview');
+    }
+  }
+
   function grabFromVideo() {
     const video = videoRef.current;
     if (!video || !video.videoWidth) return;
-    // ガイド枠（中央の正方形 78%）だけを切り出す
-    const side = Math.min(video.videoWidth, video.videoHeight) * 0.78;
+    // ガイド枠（中央の正方形 90%）だけを切り出す。用紙の四隅マーカーまで入るよう広め。
+    const side = Math.min(video.videoWidth, video.videoHeight) * 0.9;
     const sx = (video.videoWidth - side) / 2;
     const sy = (video.videoHeight - side) / 2;
     const canvas = document.createElement('canvas');
-    canvas.width = 900;
-    canvas.height = 900;
+    canvas.width = 1000;
+    canvas.height = 1000;
     const ctx = canvas.getContext('2d')!;
-    ctx.drawImage(video, sx, sy, side, side, 0, 0, 900, 900);
-    setImageUrl(canvas.toDataURL('image/png'));
-    setStage('preview');
+    ctx.drawImage(video, sx, sy, side, side, 0, 0, 1000, 1000);
+    void runScan(canvas.toDataURL('image/png'));
   }
 
   function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
     const url = URL.createObjectURL(file);
-    setImageUrl(url);
-    setStage('preview');
+    void runScan(url);
   }
 
   async function confirm() {
@@ -185,13 +238,16 @@ export function CaptureScene() {
             <div
               style={{
                 position: 'absolute',
-                inset: '11%',
+                inset: '6%',
                 border: '4px dashed var(--crayon-red)',
                 borderRadius: 12,
                 pointerEvents: 'none',
               }}
             />
           </div>
+          <p style={{ fontSize: '0.8rem', color: 'var(--ink-soft)', textAlign: 'center', maxWidth: '24rem' }}>
+            したがきようし（四隅に ■ マーカー）を つかうと、かたむき補正＋きりぬきが きれいに できるよ
+          </p>
           <div style={{ display: 'flex', gap: '0.8rem', flexWrap: 'wrap', justifyContent: 'center' }}>
             <button className="crayon-btn primary big" onClick={grabFromVideo} disabled={!!cameraError}>
               📸 さつえい
@@ -204,14 +260,41 @@ export function CaptureScene() {
         </>
       )}
 
+      {stage === 'scanning' && (
+        <div style={{ display: 'grid', placeItems: 'center', gap: '0.8rem', minHeight: '16rem' }}>
+          <motion.div
+            animate={{ rotate: 360 }}
+            transition={{ repeat: Infinity, duration: 1.1, ease: 'linear' }}
+            style={{ fontSize: '2.4rem' }}
+          >
+            🔍
+          </motion.div>
+          <p style={{ fontSize: '1rem', color: 'var(--ink-soft)' }}>よう紙を よみとっているよ…</p>
+        </div>
+      )}
+
       {stage === 'preview' && imageUrl && (
         <>
           <div
             className="sketch-card"
-            style={{ width: 'min(24rem, 80vw)', aspectRatio: '1', overflow: 'hidden', padding: 8, background: '#fff' }}
+            style={{
+              width: 'min(24rem, 80vw)',
+              aspectRatio: '1',
+              overflow: 'hidden',
+              padding: 8,
+              background:
+                'repeating-conic-gradient(#eee 0% 25%, #fff 0% 50%) 50% / 16px 16px',
+            }}
           >
             <img src={imageUrl} alt="とりこんだ え" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
           </div>
+          {cornersFound !== null && (
+            <p style={{ fontSize: '0.82rem', color: cornersFound ? 'var(--crayon-green)' : 'var(--ink-soft)' }}>
+              {cornersFound
+                ? '✅ よう紙の マーカーを みつけたよ！ まっすぐ・きりぬき ずみ'
+                : 'ℹ️ マーカーが 見つからなかったので、そのまま きりぬいたよ'}
+            </p>
+          )}
 
           <fieldset className="sketch-card" style={{ border: '2px solid var(--border)', width: 'min(28rem, 92vw)', padding: '0.8rem 1rem' }}>
             <legend style={{ fontFamily: 'var(--font-display)', padding: '0 0.5rem' }}>ようし の チェックらん（なくてもOK）</legend>
@@ -236,7 +319,14 @@ export function CaptureScene() {
           </fieldset>
 
           <div style={{ display: 'flex', gap: '0.8rem', flexWrap: 'wrap', justifyContent: 'center' }}>
-            <button className="crayon-btn" onClick={() => setStage('camera')} disabled={busy}>
+            <button
+              className="crayon-btn"
+              onClick={() => {
+                setCornersFound(null);
+                setStage('camera');
+              }}
+              disabled={busy}
+            >
               とりなおす
             </button>
             <button className="crayon-btn primary big" onClick={confirm} disabled={busy}>

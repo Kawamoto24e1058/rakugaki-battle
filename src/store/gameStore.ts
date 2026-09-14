@@ -6,6 +6,7 @@ import { loadZukan, saveZukan } from './zukan';
 
 export type Screen =
   | 'title'
+  | 'print'
   | 'capture'
   | 'reveal'
   | 'loadout'
@@ -48,6 +49,7 @@ interface GameState {
   startSolo: () => void;
   startVersus: () => void;
   openZukan: () => void;
+  openPrintTemplate: () => void;
   devQuickBattle: (mode: Mode) => void;
   setCaptured: (slot: CapturedSlot) => void;
   /** リビール画面で名前を手直しする。 */
@@ -90,6 +92,7 @@ export const useGame = create<GameState>((set, get) => ({
     set({ mode: 'versus', screen: 'capture', player: null, pendingChallenger: null, runWins: 0, runBattles: 0 }),
 
   openZukan: () => set({ screen: 'zukan', zukan: loadZukan() }),
+  openPrintTemplate: () => set({ screen: 'print' }),
 
   devQuickBattle: (mode) => {
     const roster = get().cpuRoster;
