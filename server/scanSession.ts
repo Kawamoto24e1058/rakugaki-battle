@@ -29,10 +29,10 @@ function randomCode(): string {
   return s;
 }
 
-const redis: Redis | null =
-  process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
-    ? new Redis({ url: process.env.UPSTASH_REDIS_REST_URL, token: process.env.UPSTASH_REDIS_REST_TOKEN })
-    : null;
+// コピペ時の末尾改行/空白が紛れ込んでも大丈夫なよう trim しておく。
+const upstashUrl = process.env.UPSTASH_REDIS_REST_URL?.trim();
+const upstashToken = process.env.UPSTASH_REDIS_REST_TOKEN?.trim();
+const redis: Redis | null = upstashUrl && upstashToken ? new Redis({ url: upstashUrl, token: upstashToken }) : null;
 
 // --- ローカル開発用フォールバック（プロセス内メモリ） ---
 const MEMORY = new Map<string, ScanSession>();

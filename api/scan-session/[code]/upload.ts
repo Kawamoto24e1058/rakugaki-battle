@@ -9,6 +9,10 @@ export default async function handler(req: VercelReq, res: VercelRes): Promise<v
   const raw = req.query.code;
   const code = String(Array.isArray(raw) ? raw[0] : (raw ?? '')).toUpperCase();
   const body = (req.body ?? {}) as { imageDataUrl?: unknown; cornersFound?: unknown };
-  const ok = typeof body.imageDataUrl === 'string' && (await uploadToSession(code, body.imageDataUrl, !!body.cornersFound));
-  res.status(ok ? 200 : 404).json({ ok });
+  try {
+    const ok = typeof body.imageDataUrl === 'string' && (await uploadToSession(code, body.imageDataUrl, !!body.cornersFound));
+    res.status(ok ? 200 : 404).json({ ok });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e instanceof Error ? e.message : String(e) });
+  }
 }
