@@ -31,6 +31,35 @@ npx vitest       # エンジンのテスト（解析・バトル・AI変換・�
 - `GROQ_API_KEY=mock`（または `RAKUGAKI_AI_MOCK=1`）で、画像を見ずに擬似特徴を返す（通しの動作確認用）
 - モデルは `RAKUGAKI_AI_MODEL`（省略時 Groq=llama-4-scout / Gemini=gemini-2.5-flash）
 
+### スマホ読み取り（QR連携）
+
+展示PCにカメラが無い場合の撮影手段。読み取り画面の「📱 スマホで よみとる」→ QR表示 →
+来場者のスマホで開く → スマホのカメラで撮影・その場でスキャン（傾き補正＋背景透明化）
+→ 「PCに おくる」→ PC側が自動検知してプレビューへ進む。PC直接のカメラ/ファイル選択は
+保険として残っている。
+
+- スマホとPCは**同一Wi-Fi（LAN）が必須**。QRはPCの `window.location.origin` を埋め込むので、
+  `localhost` ではなく PC の LAN IP（`npm run dev` 起動時に表示される、または Vercel の公開URL）で
+  開くこと
+- セッションの受け渡しは `/api/scan-session*`。ローカルはプロセス内メモリ、Vercel等の
+  サーバーレスは Upstash Redis（要 `UPSTASH_REDIS_REST_URL`/`UPSTASH_REDIS_REST_TOKEN`。無ければ
+  QR発行自体が失敗する）
+
+## デプロイ（Vercel）
+
+`npm run dev`/`npm run preview` はNodeプロセスが常駐するので `vite.config.ts` の
+ミドルウェアで `/api/*` がそのまま動くが、**Vercel は静的ホスティング＋Serverless Functions**
+なので同じコードは動かない。`api/` 以下に薄いアダプタを置いてあり（`server/` の実処理を
+そのまま呼ぶだけ）、Vercelはこれを自動でFunctions化する：
+
+- `api/analyze.ts` … AI解析（`GROQ_API_KEY` を Vercel の Environment Variables に設定。
+  `.env.local` はデプロイに含まれないので別途設定が必要）
+- `api/scan-session/*.ts` … スマホ読み取りのセッション受け渡し（`UPSTASH_REDIS_REST_URL`/
+  `UPSTASH_REDIS_REST_TOKEN` が無いと動かない。Serverless Functionsは呼び出しごとに別インスタンス
+  になりうるためプロセス内メモリでは共有できない）
+
+vercel.json 等は不要（Viteプロジェクトとしてゼロコンフィグで検出される）。
+
 ## 構成
 
 ```

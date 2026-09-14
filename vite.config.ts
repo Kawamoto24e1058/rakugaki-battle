@@ -57,7 +57,7 @@ function scanSessionPlugin(): Plugin {
     res.setHeader('content-type', 'application/json')
     try {
       if (req.method === 'POST' && url === '/api/scan-session') {
-        const { code } = createSession()
+        const { code } = await createSession()
         res.statusCode = 200
         res.end(JSON.stringify({ ok: true, code }))
         return
@@ -71,13 +71,13 @@ function scanSessionPlugin(): Plugin {
           const body = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}')
           const ok =
             typeof body.imageDataUrl === 'string' &&
-            uploadToSession(code, body.imageDataUrl, !!body.cornersFound)
+            (await uploadToSession(code, body.imageDataUrl, !!body.cornersFound))
           res.statusCode = ok ? 200 : 404
           res.end(JSON.stringify({ ok }))
           return
         }
         if (!m[2] && req.method === 'GET') {
-          const s = getSession(code)
+          const s = await getSession(code)
           if (!s) {
             res.statusCode = 404
             res.end(JSON.stringify({ ok: false }))
@@ -95,7 +95,7 @@ function scanSessionPlugin(): Plugin {
           return
         }
         if (!m[2] && req.method === 'DELETE') {
-          clearSession(code)
+          await clearSession(code)
           res.statusCode = 200
           res.end(JSON.stringify({ ok: true }))
           return
