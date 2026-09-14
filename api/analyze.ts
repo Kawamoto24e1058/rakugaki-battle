@@ -1,5 +1,5 @@
-import type { VercelReq, VercelRes } from './_types.ts';
-import { analyzeImage, type AnalyzeRequest } from '../server/analyzeHandler.ts';
+import type { VercelReq, VercelRes } from './_types.js';
+import { analyzeImage, type AnalyzeRequest } from '../server/analyzeHandler.js';
 
 export default async function handler(req: VercelReq, res: VercelRes): Promise<void> {
   if (req.method !== 'POST') {

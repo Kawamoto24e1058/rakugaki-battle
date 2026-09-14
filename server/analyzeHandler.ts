@@ -13,7 +13,7 @@ import {
   AI_JSON_INSTRUCTION,
   GEMINI_RESPONSE_SCHEMA,
   looksLikeAiFeatures,
-} from './aiContract.ts';
+} from './aiContract.js';
 
 export interface AnalyzeRequest {
   imageBase64: string;

@@ -3,8 +3,8 @@ import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vitest/config'
 import { loadEnv, type Connect, type Plugin } from 'vite'
 import { VitePWA } from 'vite-plugin-pwa'
-import { analyzeImage } from './server/analyzeHandler.ts'
-import { createSession, getSession, uploadToSession, clearSession } from './server/scanSession.ts'
+import { analyzeImage } from './server/analyzeHandler.js'
+import { createSession, getSession, uploadToSession, clearSession } from './server/scanSession.js'
 
 /** 画像 → AI Vision 解析の API を dev / preview サーバーに生やす小さなプラグイン。 */
 function aiAnalyzePlugin(): Plugin {

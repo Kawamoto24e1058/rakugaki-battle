@@ -1,5 +1,5 @@
-import type { VercelReq, VercelRes } from '../_types.ts';
-import { getSession, clearSession } from '../../server/scanSession.ts';
+import type { VercelReq, VercelRes } from '../_types.js';
+import { getSession, clearSession } from '../../server/scanSession.js';
 
 export default async function handler(req: VercelReq, res: VercelRes): Promise<void> {
   const raw = req.query.code;
