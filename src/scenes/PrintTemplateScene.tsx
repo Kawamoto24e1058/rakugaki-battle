@@ -24,6 +24,8 @@ export function PrintTemplateScene() {
           background: #fff;
           color: #222;
           font-family: var(--font-body), sans-serif;
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
         }
         @media screen {
           .print-sheet-wrap { zoom: 0.46; }
@@ -37,6 +39,16 @@ export function PrintTemplateScene() {
         この用紙をA4で いんさつして、わくの中に かいてもらうと、しゃしんを とったときに
         きれいに まっすぐ・きりぬきで とりこめるよ。
       </p>
+      <div
+        className="no-print sketch-card"
+        style={{ maxWidth: '26rem', padding: '0.6rem 1rem', fontSize: '0.82rem', color: 'var(--ink-soft)', textAlign: 'left' }}
+      >
+        いんさつ画面で ⚠️ この2つを かくにんしてね：
+        <br />
+        ・「背景のグラフィック」を ON（黒い四角が消えるのを ふせぐ）
+        <br />
+        ・「ヘッダーとフッター」を OFF（URLなどの よぶんな もじを けす）
+      </div>
       <div className="no-print" style={{ display: 'flex', gap: '0.8rem' }}>
         <button className="crayon-btn primary big" onClick={() => window.print()}>
           🖨️ いんさつする
@@ -78,17 +90,16 @@ export function PrintTemplateScene() {
             { left: '15mm', top: '200mm' }, // bottom-left
             { left: '175mm', top: '200mm' }, // bottom-right
           ].map((pos, i) => (
-            <div
+            // 「背景のグラフィック」OFFでも消えないよう、背景色ではなくSVGの塗りで描く
+            <svg
               key={i}
-              style={{
-                position: 'absolute',
-                left: `calc(${pos.left} - 6mm)`,
-                top: `calc(${pos.top} - 6mm)`,
-                width: '12mm',
-                height: '12mm',
-                background: '#000',
-              }}
-            />
+              width="12mm"
+              height="12mm"
+              viewBox="0 0 10 10"
+              style={{ position: 'absolute', left: `calc(${pos.left} - 6mm)`, top: `calc(${pos.top} - 6mm)` }}
+            >
+              <rect x="0" y="0" width="10" height="10" fill="#000" />
+            </svg>
           ))}
 
           <div style={{ position: 'absolute', left: 0, right: 0, top: '208mm', textAlign: 'center', fontSize: '3.6mm', color: '#999' }}>

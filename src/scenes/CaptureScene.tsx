@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
+import QRCode from 'qrcode';
 import { useGame } from '../store/gameStore';
 import {
   analyzeImageData,
@@ -12,7 +13,7 @@ import {
 import { hashBytes } from '../engine/rng';
 import type { Attribute, Weapon } from '../engine/types';
 import { ATTRIBUTE_META } from '../engine/attributes';
-import { scanDrawing } from '../engine/scan';
+import { scanCapturedImage } from '../capture/scanCapturedImage';
 
 /** 画像を最大 640px の JPEG に。ImageData（フォールバック解析＋シード用）と base64 を返す。 */
 function prepareImage(img: HTMLImageElement): { imageData: ImageData; base64: string; mediaType: string } {
@@ -64,42 +65,6 @@ async function analyzeWithAI(
 
 type Stage = 'camera' | 'scanning' | 'preview';
 
-function loadImageEl(url: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error('画像を よみこめませんでした'));
-    img.src = url;
-  });
-}
-
-/** 撮影/選択した画像から したがき用紙を検出 → 傾き補正＋背景を透明化した PNG を作る。 */
-async function scanCapturedImage(rawUrl: string): Promise<{ url: string; cornersFound: boolean }> {
-  const img = await loadImageEl(rawUrl);
-  const srcW = img.naturalWidth || img.width;
-  const srcH = img.naturalHeight || img.height;
-  const maxDim = 1000;
-  const scale = Math.min(1, maxDim / Math.max(srcW, srcH));
-  const w = Math.max(1, Math.round(srcW * scale));
-  const h = Math.max(1, Math.round(srcH * scale));
-  const canvas = document.createElement('canvas');
-  canvas.width = w;
-  canvas.height = h;
-  const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
-  ctx.drawImage(img, 0, 0, w, h);
-  const imageData = ctx.getImageData(0, 0, w, h);
-  const { output, cornersFound } = scanDrawing(imageData, { outSize: 640 });
-  // scanDrawing は Node(Vitest)でも動くよう { data, width, height } を返すだけ。
-  // 本物の ImageData に包み直さないと putImageData に弾かれる。
-  const realImageData = new ImageData(output.data, output.width, output.height);
-  const outCanvas = document.createElement('canvas');
-  outCanvas.width = output.width;
-  outCanvas.height = output.height;
-  outCanvas.getContext('2d')!.putImageData(realImageData, 0, 0);
-  return { url: outCanvas.toDataURL('image/png'), cornersFound };
-}
-
 const WEAPON_LABEL: Record<Weapon, string> = {
   sword: 'つるぎ/ツメ',
   wand: 'つえ',
@@ -122,7 +87,12 @@ export function CaptureScene() {
   const [weapon, setWeapon] = useState<Weapon | 'auto'>('auto');
   const [busy, setBusy] = useState(false);
 
+  const [phoneCode, setPhoneCode] = useState<string | null>(null);
+  const [qrUrl, setQrUrl] = useState<string | null>(null);
+  const [phoneError, setPhoneError] = useState<string | null>(null);
+
   const playerLabel = mode === 'versus' ? (pending ? 'ふたりめ' : 'ひとりめ') : 'あなた';
+  const isLocalhost = typeof window !== 'undefined' && /^(localhost|127\.0\.0\.1)$/.test(window.location.hostname);
 
   useEffect(() => {
     if (stage !== 'camera') return;
@@ -147,6 +117,59 @@ export function CaptureScene() {
       stream?.getTracks().forEach((t) => t.stop());
     };
   }, [stage]);
+
+  // スマホから届くのを待つ間、ポーリングする
+  useEffect(() => {
+    if (!phoneCode) return;
+    let cancelled = false;
+    const timer = setInterval(async () => {
+      try {
+        const resp = await fetch(`/api/scan-session/${phoneCode}`);
+        const j = (await resp.json()) as {
+          ok?: boolean;
+          status?: 'waiting' | 'ready';
+          imageDataUrl?: string;
+          cornersFound?: boolean;
+        };
+        if (cancelled) return;
+        if (j.ok && j.status === 'ready' && j.imageDataUrl) {
+          setImageUrl(j.imageDataUrl);
+          setCornersFound(!!j.cornersFound);
+          setStage('preview');
+          setPhoneCode(null);
+          setQrUrl(null);
+          void fetch(`/api/scan-session/${phoneCode}`, { method: 'DELETE' });
+        }
+      } catch {
+        // 通信エラーは無視して次のポーリングへ
+      }
+    }, 1500);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [phoneCode]);
+
+  async function startPhoneSession() {
+    setPhoneError(null);
+    try {
+      const resp = await fetch('/api/scan-session', { method: 'POST' });
+      const j = (await resp.json()) as { ok?: boolean; code?: string };
+      if (!j.ok || !j.code) throw new Error('セッションを つくれなかった');
+      const url = `${window.location.origin}/scan?session=${j.code}`;
+      const qr = await QRCode.toDataURL(url, { margin: 1, width: 280 });
+      setPhoneCode(j.code);
+      setQrUrl(qr);
+    } catch {
+      setPhoneError('QRを つくれなかったよ。もういちど ためしてね。');
+    }
+  }
+
+  function cancelPhoneSession() {
+    if (phoneCode) void fetch(`/api/scan-session/${phoneCode}`, { method: 'DELETE' });
+    setPhoneCode(null);
+    setQrUrl(null);
+  }
 
   async function runScan(rawUrl: string) {
     setStage('scanning');
@@ -217,11 +240,49 @@ export function CaptureScene() {
     <div className="scene">
       <h2 style={{ fontSize: '1.8rem' }}>{playerLabel}の えを とりこもう</h2>
 
-      {stage === 'camera' && (
+      {stage === 'camera' && phoneCode && qrUrl && (
         <>
+          <div className="sketch-card" style={{ width: 'min(20rem, 80vw)', padding: '1rem', textAlign: 'center' }}>
+            <img src={qrUrl} alt="QRコード" style={{ width: '100%', height: 'auto' }} />
+          </div>
+          <p style={{ fontSize: '0.95rem', textAlign: 'center' }}>
+            スマホの カメラで この QR を よみとってね
+            <br />
+            <span style={{ fontSize: '0.8rem', color: 'var(--ink-soft)' }}>コード：{phoneCode}</span>
+          </p>
+          <motion.p
+            animate={{ opacity: [1, 0.5, 1] }}
+            transition={{ repeat: Infinity, duration: 1.4 }}
+            style={{ fontSize: '0.9rem', color: 'var(--crayon-blue)' }}
+          >
+            スマホからの おくりものを まっているよ…
+          </motion.p>
+          {isLocalhost && (
+            <p style={{ fontSize: '0.78rem', color: 'var(--crayon-red)', textAlign: 'center', maxWidth: '24rem' }}>
+              ⚠️ 今 localhost で開いています。スマホから開くには、この PC の ローカルIPアドレスで
+              開きなおしてね（例：http://192.168.x.x:5273）
+            </p>
+          )}
+          <button className="crayon-btn" onClick={cancelPhoneSession}>
+            スマホを つかわず もどる
+          </button>
+        </>
+      )}
+
+      {stage === 'camera' && !phoneCode && (
+        <>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'center' }}>
+            <button className="crayon-btn primary big" onClick={startPhoneSession}>
+              📱 スマホで よみとる
+            </button>
+            {phoneError && <p style={{ fontSize: '0.8rem', color: 'var(--crayon-red)' }}>{phoneError}</p>}
+          </div>
+
+          <p style={{ fontSize: '0.8rem', color: 'var(--ink-soft)' }}>― または、この PC で ちょくせつ ―</p>
+
           <div
             className="sketch-card"
-            style={{ position: 'relative', width: 'min(30rem, 92vw)', aspectRatio: '1', overflow: 'hidden', padding: 0 }}
+            style={{ position: 'relative', width: 'min(24rem, 84vw)', aspectRatio: '1', overflow: 'hidden', padding: 0 }}
           >
             {!cameraError ? (
               <video
@@ -249,7 +310,7 @@ export function CaptureScene() {
             したがきようし（四隅に ■ マーカー）を つかうと、かたむき補正＋きりぬきが きれいに できるよ
           </p>
           <div style={{ display: 'flex', gap: '0.8rem', flexWrap: 'wrap', justifyContent: 'center' }}>
-            <button className="crayon-btn primary big" onClick={grabFromVideo} disabled={!!cameraError}>
+            <button className="crayon-btn" onClick={grabFromVideo} disabled={!!cameraError}>
               📸 さつえい
             </button>
             <label className="crayon-btn" style={{ display: 'inline-flex', alignItems: 'center' }}>
