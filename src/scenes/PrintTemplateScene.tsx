@@ -65,31 +65,46 @@ export function PrintTemplateScene() {
               ラクガキバトル したがきようし
             </div>
             <div style={{ fontSize: '4.2mm', marginTop: '2mm' }}>
-              ① くろい ■ に かこまれた なかに じゆうに かいてね
+              ① 4つの かどの めじるしの なかに じゆうに かいてね
               <br />
               ② くろい ■ の うえは かかないでね
             </div>
           </div>
 
           {/*
-            描画エリア（160mm四方、中央）の目印。実線の色つきわくにすると、
-            撮影後の切り抜き処理が「わく線のインク」と「子どもが際に描いた絵」を
-            区別できず、絵ごと切ってしまう事故が実写で起きた。うすいグレーの
-            点線なら紙にごく近い色なので、背景の透明化処理が（特別扱いしなくても）
-            自然に消してくれる＝際まで描いた絵を巻き込まない。
+            描画エリア（160mm四方、中央）の目印。以前は四辺ぜんぶに実線のわくを
+            引いていたが、撮影後の切り抜き処理が「わく線のインク」と「際に描いた
+            子どもの絵」を位置だけでは区別できず、絵ごと切ってしまう事故が実写で
+            起きた。かといって薄すぎる目印は子どもに見えにくい（ユーザー指摘）。
+            なので「辺には何も引かず、角だけに目立つ色のL字目印を置く」形に。
+            角だけなら切り抜き側も安全に処理でき（マーカーと同じく角の処理だけで
+            対応可）、辺の途中の絵を巻き込む心配が構造的に無くなる。
           */}
-          <div
-            style={{
-              position: 'absolute',
-              left: '15mm',
-              top: '40mm',
-              width: '160mm',
-              height: '160mm',
-              border: '0.6mm dashed #d8d8d8',
-              borderRadius: '3mm',
-              boxSizing: 'border-box',
-            }}
-          />
+          {(
+            [
+              { cx: 15, cy: 40, hEdge: 'top' as const, vEdge: 'left' as const },
+              { cx: 175, cy: 40, hEdge: 'top' as const, vEdge: 'right' as const },
+              { cx: 15, cy: 200, hEdge: 'bottom' as const, vEdge: 'left' as const },
+              { cx: 175, cy: 200, hEdge: 'bottom' as const, vEdge: 'right' as const },
+            ] as const
+          ).map((b, i) => {
+            const arm = 12; // mm
+            const svgLeft = b.vEdge === 'left' ? b.cx : b.cx - arm;
+            const svgTop = b.hEdge === 'top' ? b.cy : b.cy - arm;
+            const thFrac = 12; // 100分率での太さ
+            return (
+              <svg
+                key={i}
+                width={`${arm}mm`}
+                height={`${arm}mm`}
+                viewBox="0 0 100 100"
+                style={{ position: 'absolute', left: `${svgLeft}mm`, top: `${svgTop}mm` }}
+              >
+                <rect x={0} y={b.hEdge === 'top' ? 0 : 100 - thFrac} width={100} height={thFrac} fill="#e8b32a" />
+                <rect x={b.vEdge === 'left' ? 0 : 100 - thFrac} y={0} width={thFrac} height={100} fill="#e8b32a" />
+              </svg>
+            );
+          })}
           {[
             { left: '15mm', top: '40mm' }, // top-left
             { left: '175mm', top: '40mm' }, // top-right
