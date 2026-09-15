@@ -32,22 +32,20 @@ function resizeNearest(img: ImageData, size: number): ImageData {
 }
 
 /**
- * マーカー・枠線を画角の外へ追い出すための内側マージン（出力サイズに対する割合）。
- * マーカーは わく（160mm四方）の角に12mm角で半分だけかぶせてあるので、理論上は
- * 6/160 ≈ 3.75% 切り込めば わく線のインクは画角に入らない計算。ただし実写では
- * マーカー検出・台形補正が辺ごとに均等には揃わないため、大きめ（7%）に取って
- * いたが、その分 わくぎりぎりに描かれた絵まで一緒に切ってしまう事故が実写で
- * 発生した（絵が消えるより わく線が薄く残る方がまだマシ、という判断で縮小）。
- */
-const CROP_MARGIN_FRAC = 0.045;
-
-/**
  * 撮影した画像から「したがき用紙」を検出して:
  *  1. 四隅マーカーが見つかれば台形補正して まっすぐな正方形に
  *  2. 紙の背景を透明化
+ *  3. マーカーの黒インクが角にわずかに残ることがあるので、角だけ丸く消す
  * を行う。マーカーが見つからなくても背景透明化だけは行い、常に有効な画像を返す。
  * 影への強さ（局所的な明るさで判定する）は markers.ts / bgRemove.ts 側で
  * それぞれ担っている（実際の画素値はここでは一切書き換えない）。
+ *
+ * ★以前は わく線ごと確実に消すため、四辺全体をマーカーよりひとまわり内側に
+ * 切り込ませていた（CROP_MARGIN_FRAC）。しかしそれだと「わく線のインク」と
+ * 「わく際に描いた子どもの絵」を位置だけでは区別できず、絵ごと切ってしまう
+ * 事故が実写で起きた。わく線の印刷自体を廃止（したがき用紙は四隅マーカーの
+ * みに）したことで、対処すべきは各コーナーのマーカーの黒だけになったので、
+ * コーナー周辺だけを丸く消す方式に戻した＝辺の途中に描いた絵は一切削らない。
  */
 export function scanDrawing(img: ImageData, opts: { outSize?: number } = {}): ScanResult {
   const outSize = opts.outSize ?? 640;
@@ -56,17 +54,11 @@ export function scanDrawing(img: ImageData, opts: { outSize?: number } = {}): Sc
   let working: ImageData;
   let cornersFound = false;
   if (corners) {
-    // マーカーの中心＝印刷したわく線のちょうど角。実写では検出や補正が完璧には
-    // 揃わず、わく線やマーカーの黒がわずかに画角内へ残ることがある（色での
-    // 背景判定だけでは消せない＝印刷物のインクなので）。なので出力の四辺を
-    // マーカーの位置よりひとまわり内側に切り込ませ、わく線ごと画角の外に
-    // 追い出す（色に関係なく幾何学的に確実に除ける）。
-    const m = outSize * CROP_MARGIN_FRAC;
     const dst: [Point, Point, Point, Point] = [
-      { x: -m, y: -m },
-      { x: outSize + m, y: -m },
-      { x: -m, y: outSize + m },
-      { x: outSize + m, y: outSize + m },
+      { x: 0, y: 0 },
+      { x: outSize, y: 0 },
+      { x: 0, y: outSize },
+      { x: outSize, y: outSize },
     ];
     const src: [Point, Point, Point, Point] = [corners.tl, corners.tr, corners.bl, corners.br];
     const H = computeHomography(dst, src);
@@ -78,5 +70,34 @@ export function scanDrawing(img: ImageData, opts: { outSize?: number } = {}): Sc
 
   const paper = estimatePaperColor(working);
   const output = removeBackground(working, paper);
+  if (cornersFound) clearCornerSpecks(output);
   return { output, cornersFound };
+}
+
+/** マーカーのインク残りを、出力の四隅だけ丸く（なめらかに）透明化する。 */
+function clearCornerSpecks(img: ImageData, radiusFrac = 0.055): void {
+  const { width: w, height: h, data } = img;
+  const radius = Math.max(4, Math.round(Math.min(w, h) * radiusFrac));
+  const corners: [number, number][] = [
+    [0, 0],
+    [w - 1, 0],
+    [0, h - 1],
+    [w - 1, h - 1],
+  ];
+  for (const [cx, cy] of corners) {
+    const x0 = Math.max(0, cx - radius);
+    const x1 = Math.min(w - 1, cx + radius);
+    const y0 = Math.max(0, cy - radius);
+    const y1 = Math.min(h - 1, cy + radius);
+    for (let y = y0; y <= y1; y++) {
+      for (let x = x0; x <= x1; x++) {
+        const dist = Math.hypot(x - cx, y - cy);
+        if (dist > radius) continue;
+        const t = dist / radius;
+        const fade = t * t * (3 - 2 * t); // smoothstep：角で0・半径で1
+        const i = (y * w + x) * 4;
+        data[i + 3] = Math.round(data[i + 3] * fade);
+      }
+    }
+  }
 }

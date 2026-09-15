@@ -65,13 +65,19 @@ export function PrintTemplateScene() {
               ラクガキバトル したがきようし
             </div>
             <div style={{ fontSize: '4.2mm', marginTop: '2mm' }}>
-              ① きいろい わくの なかに じゆうに かいてね
+              ① くろい ■ に かこまれた なかに じゆうに かいてね
               <br />
               ② くろい ■ の うえは かかないでね
             </div>
           </div>
 
-          {/* 描画エリア（160mm四方、中央）＋四隅マーカー */}
+          {/*
+            描画エリア（160mm四方、中央）の目印。実線の色つきわくにすると、
+            撮影後の切り抜き処理が「わく線のインク」と「子どもが際に描いた絵」を
+            区別できず、絵ごと切ってしまう事故が実写で起きた。うすいグレーの
+            点線なら紙にごく近い色なので、背景の透明化処理が（特別扱いしなくても）
+            自然に消してくれる＝際まで描いた絵を巻き込まない。
+          */}
           <div
             style={{
               position: 'absolute',
@@ -79,7 +85,7 @@ export function PrintTemplateScene() {
               top: '40mm',
               width: '160mm',
               height: '160mm',
-              border: '1mm solid var(--crayon-yellow, #e8b32a)',
+              border: '0.6mm dashed #d8d8d8',
               borderRadius: '3mm',
               boxSizing: 'border-box',
             }}

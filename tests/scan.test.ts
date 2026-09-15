@@ -218,30 +218,39 @@ describe('scanDrawing: 一連の処理', () => {
     expect(alphaAt(100, 100)).toBeLessThan(40);
   });
 
-  it('回帰：わく線・マーカーは色に関係なく画角の外へ追い出される', () => {
-    // マーカーと同じ色（紙と全く違う色）で「わく線」を四隅マーカーのすぐ内側に描いても、
-    // 出力には一切写り込まない（背景色判定に頼らず幾何学的に除外される）ことを確認する。
+  it('回帰：マーカーの黒インクは角だけ消える（辺の途中には影響しない）', () => {
+    // したがき用紙は今はわく線を廃止し四隅マーカーのみ。角のマーカー残りは
+    // 消しつつ、辺の途中（マーカーから離れた場所）の絵には一切影響しないことを確認。
     const size = 200;
     const mk = 12;
     const img = makeImage(size, size, (x, y) => {
       const inMarker =
         (x < mk && y < mk) || (x >= size - mk && y < mk) || (x < mk && y >= size - mk) || (x >= size - mk && y >= size - mk);
       if (inMarker) return [0, 0, 0, 255];
-      const onFrameLine = x === mk + 2 || x === size - mk - 3 || y === mk + 2 || y === size - mk - 3;
-      if (onFrameLine) return [230, 170, 10, 255]; // わく線（オレンジ寄りの黄色）
-      if (x >= 90 && x < 110 && y >= 90 && y < 110) return [30, 90, 200, 255]; // キャラ
+      if (x >= 90 && x < 110 && y >= 90 && y < 110) return [30, 90, 200, 255]; // 中央のキャラ
       return null;
     });
     const { output } = scanDrawing(img, { outSize: 120 });
-    // 出力のどのピクセルにも、わく線の色（不透明）は現れないはず
-    let frameLineLeaked = false;
-    for (let p = 0; p < 120 * 120; p++) {
-      const i = p * 4;
-      if (output.data[i + 3] > 100 && output.data[i] > 200 && output.data[i + 1] > 140 && output.data[i + 1] < 200 && output.data[i + 2] < 40) {
-        frameLineLeaked = true;
-        break;
-      }
-    }
-    expect(frameLineLeaked).toBe(false);
+    const alphaAt = (x: number, y: number) => output.data[(y * 120 + x) * 4 + 3];
+    expect(alphaAt(0, 0)).toBeLessThan(10); // 角＝マーカー残りは消える
+    expect(alphaAt(60, 60)).toBeGreaterThan(150); // 中央のキャラは残る
+  });
+
+  it('回帰：わくの際（辺の途中）に描いた絵はコーナーの処理に巻き込まれず残る', () => {
+    // わく線の印刷を廃止したので、辺の真ん中あたりぎりぎりに描いた絵は
+    // マーカーのある角から離れていれば一切削られてはいけない。
+    const size = 200;
+    const mk = 12;
+    const img = makeImage(size, size, (x, y) => {
+      const inMarker =
+        (x < mk && y < mk) || (x >= size - mk && y < mk) || (x < mk && y >= size - mk) || (x >= size - mk && y >= size - mk);
+      if (inMarker) return [0, 0, 0, 255];
+      // 上辺のまん中ぎりぎり（マーカーからは離れている）に描いた黄色い線
+      if (y < mk + 4 && x >= 90 && x < 110) return [232, 196, 20, 255];
+      return null;
+    });
+    const { output } = scanDrawing(img, { outSize: 120 });
+    const alphaAt = (x: number, y: number) => output.data[(y * 120 + x) * 4 + 3];
+    expect(alphaAt(60, 4)).toBeGreaterThan(150); // 辺の途中の絵はマーカーと無関係に残る
   });
 });
