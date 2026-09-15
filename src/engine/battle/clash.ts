@@ -275,10 +275,10 @@ export function resolveClashTurn(
     if (next.winner !== null) break;
     const foe = eff[(1 - side) as Side];
     const res = clashResult(eff[side], foe);
-    // 三すくみに負けた側は「見切られて」発動できない。
-    // ただし 勝った側が 補助わざ のときは中断できない（相手はふつうに行動する）。
+    // 三すくみに負けた側は「見切られて」発動できない（勝った側の技の種類を問わない＝
+    // バフ技で勝っても攻撃技と同じく相手を止められる）。
     const winnerMove = chosenMoves[(1 - side) as Side];
-    const interrupted = res === 'lose' && !!winnerMove && winnerMove.category === 'attack';
+    const interrupted = res === 'lose' && !!winnerMove;
     if (interrupted) {
       log.push({ t: 'act', side, stance: eff[side], moveName: '（見切られて うごけない）' });
       continue;

@@ -28,16 +28,22 @@ function scriptToEnd(state: ClashState, s0: ClashStance, s1: ClashStance): Clash
 }
 
 describe('力・技・速さ 三すくみ（プロトタイプ）', () => {
-  it('わざのカテゴリ分け：属性3段は力、先制わざは速さ、補助は技', () => {
-    expect(moveCategory(getMove('fire_a3'))).toBe('power'); // 威力38
+  it('わざのカテゴリ分け：先制は速さ・大技は力・軽いジャブは速さ（それ以外は技IDで散らす）', () => {
+    expect(moveCategory(getMove('fire_a3'))).toBe('power'); // 威力38（34以上）
     expect(moveCategory(getMove('sw_great'))).toBe('power'); // 威力46
-    expect(moveCategory(getMove('fire_a1'))).toBe('speed'); // 威力14の弱い属性技
     expect(moveCategory(getMove('ta_stretch'))).toBe('speed'); // 先制
-    expect(moveCategory(getMove('sm_jab'))).toBe('speed'); // 威力12
-    expect(moveCategory(getMove('c_guard'))).toBe('tech'); // 補助
-    expect(moveCategory(getMove('ey_glare'))).toBe('tech'); // デバフ補助
-    expect(moveCategory(getMove('ey_see'))).toBe('tech'); // 貫通（みやぶり 威力22）
-    expect(moveCategory(getMove('fire_a2'))).toBe('tech'); // 威力24＋状態異常
+    expect(moveCategory(getMove('sm_jab'))).toBe('speed'); // 威力12（12以下）
+    // 同じ技は何度判定しても必ず同じカテゴリ（決定論）
+    expect(moveCategory(getMove('c_guard'))).toBe(moveCategory(getMove('c_guard')));
+  });
+
+  it('補助わざは「技」に固定されず、力／技／速さに散らばる', () => {
+    const supportCats = new Set<TriStance>();
+    for (const m of Object.values(MOVES)) {
+      if (m.category === 'support') supportCats.add(moveCategory(m));
+    }
+    // 以前は補助わざ＝必ず技だった。今は複数カテゴリに分散しているはず。
+    expect(supportCats.size).toBeGreaterThan(1);
   });
 
   it('全わざがいずれかのカテゴリに入る', () => {
@@ -245,16 +251,20 @@ describe('力・技・速さ 三すくみ（プロトタイプ）', () => {
     expect(act1 && act1.t === 'act' && !act1.moveName.startsWith('（')).toBe(true);
   });
 
-  it('補助わざが勝っても 相手は中断されない（補助技は攻撃しない）', () => {
+  it('補助わざで勝っても、攻撃技で勝った時と同じく相手を中断できる（ただし補助自体は攻撃しない）', () => {
     const a = drawn([210, 40, 30]);
     const b = drawn([30, 90, 210]);
-    a.moveIds = ['c_guard', 'c_tackle', 'sm_jab']; // 技枠は c_guard（補助）
-    b.moveIds = ['c_tackle', 'sm_jab', 'sm_dart'];
-    // side0 技(ガード) vs side1 速さ → 技が勝つが 補助なので side1 は動ける
-    const st = resolveClashTurn(createClashState(a, b, 6), ['c_guard', 'sm_dart']);
+    const support = Object.values(MOVES).find((m) => m.category === 'support')!;
+    const supportCat = moveCategory(support);
+    const beatenCat = STANCE_BEATS[supportCat];
+    const loserMove = Object.values(MOVES).find((m) => m.category === 'attack' && moveCategory(m) === beatenCat)!;
+    a.moveIds = [support.id, 'c_tackle', 'sm_jab'];
+    b.moveIds = [loserMove.id, 'c_tackle', 'sm_jab'];
+    const st = resolveClashTurn(createClashState(a, b, 6), [support.id, loserMove.id]);
+    // 負けた側は「見切られて うごけない」（攻撃技で勝った時と同じ扱い）
     const act1 = st.log.find((e) => e.t === 'act' && e.side === 1);
-    expect(act1 && act1.t === 'act' && !act1.moveName.startsWith('（')).toBe(true);
-    // side0 は ガードを張っただけ（相手にダメージを与えていない）
+    expect(act1 && act1.t === 'act' && act1.moveName.startsWith('（')).toBe(true);
+    // それでも補助わざ自体は相手にダメージを与えない
     const dmgToFoe = st.log.some((e) => e.t === 'damage' && e.side === 1 && e.amount > 0);
     expect(dmgToFoe).toBe(false);
   });

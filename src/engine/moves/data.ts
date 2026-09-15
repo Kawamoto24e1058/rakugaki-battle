@@ -257,24 +257,29 @@ export const LOADOUT_BUDGET = 6;
 /** 三すくみのカテゴリ。力＝重い一撃／技＝搦め手・補助／速さ＝軽い・先制。 */
 export type MoveCategory3 = 'power' | 'tech' | 'speed';
 
+/** 文字列→0..2^31 の決定論ハッシュ（同じ技IDは常に同じ値）。 */
+function hashId(id: string): number {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (Math.imul(h, 31) + id.charCodeAt(i)) >>> 0;
+  return h;
+}
+
 /**
  * わざを 力／技／速さ に振り分ける（Phase 17 三すくみ）。
- * - 補助 → 技
- * - 先制わざ → 速さ
- * - 威力30以上 → 力
- * - 威力14以下 → 速さ（軽いジャブ。弱い属性技a1もここ）
- * - 状態異常／デバフ／ドレイン／貫通 → 技
- * - 威力18以下 → 速さ（軽い攻撃）
- * - それ以外 → 力
+ * 強い直感のあるものだけ固定ルールにする：
+ * - 先制わざ → 速さ（先手＝すばやい）
+ * - ものすごい大技（威力34+） → 力
+ * - ごく軽いジャブ（威力1〜12） → 速さ
+ * それ以外（補助わざ・中威力の攻撃わざ）は技IDのハッシュで3カテゴリに散らす。
+ * 「補助わざ＝技」のように固定観念で偏らせず、絵ごとの得意カテゴリが本当に
+ * バラける（同じ技は何度判定しても必ず同じカテゴリ＝決定論は保つ）。
  */
 export function moveCategory(m: MoveDef): MoveCategory3 {
-  if (m.category === 'support') return 'tech';
   if (m.first) return 'speed';
-  if (m.power >= 30) return 'power';
-  if (m.power <= 14) return 'speed';
-  if (m.status || m.debuff || m.drain || m.pierce) return 'tech';
-  if (m.power <= 18) return 'speed';
-  return 'power';
+  if (m.power >= 34) return 'power';
+  if (m.power > 0 && m.power <= 12) return 'speed';
+  const cats: MoveCategory3[] = ['power', 'tech', 'speed'];
+  return cats[hashId(m.id) % 3];
 }
 
 /** 補助わざを「何をする技か」の一言に。リール表示用。 */

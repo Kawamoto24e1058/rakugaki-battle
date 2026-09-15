@@ -8,6 +8,7 @@ import {
   moveCost,
   movesByTag,
   LOADOUT_BUDGET,
+  MOVES,
   type MoveCategory3,
   type MoveId,
   type UnlockTag,
@@ -91,9 +92,7 @@ export function assignMovePool(input: AssignInput, seed: number): MoveId[] {
   );
   const targetCount = MOVESET_MIN + extra;
 
-  // 1) 核：たいあたり・ガード・属性ライン
-  take('c_tackle');
-  take('c_guard');
+  // 1) 核：属性ライン（絵の属性を象徴する技だけは必ず候補に）
   take(attrMove(input.attribute, input.skillLevel));
   // 2) 属性の特殊/補助を1つ
   takeFromTag(`attr:${input.attribute}`, 1);
@@ -111,8 +110,9 @@ export function assignMovePool(input: AssignInput, seed: number): MoveId[] {
     else take('u_detox');
   }
 
-  // 4.5) 力／技／速さ の三すくみカテゴリを最低1つずつ持たせる（速さが 0 になりやすいので）
-  ensureCategorySpread(chosen, input, take);
+  // 4.5) 力／技／速さ を最低2つずつは候補に持たせる（特定のカテゴリだけ偏らないように、
+  // 足りない分はランダムに補充＝毎回同じ技で埋まらない）
+  ensureCategorySpread(chosen, input, take, rng, 2);
 
   // 5) targetCount に満たなければ、特徴タグ→共通の順で埋める
   for (const tag of tags) {
@@ -120,6 +120,10 @@ export function assignMovePool(input: AssignInput, seed: number): MoveId[] {
     takeFromTag(tag, 1);
   }
   const fillers: MoveId[] = ['c_bite', 'c_scratch', 'c_focus', 'c_gamble', 'c_tackle', 'c_guard'];
+  for (let i = fillers.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [fillers[i], fillers[j]] = [fillers[j], fillers[i]];
+  }
   for (const id of fillers) {
     if (chosen.length >= Math.max(MOVESET_MIN, targetCount)) break;
     take(id);
@@ -207,11 +211,16 @@ function hasCureEffect(id: MoveId): boolean {
   return ['ca_breath', 'ca_song', 'water_wash', 'fire_dry', 'u_detox', 'u_endure', 'ca_heal'].includes(id);
 }
 
-/** 力／技／速さ を最低1つずつ。足りないカテゴリに、属性技・共通技から補う。 */
+/**
+ * 力／技／速さ を最低 minPerCategory ずつ持たせる。足りない分は、そのカテゴリの
+ * 全技（自分の属性で使えるもの）からランダムに補う＝毎回同じ技で埋まらない。
+ */
 function ensureCategorySpread(
   chosen: MoveId[],
   input: AssignInput,
   take: (id: MoveId) => void,
+  rng: Rng,
+  minPerCategory: number,
 ): void {
   const counts = () => {
     const c: Record<MoveCategory3, number> = { power: 0, tech: 0, speed: 0 };
@@ -224,26 +233,18 @@ function ensureCategorySpread(
     }
     return c;
   };
-  // カテゴリごとの補充候補（前が優先）。属性で色が出るように a1 系を先に。
-  const fill: Record<MoveCategory3, MoveId[]> = {
-    speed: [attrMove(input.attribute, 1), 'sm_dart', 'ta_stretch', 'c_scratch', 'sw_rapid'],
-    power: ['c_bite', 'c_tackle', 'pl_simple', 'c_gamble'],
-    tech: ['c_guard', 'c_focus', 'u_detox'],
-  };
-  for (let pass = 0; pass < 3; pass++) {
+  const byCategory: Record<MoveCategory3, MoveId[]> = { power: [], tech: [], speed: [] };
+  for (const m of Object.values(MOVES)) {
+    if (m.unlock.some((t) => t.startsWith('attr:') && t !== `attr:${input.attribute}`)) continue;
+    byCategory[moveCategory(m)].push(m.id);
+  }
+  for (let pass = 0; pass < minPerCategory; pass++) {
     const c = counts();
     for (const cat of ['speed', 'tech', 'power'] as MoveCategory3[]) {
-      if (c[cat] > 0) continue;
-      for (const id of fill[cat]) {
-        if (chosen.includes(id)) continue;
-        try {
-          if (moveCategory(getMove(id)) !== cat) continue;
-        } catch {
-          continue;
-        }
-        take(id);
-        break;
-      }
+      if (c[cat] >= minPerCategory) continue;
+      const cands = byCategory[cat].filter((id) => !chosen.includes(id));
+      if (cands.length === 0) continue;
+      take(cands[Math.floor(rng() * cands.length)]);
     }
   }
 }
