@@ -4,6 +4,7 @@ import { estimatePaperColor, removeBackground } from './bgRemove';
 
 export type { Point, CornerMarkers };
 export { detectCornerMarkers, computeHomography, warpPerspective, estimatePaperColor, removeBackground };
+export { estimateIlluminationField, boxBlur2D } from './illum';
 
 export interface ScanResult {
   /** 台形補正＋背景透明化ずみの画像（RGBA、透過あり）。 */
@@ -35,6 +36,8 @@ function resizeNearest(img: ImageData, size: number): ImageData {
  *  1. 四隅マーカーが見つかれば台形補正して まっすぐな正方形に
  *  2. 紙の背景を透明化
  * を行う。マーカーが見つからなくても背景透明化だけは行い、常に有効な画像を返す。
+ * 影への強さ（局所的な明るさで判定する）は markers.ts / bgRemove.ts 側で
+ * それぞれ担っている（実際の画素値はここでは一切書き換えない）。
  */
 export function scanDrawing(img: ImageData, opts: { outSize?: number } = {}): ScanResult {
   const outSize = opts.outSize ?? 640;

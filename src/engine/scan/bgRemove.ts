@@ -3,11 +3,15 @@
  * 「紙とつながっている・紙に近い色」の領域だけを背景として抜く。
  * 絵の内側の白（目のハイライト等）は外周とつながっていなければ残る。
  */
+import { estimateIlluminationField } from './illum';
 
 export interface RGB {
   r: number;
   g: number;
   b: number;
+  /** どこからサンプルしたか（そこでの照明の明るさを基準点にするため）。 */
+  x?: number;
+  y?: number;
 }
 
 /**
@@ -24,7 +28,7 @@ export function estimatePaperColor(img: ImageData): RGB {
     [half, Math.floor(h / 2)], // 左辺まん中
     [w - 1 - half, Math.floor(h / 2)], // 右辺まん中
   ];
-  let best: RGB = { r: 255, g: 255, b: 255 };
+  let best: RGB = { r: 255, g: 255, b: 255, x: Math.floor(w / 2), y: half };
   let bestLum = -1;
   for (const [cx, cy] of centers) {
     let r = 0;
@@ -45,7 +49,7 @@ export function estimatePaperColor(img: ImageData): RGB {
       }
     }
     if (n === 0) continue;
-    const avg = { r: r / n, g: g / n, b: b / n };
+    const avg = { r: r / n, g: g / n, b: b / n, x: cx, y: cy };
     const lum = 0.299 * avg.r + 0.587 * avg.g + 0.114 * avg.b;
     if (lum > bestLum) {
       bestLum = lum;
@@ -55,22 +59,50 @@ export function estimatePaperColor(img: ImageData): RGB {
   return best;
 }
 
-function colorDist(data: Uint8ClampedArray, i: number, paper: RGB): number {
-  const dr = data[i] - paper.r;
-  const dg = data[i + 1] - paper.g;
-  const db = data[i + 2] - paper.b;
+function dist3(dr: number, dg: number, db: number): number {
   return Math.sqrt(dr * dr + dg * dg + db * db);
 }
 
 export interface BgRemoveOptions {
-  /** 紙色とのユークリッド距離がこれ以下なら「背景」候補。 */
+  /** その場所で予測される紙色との色差がこれ以下なら背景。 */
   threshold?: number;
+  /** 照明ムラ推定に使う箱ぼかしの半径（画像の短辺に対する割合）。 */
+  illumRadiusFrac?: number;
 }
 
-/** 外周からの floodfill で背景を透明化し、境界だけ軽くぼかす。 */
+/**
+ * 外周からの floodfill で背景を透明化し、境界だけ軽くぼかす。
+ * 紙に影が落ちていると「紙の色」は場所によって結構変わるので、固定の1色とだけ
+ * 比較すると影の境目で塗りつぶしが止まってしまう（＝背景が抜けきらず四角のまま残る）。
+ * かといって単純にぼかして明るさを均すと、キャラが画面に対して大きいときに
+ * ぼかしへキャラ自身の色が混ざり込み、キャラごと紙色に飛ばして消してしまう事故が
+ * 起きる（実写で確認済み）。
+ * そこで「その場所はだいたい何色の紙に見えるはずか」を大きな箱ぼかしで予測する
+ * "ものさし" だけを作り、実際の画素値（data）は一切書き換えずに、外周からの
+ * floodfillで各画素をその場所ごとの予測値と比較する。影はなだらかに予測へ
+ * 反映されて越えられるが、キャラの輪郭のような急激な色の変化はちゃんと止まる。
+ */
 export function removeBackground(img: ImageData, paper: RGB, opts: BgRemoveOptions = {}): ImageData {
   const { width: w, height: h, data } = img;
-  const threshold = opts.threshold ?? 46;
+  const threshold = opts.threshold ?? 42;
+  const { field: illum } = estimateIlluminationField(img, opts.illumRadiusFrac ?? 0.16);
+
+  // 基準は画像全体の平均ではなく、紙色をサンプルした「その場所」の明るさにする。
+  // 全体平均を使うと、紙色サンプル地点（=一番明るい場所）でも比が1を超えて
+  // 予測が255を超え、そこの紙自身が背景と認識されなくなる事故が起きる。
+  const px = Math.min(w - 1, Math.max(0, Math.round(paper.x ?? w / 2)));
+  const py = Math.min(h - 1, Math.max(0, Math.round(paper.y ?? h / 2)));
+  const illumAtPaper = illum[py * w + px];
+
+  // 各画素位置で「そこに紙があったら何色に見えるはずか」を明るさ比で予測。
+  const predicted = new Float32Array(w * h * 3);
+  for (let p = 0; p < w * h; p++) {
+    const ratio = illum[p] / Math.max(24, illumAtPaper);
+    predicted[p * 3] = Math.min(255, paper.r * ratio);
+    predicted[p * 3 + 1] = Math.min(255, paper.g * ratio);
+    predicted[p * 3 + 2] = Math.min(255, paper.b * ratio);
+  }
+
   const bg = new Uint8Array(w * h); // 1 = 背景
   const visited = new Uint8Array(w * h);
   const qx = new Int32Array(w * h);
@@ -83,7 +115,8 @@ export function removeBackground(img: ImageData, paper: RGB, opts: BgRemoveOptio
     const idx = y * w + x;
     if (visited[idx]) return;
     const i = idx * 4;
-    if (colorDist(data, i, paper) > threshold) return;
+    const j = idx * 3;
+    if (dist3(data[i] - predicted[j], data[i + 1] - predicted[j + 1], data[i + 2] - predicted[j + 2]) > threshold) return;
     visited[idx] = 1;
     bg[idx] = 1;
     qx[tail] = x;

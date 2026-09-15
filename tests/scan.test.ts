@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { computeHomography, applyHomography, warpPerspective } from '../src/engine/scan/warp';
 import { detectCornerMarkers } from '../src/engine/scan/markers';
 import { estimatePaperColor, removeBackground } from '../src/engine/scan/bgRemove';
+import { estimateIlluminationField } from '../src/engine/scan/illum';
 import { scanDrawing } from '../src/engine/scan';
 import { makeImage } from './helpers';
 
@@ -102,6 +103,58 @@ describe('bgRemove: 背景の透明化', () => {
     const alphaAt = (x: number, y: number) => out.data[(y * 100 + x) * 4 + 3];
     expect(alphaAt(2, 2)).toBeLessThan(20);
     expect(alphaAt(50, 50)).toBeGreaterThan(230);
+  });
+
+  it('影で紙の明るさが場所によって違っても、背景全体をちゃんと抜ける', () => {
+    // 左端が白(255)・右端が影で暗い(160)の緩やかなグラデーション背景＋中央に色つきの絵。
+    const w = 120;
+    const h = 120;
+    const img = makeImage(w, h, (x, y) => {
+      if (x >= 45 && x < 75 && y >= 45 && y < 75) return [30, 140, 60, 255];
+      const shade = 255 - Math.round((x / (w - 1)) * 95); // 255 → 160
+      return [shade, shade, shade, 255];
+    });
+    const paper = estimatePaperColor(img); // 左辺まん中付近＝明るい方を拾うはず
+    const out = removeBackground(img, paper);
+    const alphaAt = (x: number, y: number) => out.data[(y * w + x) * 4 + 3];
+    // 影が落ちている右側の背景も、旧実装（固定閾値）なら残ってしまうところ
+    expect(alphaAt(5, 60)).toBeLessThan(40);
+    expect(alphaAt(w - 6, 60)).toBeLessThan(40);
+    expect(alphaAt(60, 60)).toBeGreaterThan(200); // 中央の絵は残る
+  });
+
+  it('回帰：画面に対して大きいキャラは、影対策でも消えずに残る', () => {
+    // 実写で見つかった事故の再現：ぼかし半径よりキャラが大きいと、画素値を
+    // 直接いじる実装だとキャラの色が紙の明るさに引っ張られて消えてしまっていた。
+    const size = 300;
+    const img = makeImage(size, size, (x, y) => {
+      const dx = x - size / 2;
+      const dy = y - size / 2;
+      if (Math.hypot(dx, dy) < 90) return [224, 128, 32, 255]; // 画面の大部分を占めるオレンジのキャラ
+      const shade = 255 - Math.round((x / (size - 1)) * 70); // ゆるやかな影
+      return [shade, shade, shade, 255];
+    });
+    const paper = estimatePaperColor(img);
+    const out = removeBackground(img, paper);
+    const alphaAt = (x: number, y: number) => out.data[(y * size + x) * 4 + 3];
+    expect(alphaAt(size / 2, size / 2)).toBeGreaterThan(200); // キャラ中央は残る
+    const i = (Math.floor(size / 2) * size + Math.floor(size / 2)) * 4;
+    expect(out.data[i]).toBeGreaterThan(out.data[i + 1]); // 色味（オレンジ）も保たれている
+    expect(alphaAt(5, size / 2)).toBeLessThan(40); // 背景は抜ける
+  });
+});
+
+describe('illum: 照明ムラ推定', () => {
+  it('明暗のグラデーションでも、場所ごとの明るさフィールドを推定できる', () => {
+    const w = 100;
+    const h = 100;
+    const img = makeImage(w, h, (x) => {
+      const shade = 255 - Math.round((x / (w - 1)) * 120); // 255 → 135
+      return [shade, shade, shade, 255];
+    });
+    const { field } = estimateIlluminationField(img);
+    // 元のグラデーションの傾向（左が明るく右が暗い）を反映しているはず
+    expect(field[50 * w + 5]).toBeGreaterThan(field[50 * w + (w - 6)]);
   });
 });
 

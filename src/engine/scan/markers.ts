@@ -1,4 +1,5 @@
 import type { Point } from './warp';
+import { boxBlur2D } from './illum';
 
 export interface CornerMarkers {
   tl: Point;
@@ -28,23 +29,24 @@ export function detectCornerMarkers(img: ImageData): CornerMarkers | null {
   const dw = Math.max(1, Math.round(img.width * scale));
   const dh = Math.max(1, Math.round(img.height * scale));
 
-  const gray = new Uint8Array(dw * dh);
-  let sum = 0;
+  const gray = new Float32Array(dw * dh);
   for (let y = 0; y < dh; y++) {
     const sy = Math.min(img.height - 1, Math.floor(y / scale));
     for (let x = 0; x < dw; x++) {
       const sx = Math.min(img.width - 1, Math.floor(x / scale));
       const i = (sy * img.width + sx) * 4;
-      const l = 0.299 * img.data[i] + 0.587 * img.data[i + 1] + 0.114 * img.data[i + 2];
-      gray[y * dw + x] = l;
-      sum += l;
+      gray[y * dw + x] = 0.299 * img.data[i] + 0.587 * img.data[i + 1] + 0.114 * img.data[i + 2];
     }
   }
-  const mean = sum / (dw * dh);
-  const threshold = Math.min(140, Math.max(40, mean * 0.55));
 
+  // 写真全体の平均ではなく「その場所の周り」と比べて暗いかどうかで判定する。
+  // 紙に影が落ちていても、マーカーは常にその場の周囲よりはっきり暗いはず。
+  const localMean = boxBlur2D(gray, dw, dh, Math.max(4, Math.round(Math.min(dw, dh) * 0.15)));
   const dark = new Uint8Array(dw * dh);
-  for (let i = 0; i < dark.length; i++) dark[i] = gray[i] < threshold ? 1 : 0;
+  for (let i = 0; i < dark.length; i++) {
+    const threshold = Math.min(150, Math.max(30, localMean[i] * 0.62));
+    dark[i] = gray[i] < threshold ? 1 : 0;
+  }
 
   // 連結成分ラベリング（4近傍BFS）
   const visited = new Uint8Array(dw * dh);
