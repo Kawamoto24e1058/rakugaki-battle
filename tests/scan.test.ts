@@ -177,7 +177,7 @@ describe('scanDrawing: 一連の処理', () => {
     expect(output.width).toBe(120);
     const alphaAt = (x: number, y: number) => output.data[(y * 120 + x) * 4 + 3];
     expect(alphaAt(60, 60)).toBeGreaterThan(150); // 中央の絵は残る
-    expect(alphaAt(0, 0)).toBeLessThan(10); // 角そのものはマーカー残りごと透明
+    expect(alphaAt(0, 0)).toBeLessThan(10); // 角＝マーカーの位置は内側マージンで画角の外に追い出される
     expect(alphaAt(30, 30)).toBeLessThan(40); // 角から離れた背景はふつうに透明
   });
 
@@ -186,5 +186,62 @@ describe('scanDrawing: 一連の処理', () => {
     const { output, cornersFound } = scanDrawing(img, { outSize: 80 });
     expect(cornersFound).toBe(false);
     expect(output.width).toBe(80);
+  });
+
+  it('回帰：わっか（閉じた輪）の内側の地の紙もちゃんと透明になる', () => {
+    // floodfillだった頃は、輪の内側が外周と繋がらず背景として抜けずに残っていた。
+    const size = 240;
+    const mk = 16;
+    const cx = size / 2;
+    const cy = size / 2;
+    const img = makeImage(size, size, (x, y) => {
+      const inMarker =
+        (x < mk && y < mk) || (x >= size - mk && y < mk) || (x < mk && y >= size - mk) || (x >= size - mk && y >= size - mk);
+      if (inMarker) return [0, 0, 0, 255];
+      const d = Math.hypot(x - cx, y - cy);
+      if (d < 60 && d > 48) return [220, 180, 20, 255]; // 黄色い輪っかの線
+      return null; // 輪の内側も外側も地の白紙
+    });
+    const { output, cornersFound } = scanDrawing(img, { outSize: 200 });
+    expect(cornersFound).toBe(true);
+    const alphaAt = (x: number, y: number) => output.data[(y * 200 + x) * 4 + 3];
+    // 輪の線そのものは（内側マージンでの縮小補正を受けつつ）どこかに残っているはず
+    let ringFound = false;
+    for (let k = 20; k <= 70; k++) {
+      if (alphaAt(100, 100 - k) > 150) {
+        ringFound = true;
+        break;
+      }
+    }
+    expect(ringFound).toBe(true);
+    // 輪の内側（中心）は外周と繋がっていなくても、ちゃんと透明になる
+    expect(alphaAt(100, 100)).toBeLessThan(40);
+  });
+
+  it('回帰：わく線・マーカーは色に関係なく画角の外へ追い出される', () => {
+    // マーカーと同じ色（紙と全く違う色）で「わく線」を四隅マーカーのすぐ内側に描いても、
+    // 出力には一切写り込まない（背景色判定に頼らず幾何学的に除外される）ことを確認する。
+    const size = 200;
+    const mk = 12;
+    const img = makeImage(size, size, (x, y) => {
+      const inMarker =
+        (x < mk && y < mk) || (x >= size - mk && y < mk) || (x < mk && y >= size - mk) || (x >= size - mk && y >= size - mk);
+      if (inMarker) return [0, 0, 0, 255];
+      const onFrameLine = x === mk + 2 || x === size - mk - 3 || y === mk + 2 || y === size - mk - 3;
+      if (onFrameLine) return [230, 170, 10, 255]; // わく線（オレンジ寄りの黄色）
+      if (x >= 90 && x < 110 && y >= 90 && y < 110) return [30, 90, 200, 255]; // キャラ
+      return null;
+    });
+    const { output } = scanDrawing(img, { outSize: 120 });
+    // 出力のどのピクセルにも、わく線の色（不透明）は現れないはず
+    let frameLineLeaked = false;
+    for (let p = 0; p < 120 * 120; p++) {
+      const i = p * 4;
+      if (output.data[i + 3] > 100 && output.data[i] > 200 && output.data[i + 1] > 140 && output.data[i + 1] < 200 && output.data[i + 2] < 40) {
+        frameLineLeaked = true;
+        break;
+      }
+    }
+    expect(frameLineLeaked).toBe(false);
   });
 });

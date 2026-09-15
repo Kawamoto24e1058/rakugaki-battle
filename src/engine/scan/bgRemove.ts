@@ -1,7 +1,12 @@
 /**
- * 紙の背景を透明にする。用紙の色を推定 → 外周から塗りつぶし（floodfill）で
- * 「紙とつながっている・紙に近い色」の領域だけを背景として抜く。
- * 絵の内側の白（目のハイライト等）は外周とつながっていなければ残る。
+ * 紙の背景を透明にする。各画素を「その場所に紙があったら何色に見えるはずか」の
+ * 予測値と比べ、近ければ背景として透明にする。
+ * 以前は外周からのfloodfillで「紙とつながっている領域だけ」を背景にしていたが、
+ * それだと わっか（輪っか・ドーナツ状の線）のように閉じた形の内側にある地の紙が
+ * 外周と繋がらず、背景として抜けずに残ってしまう不具合があった（実写で確認済み）。
+ * 目のハイライトのような小さな囲まれた白も同様に消えるようにはなるが、
+ * 「閉じた形の中に紙が残る」方が実害が大きいと判断し、連結性は見ずに
+ * 画素ごと独立に判定する。
  */
 import { estimateIlluminationField } from './illum';
 
@@ -70,18 +75,6 @@ export interface BgRemoveOptions {
   illumRadiusFrac?: number;
 }
 
-/**
- * 外周からの floodfill で背景を透明化し、境界だけ軽くぼかす。
- * 紙に影が落ちていると「紙の色」は場所によって結構変わるので、固定の1色とだけ
- * 比較すると影の境目で塗りつぶしが止まってしまう（＝背景が抜けきらず四角のまま残る）。
- * かといって単純にぼかして明るさを均すと、キャラが画面に対して大きいときに
- * ぼかしへキャラ自身の色が混ざり込み、キャラごと紙色に飛ばして消してしまう事故が
- * 起きる（実写で確認済み）。
- * そこで「その場所はだいたい何色の紙に見えるはずか」を大きな箱ぼかしで予測する
- * "ものさし" だけを作り、実際の画素値（data）は一切書き換えずに、外周からの
- * floodfillで各画素をその場所ごとの予測値と比較する。影はなだらかに予測へ
- * 反映されて越えられるが、キャラの輪郭のような急激な色の変化はちゃんと止まる。
- */
 export function removeBackground(img: ImageData, paper: RGB, opts: BgRemoveOptions = {}): ImageData {
   const { width: w, height: h, data } = img;
   const threshold = opts.threshold ?? 42;
@@ -94,52 +87,15 @@ export function removeBackground(img: ImageData, paper: RGB, opts: BgRemoveOptio
   const py = Math.min(h - 1, Math.max(0, Math.round(paper.y ?? h / 2)));
   const illumAtPaper = illum[py * w + px];
 
-  // 各画素位置で「そこに紙があったら何色に見えるはずか」を明るさ比で予測。
-  const predicted = new Float32Array(w * h * 3);
+  // 画素ごとに独立判定（連結性は見ない＝わっかの中の地の紙もちゃんと透明になる）。
+  const bg = new Uint8Array(w * h); // 1 = 背景
   for (let p = 0; p < w * h; p++) {
     const ratio = illum[p] / Math.max(24, illumAtPaper);
-    predicted[p * 3] = Math.min(255, paper.r * ratio);
-    predicted[p * 3 + 1] = Math.min(255, paper.g * ratio);
-    predicted[p * 3 + 2] = Math.min(255, paper.b * ratio);
-  }
-
-  const bg = new Uint8Array(w * h); // 1 = 背景
-  const visited = new Uint8Array(w * h);
-  const qx = new Int32Array(w * h);
-  const qy = new Int32Array(w * h);
-  let head = 0;
-  let tail = 0;
-
-  const tryPush = (x: number, y: number) => {
-    if (x < 0 || y < 0 || x >= w || y >= h) return;
-    const idx = y * w + x;
-    if (visited[idx]) return;
-    const i = idx * 4;
-    const j = idx * 3;
-    if (dist3(data[i] - predicted[j], data[i + 1] - predicted[j + 1], data[i + 2] - predicted[j + 2]) > threshold) return;
-    visited[idx] = 1;
-    bg[idx] = 1;
-    qx[tail] = x;
-    qy[tail] = y;
-    tail++;
-  };
-
-  for (let x = 0; x < w; x++) {
-    tryPush(x, 0);
-    tryPush(x, h - 1);
-  }
-  for (let y = 0; y < h; y++) {
-    tryPush(0, y);
-    tryPush(w - 1, y);
-  }
-  while (head < tail) {
-    const x = qx[head];
-    const y = qy[head];
-    head++;
-    tryPush(x - 1, y);
-    tryPush(x + 1, y);
-    tryPush(x, y - 1);
-    tryPush(x, y + 1);
+    const pr = Math.min(255, paper.r * ratio);
+    const pg = Math.min(255, paper.g * ratio);
+    const pb = Math.min(255, paper.b * ratio);
+    const i = p * 4;
+    if (dist3(data[i] - pr, data[i + 1] - pg, data[i + 2] - pb) <= threshold) bg[p] = 1;
   }
 
   // 境界を3x3で軽くぼかしてジャギーを抑える

@@ -31,6 +31,9 @@ function resizeNearest(img: ImageData, size: number): ImageData {
   return { data, width: size, height: size, colorSpace: 'srgb' } as ImageData;
 }
 
+/** マーカー・枠線を確実に画角の外へ追い出すための内側マージン（出力サイズに対する割合）。 */
+const CROP_MARGIN_FRAC = 0.07;
+
 /**
  * 撮影した画像から「したがき用紙」を検出して:
  *  1. 四隅マーカーが見つかれば台形補正して まっすぐな正方形に
@@ -46,11 +49,17 @@ export function scanDrawing(img: ImageData, opts: { outSize?: number } = {}): Sc
   let working: ImageData;
   let cornersFound = false;
   if (corners) {
+    // マーカーの中心＝印刷したわく線のちょうど角。実写では検出や補正が完璧には
+    // 揃わず、わく線やマーカーの黒がわずかに画角内へ残ることがある（色での
+    // 背景判定だけでは消せない＝印刷物のインクなので）。なので出力の四辺を
+    // マーカーの位置よりひとまわり内側に切り込ませ、わく線ごと画角の外に
+    // 追い出す（色に関係なく幾何学的に確実に除ける）。
+    const m = outSize * CROP_MARGIN_FRAC;
     const dst: [Point, Point, Point, Point] = [
-      { x: 0, y: 0 },
-      { x: outSize, y: 0 },
-      { x: 0, y: outSize },
-      { x: outSize, y: outSize },
+      { x: -m, y: -m },
+      { x: outSize + m, y: -m },
+      { x: -m, y: outSize + m },
+      { x: outSize + m, y: outSize + m },
     ];
     const src: [Point, Point, Point, Point] = [corners.tl, corners.tr, corners.bl, corners.br];
     const H = computeHomography(dst, src);
@@ -62,34 +71,5 @@ export function scanDrawing(img: ImageData, opts: { outSize?: number } = {}): Sc
 
   const paper = estimatePaperColor(working);
   const output = removeBackground(working, paper);
-  // マーカーぶんの黒い点が出力の四隅にわずかに残ることがあるので、丸く抜いておく。
-  if (cornersFound) clearCornerSpecks(output);
   return { output, cornersFound };
-}
-
-function clearCornerSpecks(img: ImageData, radiusFrac = 0.05): void {
-  const { width: w, height: h, data } = img;
-  const radius = Math.max(4, Math.round(Math.min(w, h) * radiusFrac));
-  const corners: [number, number][] = [
-    [0, 0],
-    [w - 1, 0],
-    [0, h - 1],
-    [w - 1, h - 1],
-  ];
-  for (const [cx, cy] of corners) {
-    const x0 = Math.max(0, cx - radius);
-    const x1 = Math.min(w - 1, cx + radius);
-    const y0 = Math.max(0, cy - radius);
-    const y1 = Math.min(h - 1, cy + radius);
-    for (let y = y0; y <= y1; y++) {
-      for (let x = x0; x <= x1; x++) {
-        const dist = Math.hypot(x - cx, y - cy);
-        if (dist > radius) continue;
-        const t = dist / radius;
-        const fade = t * t * (3 - 2 * t); // smoothstep：角で0・半径で1
-        const i = (y * w + x) * 4;
-        data[i + 3] = Math.round(data[i + 3] * fade);
-      }
-    }
-  }
 }
