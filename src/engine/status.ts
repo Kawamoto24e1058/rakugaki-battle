@@ -55,13 +55,13 @@ export const STATUS_META: Record<StatusKind, StatusMeta> = {
   // ぼうぎょ↑↓ は「受けるダメージの倍率」で分かりやすく（stat には触らない）。
   defUp: meta({ id: 'defUp', jp: 'ぼうぎょ↑', kind: 'buff', incomingMult: 0.6, duration: 3, description: '受けるダメージが 40% へる（3ターン）。' }),
   spdUp: meta({ id: 'spdUp', jp: 'すばやさ↑', kind: 'buff', buffStat: 'spd', buffMult: 1.5, duration: 3, description: 'すばやさが 5わり上がる（かわしやすい）。' }),
-  luckUp: meta({ id: 'luckUp', jp: 'きゅうしょ↑', kind: 'buff', buffStat: 'luck', buffMult: 1.5, duration: 3, description: 'きゅうしょに 当たりやすい。' }),
+  luckUp: meta({ id: 'luckUp', jp: 'きゅうしょ↑', kind: 'buff', buffStat: 'luck', buffMult: 2.5, duration: 3, description: 'きゅうしょに とても 当たりやすい（3ターン）。' }),
   atkDown: meta({ id: 'atkDown', jp: 'こうげき↓', kind: 'debuff', buffStat: 'atk', buffMult: 0.75, duration: 2, description: 'こうげきが 25% 下がる。' }),
   defDown: meta({ id: 'defDown', jp: 'ぼうぎょ↓', kind: 'debuff', incomingMult: 1.3, duration: 2, description: '受けるダメージが 30% ふえる（2ターン）。' }),
   spdDown: meta({ id: 'spdDown', jp: 'すばやさ↓', kind: 'debuff', buffStat: 'spd', buffMult: 0.65, duration: 2, description: 'すばやさが 35% 下がる。' }),
   flinch: meta({ id: 'flinch', jp: 'ひるみ', kind: 'debuff', duration: 1, description: 'つぎの攻撃が「かすり」になる。' }),
   guard: meta({ id: 'guard', jp: 'ガード', kind: 'buff', incomingMult: 0.5, duration: 2, description: '受けるダメージが 半分に なる（2ターン）。' }),
-  thorns: meta({ id: 'thorns', jp: 'トゲ', kind: 'buff', reflectPct: 0.33, duration: 2, description: '攻撃してきた相手に ダメージの 3わり を返す（2ターン）。' }),
+  thorns: meta({ id: 'thorns', jp: 'トゲ', kind: 'buff', reflectPct: 0.5, duration: 2, description: '攻撃してきた相手に ダメージの 半分 を返す（2ターン）。' }),
 };
 
 export interface ActiveStatus {

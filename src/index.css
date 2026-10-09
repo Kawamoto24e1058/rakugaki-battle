@@ -211,3 +211,128 @@ button {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ===========================================================
+   手札バトル：カード・場・演出
+   =========================================================== */
+.gcard {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  border: 0.22em solid var(--card-color, var(--ink));
+  border-radius: 1em;
+  background: var(--card);
+  color: var(--ink);
+  box-shadow: 0.25em 0.35em 0 rgba(51, 48, 43, 0.2);
+  overflow: hidden;
+  user-select: none;
+}
+.gcard-band {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.3em;
+  padding: 0.3em 0.55em 0.3em 1.9em;
+  background: var(--card-color);
+  color: #fff;
+  font-size: 0.82em;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.gcard-art {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  font-size: 3.3em;
+  line-height: 1;
+  background:
+    radial-gradient(circle at 50% 55%, color-mix(in srgb, var(--card-color) 22%, transparent), transparent 70%),
+    repeating-linear-gradient(135deg, transparent 0 0.6em, color-mix(in srgb, var(--card-color) 7%, transparent) 0.6em 1.2em);
+}
+.gcard-name {
+  font-family: var(--font-display);
+  text-align: center;
+  line-height: 1.12;
+  padding: 0.15em 0.3em 0;
+  color: var(--card-color);
+}
+.gcard-gist {
+  text-align: center;
+  font-size: 0.78em;
+  line-height: 1.25;
+  padding: 0.15em 0.45em 0.25em;
+  min-height: 2.6em;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+}
+.gcard-chip {
+  align-self: center;
+  margin-bottom: 0.4em;
+  font-size: 0.7em;
+  font-weight: 800;
+  padding: 0.05em 0.7em;
+  border-radius: 99px;
+  background: #fff4c9;
+  border: 0.14em solid #d9a400;
+  color: #7a5a00;
+}
+.gcard-power {
+  position: absolute;
+  top: 0.15em;
+  left: 0.15em;
+  z-index: 2;
+  width: 1.85em;
+  height: 1.85em;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #fff;
+  color: var(--ink);
+  border: 0.16em solid var(--ink);
+  font-family: var(--font-display);
+  font-size: 1.05em;
+  line-height: 1;
+}
+.gcard-foil {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(115deg, transparent 30%, rgba(255, 255, 255, 0.75) 47%, rgba(255, 236, 160, 0.5) 53%, transparent 68%);
+  background-size: 260% 100%;
+  animation: foil-sweep 2.6s linear infinite;
+  mix-blend-mode: overlay;
+}
+.gcard-back {
+  position: relative;
+  border: 0.22em solid var(--ink);
+  border-radius: 1em;
+  background:
+    radial-gradient(circle at 50% 50%, #fff 0 1.1em, transparent 1.2em),
+    repeating-linear-gradient(45deg, #f6d36a 0 0.5em, #f2b705 0.5em 1em);
+  display: grid;
+  place-items: center;
+  box-shadow: 0.25em 0.35em 0 rgba(51, 48, 43, 0.2);
+  font-family: var(--font-display);
+  color: var(--ink);
+  font-size: 1.5em;
+}
+.gcard-selected {
+  animation: sel-pulse 1.1s ease-in-out infinite;
+}
+@keyframes foil-sweep {
+  from { background-position: 160% 0; }
+  to { background-position: -100% 0; }
+}
+@keyframes sel-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--card-color) 70%, transparent), 0.3em 0.5em 0 rgba(51, 48, 43, 0.25); }
+  50% { box-shadow: 0 0 0 0.55em color-mix(in srgb, var(--card-color) 0%, transparent), 0.3em 0.5em 0 rgba(51, 48, 43, 0.25); }
+}
+@keyframes deck-bob {
+  0%, 100% { transform: translateY(0) rotate(var(--r, 0deg)); }
+  50% { transform: translateY(-0.25em) rotate(var(--r, 0deg)); }
+}
+@keyframes speed-streak {
+  from { transform: translateX(-120%); }
+  to { transform: translateX(260%); }
+}

@@ -35,7 +35,6 @@ describe('特徴抽出とキャラ生成', () => {
       expect(luck).toBeGreaterThanOrEqual(5);
       expect(heart).toBeGreaterThanOrEqual(5);
       expect(character.analysis.length).toBeGreaterThan(5);
-      expect(character.skillLevel).toBe(1);
     }
   });
 
@@ -50,7 +49,7 @@ describe('特徴抽出とキャラ生成', () => {
     const b = analyzeImageData(rectImage(200, 200, 80, 90, [200, 40, 30]));
     expect(a.character.baseStats).toEqual(b.character.baseStats);
     expect(a.character.attribute).toBe(b.character.attribute);
-    expect(a.character.moveIds).toEqual(b.character.moveIds);
+    expect(a.character.koseiId).toBe(b.character.koseiId);
   });
 
   it('用紙のチェック欄（overrides）が解析より優先される', () => {
@@ -60,7 +59,5 @@ describe('特徴抽出とキャラ生成', () => {
     });
     expect(character.attribute).toBe('dark');
     expect(character.weapon).toBe('shield');
-    // 闇の属性技が候補に入っている
-    expect(character.movePool.some((m) => m.startsWith('dark'))).toBe(true);
   });
 });

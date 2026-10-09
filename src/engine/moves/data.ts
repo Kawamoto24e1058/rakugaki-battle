@@ -1,17 +1,19 @@
 import type { Attribute, StatusKind, Stats } from '../types';
 
 export type MoveId = string;
-export type UnlockTag = string;
 
+/**
+ * 手札バトルで配られる技。
+ * 毎ターン全ワザから3枚が配られるので、「どの手札でも1枚ごとに意味がある」ように
+ * 技ごとに はっきりした役割（先制・連続攻撃・状態異常・まもり・かいふく …）を持たせる。
+ */
 export interface MoveDef {
   id: MoveId;
   name: string;
   category: 'attack' | 'support';
   attribute: Attribute | null;
-  /** attack: 基礎威力。support: 効果の大きさの目安。 */
+  /** attack: 基礎威力（連続攻撃は1発ぶん）。support: 0。 */
   power: number;
-  /** 使用後、このターン数だけ選べない。 */
-  cooldown: number;
   target: 'enemy' | 'self';
   /** 命中時に付与する状態異常。 */
   status?: { kind: StatusKind; chance: number; toSelf?: boolean };
@@ -19,11 +21,11 @@ export interface MoveDef {
   cures?: 'one' | 'all';
   /** 自分にバフ。 */
   buff?: { stat: keyof Stats; turns: number };
-  /** 必ず先制。 */
+  /** 必ず先に動く。 */
   first?: boolean;
-  /** このターン、被ダメージを軽減（%）。 */
+  /** まもり：受けるダメージを半分にする状態（ガード）をつける。 */
   guardPct?: number;
-  /** 受けたダメージの一部を返す構え（%、次の被弾まで）。 */
+  /** カウンター：攻撃してきた相手にダメージの一部を返す状態をつける。 */
   reflect?: number;
   /** ぼうぎょ無視。 */
   pierce?: boolean;
@@ -31,186 +33,97 @@ export interface MoveDef {
   drain?: number;
   /** 固定回復。 */
   heal?: number;
-  /** ランダム属性になる。 */
+  /** ランダムな属性・状態異常になる。 */
   randomAttr?: boolean;
   /** 与ダメージのぶん自分に反動（%）。 */
   recoil?: number;
-  /** きめルーレットを「はずれ／かすり」寄りにする（強い技のリスク）。 */
+  /** 「かすり」になりやすくする（強い技のリスク）。負なら かすりにくい。 */
   riskShift?: number;
-  /** ひっさつゲージ増加。 */
-  gauge?: number;
   /** 相手のステータスを下げる。 */
   debuff?: { stat: keyof Stats; turns: number };
-  unlock: UnlockTag[];
+  /** 連続攻撃の回数（1発ごとにダメージ・かすり・状態異常を判定）。 */
+  hits?: number;
+  /** きゅうしょ（クリティカル）の出やすさを足す（0.3 = +30%）。 */
+  critBoost?: number;
+  /** 相手のHPが4わり以下のとき、ダメージにかかる倍率。 */
+  execute?: number;
+  /** 相手が「こうげき」を選んでいたときだけ決まる（それ以外は失敗）。 */
+  ambush?: boolean;
   desc: string;
 }
 
-const DEFAULT: Omit<MoveDef, 'id' | 'name' | 'category' | 'power' | 'unlock' | 'desc'> = {
-  attribute: null,
-  cooldown: 0,
-  target: 'enemy' };
-
 /** 攻撃わざ。 */
-function atk(
-  id: string,
-  name: string,
-  power: number,
-  unlock: UnlockTag[],
-  desc: string,
-  extra: Partial<MoveDef> = {},
-): MoveDef {
-  return { ...DEFAULT, id, name, category: 'attack', power, unlock, desc, ...extra };
+function atk(id: string, name: string, power: number, desc: string, extra: Partial<MoveDef> = {}): MoveDef {
+  return { attribute: null, target: 'enemy', ...extra, id, name, category: 'attack', power, desc };
 }
 
 /** 補助わざ。 */
-function sup(
-  id: string,
-  name: string,
-  power: number,
-  unlock: UnlockTag[],
-  desc: string,
-  extra: Partial<MoveDef> = {},
-): MoveDef {
-  return { ...DEFAULT, id, name, category: 'support', power, target: 'self', unlock, desc, ...extra };
+function sup(id: string, name: string, desc: string, extra: Partial<MoveDef> = {}): MoveDef {
+  return { attribute: null, ...extra, id, name, category: 'support', power: 0, target: extra.target ?? 'self', desc };
 }
-
-function attrLine(a: Attribute, names: [string, string, string], status: StatusKind): MoveDef[] {
-  const st = STATUS_JP[status];
-  return [
-    atk(`${a}_a1`, names[0], 14, [`attr:${a}`, 'attr-tier:1'], `威力ひかえめ。ときどき${st}。`, { attribute: a, status: { kind: status, chance: 0.4 } }),
-    atk(`${a}_a2`, names[1], 24, [`attr:${a}`, 'attr-tier:2'], `威力ふつう。高い確率で${st}。`, { attribute: a, status: { kind: status, chance: 0.6 } }),
-    atk(`${a}_a3`, names[2], 38, [`attr:${a}`, 'attr-tier:3'], `威力大。ほぼ${st}。当てにくい。`, { attribute: a, riskShift: 8, status: { kind: status, chance: 0.9 } }),
-  ];
-}
-
-const STATUS_JP: Record<string, string> = {
-  burn: 'やけど', paralysis: 'まひ', freeze: 'こおり', sleep: 'ねむり',
-  poison: 'どく', confuse: 'こんらん', flinch: 'ひるみ' };
 
 export const MOVES: Record<MoveId, MoveDef> = Object.fromEntries(
   (
     [
-      // ===== 共通（だれでも） =====
-      atk('c_scratch', 'ひっかき', 13, ['common'], '威力ひかえめ。手数を稼ぐ小技。', {}),
-      atk('c_tackle', 'たいあたり', 20, ['common'], '威力ふつう。クセのない体当たり。', {}),
-      atk('c_bite', 'かみつき', 30, ['common'], '威力大。', { }),
-      sup('c_guard', 'ガード', 0, ['common'], '2ターン、受けるダメージが 半分に なる。', { guardPct: 55 }),
-      sup('c_focus', 'きあいだめ', 0, ['common'], '3ターン、こうげきが 5わり上がる。', { buff: { stat: 'atk', turns: 3 } }),
-      atk('c_gamble', 'ギャンブルアタック', 35, ['common'], '威力特大。外れ・かすりが多い。', { riskShift: 16 }),
+      // ===== こうげき：ふつう =====
+      atk('c_scratch', 'ひっかき', 14, 'ちいさな ダメージ。かすりにくい。', { riskShift: -8 }),
+      atk('c_tackle', 'たいあたり', 22, 'ふつうの たいあたり。'),
+      atk('c_bite', 'かみつき', 30, 'つよい かみつき。'),
 
-      // ===== 属性ライン（3段階・進化で上がる） =====
-      ...attrLine('fire', ['ひのこ', 'かえん', 'ごうか'], 'burn'),
-      ...attrLine('water', ['みずでっぽう', 'すいりゅう', 'だくりゅう'], 'freeze'),
-      ...attrLine('wood', ['つるむち', 'いばらムチ', 'もりのいかり'], 'poison'),
-      ...attrLine('bolt', ['でんげき', 'いなずま', 'かみなり'], 'paralysis'),
-      ...attrLine('dark', ['かげぬい', 'やみのやいば', 'あんこく'], 'confuse'),
+      // ===== こうげき：先に動く =====
+      atk('sm_dart', 'スニークムーブ', 16, 'かならず 先に うごく。', { first: true }),
+      atk('wg_dive', 'きゅうこうか', 24, 'かならず 先に うごく。', { first: true }),
+      atk('fi_charge', 'とっしん', 30, '先に うごく。そのかわり 反動を うける。', { first: true, recoil: 20 }),
+      atk('as_sucker', 'ふいうち', 32, 'あいてが こうげきを えらんだときだけ 先に きまる。ほかは しっぱい。', { first: true, ambush: true }),
 
-      // 属性シグネチャー（強力な切り札）＋ 属性の補助
-      atk('fire_sig', 'フレアバスター', 36, ['attr:fire', 'mood:fierce'], '威力特大。ぼうぎょ無視。必ずやけど。', { attribute: 'fire', pierce: true, riskShift: 6, status: { kind: 'burn', chance: 1 } }),
-      sup('fire_dry', 'ねっぷう', 0, ['attr:fire'], 'こおり などを 吹き飛ばして 少し回復。', { cures: 'one', heal: 12 }),
-      atk('water_sig', 'アクアカノン', 36, ['attr:water', 'weapon:wand'], '威力特大。ぼうぎょ無視。必ず こおり。', { attribute: 'water', pierce: true, status: { kind: 'freeze', chance: 1 } }),
-      sup('water_wash', 'みずであらう', 0, ['attr:water', 'mood:calm'], 'やけど・どくを洗い流して中回復。', { cures: 'all', heal: 16 }),
-      atk('wood_sig', 'ジャングルバインド', 34, ['attr:wood', 'shape:big'], '威力大。必ず どく。', { attribute: 'wood', status: { kind: 'poison', chance: 1 } }),
-      sup('wood_root', 'ねをはる', 0, ['attr:wood'], '3ターン、受けるダメージ 40%減＋少し回復。', { buff: { stat: 'def', turns: 3 }, heal: 10 }),
-      atk('bolt_sig', 'サンダーレイド', 34, ['attr:bolt', 'part:wings'], '威力大。必ず先制。高い確率で まひ。', { attribute: 'bolt', first: true, status: { kind: 'paralysis', chance: 0.9 } }),
-      atk('dark_sig', 'ドレインバイト', 32, ['attr:dark', 'mood:fierce'], '威力大。与ダメージの半分を回復。ときどき こんらん。', { attribute: 'dark', drain: 55, status: { kind: 'confuse', chance: 0.5 } }),
-      sup('dark_veil', 'やみのベール', 0, ['attr:dark'], 'すばやさアップ（2ターン）＋回避が上がる。', { buff: { stat: 'spd', turns: 2 } }),
+      // ===== こうげき：くせのある技 =====
+      atk('sw_rapid', 'れんぞくぎり', 9, '3かい つづけて きる。', { hits: 3 }),
+      atk('ey_aim', 'ねらいうち', 24, 'きゅうしょに あたりやすい。', { critBoost: 0.35 }),
+      atk('fi_finish', 'とどめのキバ', 26, 'あいての HPが 4わり いかだと 1.7ばいの ダメージ。', { execute: 1.7 }),
+      atk('wd_bolt', 'まほうだん', 22, 'あいての ぼうぎょを むしする。', { pierce: true }),
+      atk('wd_mega', 'メガチャージ', 35, 'ぼうぎょを むし。つよいが かすりやすい。', { pierce: true, riskShift: 6 }),
+      atk('sw_great', 'だいせつだん', 37, 'とても つよいが かすりやすい。', { riskShift: 10 }),
+      atk('fi_rampage', 'あばれる', 34, 'つよい。そのかわり 反動を うける。', { recoil: 15 }),
 
-      // ===== 形：トゲトゲ =====
-      atk('sp_claw', 'するどいツメ', 22, ['shape:spiky'], '威力ふつう。鋭い爪で切り裂く。', {}),
-      atk('sp_horn', 'つのアタック', 30, ['shape:spiky'], '威力大。ときどきひるみ。', { status: { kind: 'flinch', chance: 0.5 } }),
-      sup('sp_thorn', 'とげのよろい', 0, ['shape:spiky'], '2ターン、攻撃してきた相手に ダメージの 3わり を返す。', { reflect: 35 }),
-      atk('sp_pierce', 'つらぬきトゲ', 16, ['shape:spiky'], '威力ひかえめ。ぼうぎょ無視。', { pierce: true }),
+      // ===== こうげき：じょうたいいじょう =====
+      atk('fire_a2', 'かえん', 24, '60% で やけど。', { attribute: 'fire', status: { kind: 'burn', chance: 0.6 } }),
+      atk('water_a2', 'すいりゅう', 24, '40% で こおり。うごけなくする。', { attribute: 'water', status: { kind: 'freeze', chance: 0.4 } }),
+      atk('wood_a2', 'いばらムチ', 24, '60% で どく。', { attribute: 'wood', status: { kind: 'poison', chance: 0.6 } }),
+      atk('bolt_a2', 'いなずま', 24, '55% で まひ。', { attribute: 'bolt', status: { kind: 'paralysis', chance: 0.55 } }),
+      atk('dark_a2', 'やみのやいば', 24, '55% で こんらん。', { attribute: 'dark', status: { kind: 'confuse', chance: 0.55 } }),
+      atk('sp_horn', 'つのアタック', 30, '50% で ひるみ。つぎの こうげきが かすりに なる。', { status: { kind: 'flinch', chance: 0.5 } }),
+      atk('as_trick', 'トリッキー', 20, '35% で ねむらせる。', { status: { kind: 'sleep', chance: 0.35 } }),
+      atk('u_poison_needle', 'どくばり', 10, 'ほぼ かならず どく。', { status: { kind: 'poison', chance: 0.9 } }),
+      atk('co_rainbow', 'にじいろだま', 24, 'ランダムな ぞくせいと じょうたいいじょう。', { randomAttr: true }),
 
-      // ===== 形：まる =====
-      atk('ro_roll', 'ころがる', 26, ['shape:round'], '威力ふつう。まるまって転がり突撃。', { }),
-      sup('ro_ball', 'まるまる', 0, ['shape:round'], '2ターン、受けるダメージが 半分に なる。', { guardPct: 65 }),
-      sup('ro_puff', 'ふくらむ', 0, ['shape:round'], '3ターン、受けるダメージが 40% へる。', { buff: { stat: 'def', turns: 2 } }),
+      // ===== こうげき：大技（めったに配られない） =====
+      atk('fire_sig', 'フレアバスター', 36, 'ぼうぎょ無視。かならず やけど。', { attribute: 'fire', pierce: true, riskShift: 6, status: { kind: 'burn', chance: 1 } }),
+      atk('water_sig', 'アクアカノン', 36, 'ぼうぎょ無視。80% で こおり。', { attribute: 'water', pierce: true, status: { kind: 'freeze', chance: 0.8 } }),
+      atk('wood_sig', 'ジャングルバインド', 34, 'かならず どく。', { attribute: 'wood', status: { kind: 'poison', chance: 1 } }),
+      atk('bolt_sig', 'サンダーレイド', 32, '先に うごく。90% で まひ。', { attribute: 'bolt', first: true, status: { kind: 'paralysis', chance: 0.9 } }),
+      atk('dark_sig', 'ドレインバイト', 32, 'ダメージの 半分を かいふく。50% で こんらん。', { attribute: 'dark', drain: 55, status: { kind: 'confuse', chance: 0.5 } }),
+      atk('wi_slam', 'のしかかり', 34, '60% で ひるみ。', { status: { kind: 'flinch', chance: 0.6 } }),
 
-      // ===== 形：たて長 =====
-      atk('ta_stretch', 'のびパンチ', 18, ['shape:tall'], '威力ひかえめ。必ず先制。', { first: true }),
-      atk('ta_kick', 'ハイキック', 28, ['shape:tall'], '威力大。', { }),
-      sup('ta_look', 'みおろす', 0, ['shape:tall'], 'すばやさアップ（2ターン）。', { buff: { stat: 'spd', turns: 2 } }),
+      // ===== ほじょ：まもり（先に うごく） =====
+      sup('c_guard', 'ガード', '先に うごく。2ターン、うけるダメージが 半分。', { guardPct: 50 }),
+      sup('wood_root', 'ねをはる', '先に うごく。3ターン、うけるダメージ 40%へらす。少し かいふく。', { buff: { stat: 'def', turns: 3 }, heal: 10 }),
+      sup('sh_counter', 'カウンター', '先に うごく。2ターン、こうげきしてきた あいてに ダメージの 半分を かえす。', { reflect: 35 }),
 
-      // ===== 形：よこ広 =====
-      atk('wi_slam', 'のしかかり', 34, ['shape:wide', 'shape:big'], '威力特大。高確率でひるみ。', { status: { kind: 'flinch', chance: 0.6 } }),
-      sup('wi_stance', 'どっしりかまえ', 0, ['shape:wide'], '2ターン、受けるダメージが 半分に なる。', { guardPct: 55 }),
-      atk('wi_don', 'たいあたりドン', 30, ['shape:wide'], '威力大。全体重の体当たり。', { }),
+      // ===== ほじょ：かいふく =====
+      sup('ca_heal', 'いやしのて', 'HPを おおきく かいふく。', { heal: 34 }),
+      sup('ca_breath', 'ふかこきゅう', 'じょうたいいじょうを 1つ なおして かいふく。', { cures: 'one', heal: 15 }),
+      sup('water_wash', 'みずであらう', 'じょうたいいじょうを ぜんぶ なおして かいふく。', { cures: 'all', heal: 16 }),
+      sup('u_detox', 'デトックス', 'じょうたいいじょうを ぜんぶ なおす。', { cures: 'all' }),
 
-      // ===== 形：大きい =====
-      atk('bg_press', 'グランドプレス', 36, ['shape:big'], '威力特大。当てにくい。', { riskShift: 6 }),
-      atk('bg_body', 'ボディブロー', 30, ['shape:big'], '威力大。ずしんと効く一発。', { }),
-      sup('bg_weight', 'おもみ', 0, ['shape:big'], '3ターン、受けるダメージが 40% へる。', { buff: { stat: 'def', turns: 2 } }),
+      // ===== ほじょ：じぶんを つよくする =====
+      sup('c_focus', 'きあいだめ', '3ターン、こうげきが 5わり あがる。', { buff: { stat: 'atk', turns: 3 } }),
+      sup('wg_flap', 'はばたき', '3ターン、すばやさが 5わり あがる。かわしやすい。', { buff: { stat: 'spd', turns: 3 } }),
+      sup('ey_read', 'よみのちから', '3ターン、きゅうしょに とても あたりやすい。', { buff: { stat: 'luck', turns: 3 } }),
 
-      // ===== 形：小さい =====
-      atk('sm_jab', 'クイックジャブ', 16, ['shape:small'], '威力ひかえめ。小さく素早い一撃。', {}),
-      atk('sm_dart', 'スニークムーブ', 17, ['shape:small'], '威力ひかえめ。必ず先制。', { first: true }),
-      sup('sm_slip', 'すりぬけ', 0, ['shape:small'], 'すばやさアップ（回避も上がる）。', { buff: { stat: 'spd', turns: 2 } }),
-
-      // ===== 形：左右対称 =====
-      atk('sy_straight', 'せいけん', 26, ['shape:symmetric'], '威力ふつう。まっすぐ強い一撃。', {}),
-      sup('sy_wall', 'てっぺき', 0, ['shape:symmetric'], '2ターン、受けるダメージが 半分に なる。', { guardPct: 80 }),
-      atk('sy_balance', 'バランスアタック', 22, ['shape:symmetric'], '威力ふつう。くずれない構えから打つ。', {}),
-
-      // ===== 形：非対称 =====
-      atk('as_trick', 'トリッキー', 20, ['shape:asymmetric'], '威力ふつう。ときどき ねむらせる。', { status: { kind: 'sleep', chance: 0.35 } }),
-      atk('as_swap', 'いれかわり', 18, ['shape:asymmetric'], '威力ひかえめ。不意をつく一撃。', {}),
-      atk('as_weird', 'へんそくアタック', 24, ['shape:asymmetric'], '威力ふつう。クセのある一撃。', { }),
-
-      // ===== 部位：目 =====
-      atk('ey_see', 'みやぶり', 22, ['part:eyes'], '威力ふつう。ぼうぎょ無視。', { pierce: true }),
-      sup('ey_glare', 'にらむ', 0, ['part:eyes'], '相手のこうげきを下げる（2ターン）。', { target: 'enemy', debuff: { stat: 'atk', turns: 2 } }),
-      atk('ey_aim', 'ねらいうち', 26, ['part:eyes'], '威力ふつう。よく狙った一撃。', { }),
-      sup('ey_read', 'よみのちから', 0, ['part:eyes'], 'きゅうしょアップ（3ターン）。', { buff: { stat: 'luck', turns: 3 } }),
-
-      // ===== 部位：翼 =====
-      atk('wg_dive', 'きゅうこうか', 26, ['part:wings'], '威力ふつう。必ず先制。', { first: true }),
-      sup('wg_flap', 'はばたき', 0, ['part:wings'], 'すばやさを大きく上げる。', { buff: { stat: 'spd', turns: 2 } }),
-      atk('wg_wind', 'かぜのやいば', 18, ['part:wings'], '威力ひかえめ。風の刃。', {}),
-      sup('wg_soar', 'まいあがる', 0, ['part:wings'], 'すばやさアップ（回避も上がる）。', { buff: { stat: 'spd', turns: 2 } }),
-
-      // ===== 雰囲気：好戦的 =====
-      atk('fi_rampage', 'あばれる', 34, ['mood:fierce'], '威力特大。少し反動を受ける。', { recoil: 15 }),
-      atk('fi_charge', 'とっしん', 26, ['mood:fierce'], '威力ふつう。必ず先制。', { first: true }),
-      sup('fi_anger', 'いかり', 0, ['mood:fierce'], 'こうげきを大きく上げる（少し自分もやけど）。', { buff: { stat: 'atk', turns: 2 }, status: { kind: 'burn', chance: 0.3, toSelf: true } }),
-      atk('fi_finish', 'とどめのキバ', 28, ['mood:fierce'], '威力大。弱った相手にとくに効く。', { }),
-
-      // ===== 雰囲気：穏やか =====
-      sup('ca_breath', 'ふかこきゅう', 0, ['mood:calm'], '状態異常を1つ治して少し回復。', { cures: 'one', heal: 15 }),
-      sup('ca_heal', 'いやしのて', 0, ['mood:calm'], 'HPを大きく回復。', { heal: 34 }),
-      sup('ca_watch', 'みまもる', 0, ['mood:calm'], '3ターン、受けるダメージが 40% へる。', { buff: { stat: 'def', turns: 2 } }),
-      sup('ca_song', 'いやしのうた', 0, ['mood:calm'], '状態異常をすべて治す。', { cures: 'all' }),
-      sup('ca_calm', 'こころをしずめる', 0, ['mood:calm'], '3ターン、受けるダメージが 40% へる。', { buff: { stat: 'def', turns: 2 } }),
-
-      // ===== 装飾：カラフル =====
-      atk('co_rainbow', 'にじいろだま', 24, ['deco:colorful'], '威力ふつう。ランダムな属性の弾。', { randomAttr: true }),
-      sup('co_shine', 'きらめき', 0, ['deco:colorful'], 'きゅうしょアップ（3ターン）。', { buff: { stat: 'luck', turns: 3 } }),
-      atk('co_prism', 'プリズム', 26, ['deco:colorful'], '威力ふつう。光の一撃。', { }),
-
-      // ===== 装飾：シンプル =====
-      atk('pl_simple', 'シンプルアタック', 28, ['deco:plain'], '威力大。まっすぐ強い一撃。', {}),
-      sup('pl_focus', 'いっしんに', 0, ['deco:plain'], 'こうげきを大きく上げる（2ターン）。', { buff: { stat: 'atk', turns: 2 } }),
-      atk('pl_true', 'まっすぐ', 22, ['deco:plain'], '威力ふつう。ぼうぎょ無視。', { pierce: true }),
-
-      // ===== 持ち物：剣 =====
-      atk('sw_cut', 'きりつける', 28, ['weapon:sword'], '威力大。鋭く斬る。', { }),
-      atk('sw_rapid', 'れんぞくぎり', 14, ['weapon:sword'], '威力ひかえめ。素早く連続で斬る。', {}),
-      atk('sw_great', 'だいせつだん', 37, ['weapon:sword'], '威力最大級。大振りで当てにくい。', { riskShift: 10 }),
-
-      // ===== 持ち物：杖 =====
-      atk('wd_bolt', 'まほうだん', 22, ['weapon:wand'], '威力ふつう。ぼうぎょ無視の魔法弾。', { pierce: true }),
-      sup('wd_charge', 'チャージ', 0, ['weapon:wand'], '3ターン、こうげきが 5わり上がる。', { buff: { stat: 'atk', turns: 3 } }),
-      atk('wd_mega', 'メガチャージ', 35, ['weapon:wand'], '威力特大。ぼうぎょ無視。当てにくい。', { pierce: true, riskShift: 6 }),
-
-      // ===== 持ち物：盾 =====
-      atk('sh_bash', 'シールドバッシュ', 18, ['weapon:shield'], '威力ひかえめ。殴りつつ 2ターン ダメージ半分。', { guardPct: 25 }),
-      sup('sh_wall', 'ホーリーウォール', 0, ['weapon:shield'], '2ターン、受けるダメージが 半分に なる。', { guardPct: 85 }),
-      sup('sh_counter', 'カウンター', 0, ['weapon:shield'], '2ターン、攻撃してきた相手に ダメージの 3わり を返す。', { reflect: 55 }),
-
-      // ===== 汎用ユーティリティ（だれでも候補） =====
-      sup('u_detox', 'デトックス', 0, ['utility'], '状態異常をすべて治す。', { cures: 'all' }),
-      sup('u_endure', 'がまん', 0, ['utility'], '2ターン、受けるダメージ半分＋少し回復。', { guardPct: 40, heal: 10 }),
-      atk('u_poison_needle', 'どくばり', 8, ['utility', 'shape:spiky'], '威力ひかえめ。高確率でどく。', { status: { kind: 'poison', chance: 0.9 } }),
+      // ===== ほじょ：あいてを よわらせる =====
+      sup('ey_glare', 'にらむ', 'あいての こうげきを 2ターン さげる。', { target: 'enemy', debuff: { stat: 'atk', turns: 2 } }),
+      sup('ta_look', 'みおろす', 'あいての すばやさを 2ターン さげる。', { target: 'enemy', debuff: { stat: 'spd', turns: 2 } }),
+      sup('bg_roar', 'ほえる', 'あいてが うけるダメージを 2ターン 3わり ふやす。', { target: 'enemy', debuff: { stat: 'def', turns: 2 } }),
     ] as MoveDef[]
   ).map((m) => [m.id, m]),
 );
@@ -221,103 +134,12 @@ export function getMove(id: MoveId): MoveDef {
   return m;
 }
 
-/**
- * わざの「強さ星」1〜3。リールで一目で強弱が分かるように。
- * 攻撃は威力で、補助は効果の大きさで判定する。
- */
-export function moveStars(m: MoveDef): 1 | 2 | 3 {
-  if (m.category === 'attack') {
-    if (m.power >= 32) return 3;
-    if (m.power >= 18) return 2;
-    return 1;
-  }
-  const strong =
-    (m.guardPct ?? 0) >= 70 ||
-    (m.heal ?? 0) >= 28 ||
-    m.cures === 'all' ||
-    (m.reflect ?? 0) >= 50;
-  if (strong) return 3;
-  const mid =
-    (m.guardPct ?? 0) >= 40 ||
-    (m.heal ?? 0) >= 12 ||
-    !!m.buff ||
-    !!m.debuff ||
-    m.cures === 'one' ||
-    (m.reflect ?? 0) > 0;
-  return mid ? 2 : 1;
+/** 大技か（めったに配られない）。 */
+export function isRareMove(m: MoveDef): boolean {
+  return m.category === 'attack' && m.power >= 34;
 }
 
-/** 編成コスト＝強さ星（1〜3）。プレイヤーは合計 LOADOUT_BUDGET まで技を選べる。 */
-export function moveCost(m: MoveDef): 1 | 2 | 3 {
-  return moveStars(m);
-}
-/** 技セットの★予算（全員同じ固定）。 */
-export const LOADOUT_BUDGET = 6;
-
-/** 三すくみのカテゴリ。力＝重い一撃／技＝搦め手・補助／速さ＝軽い・先制。 */
-export type MoveCategory3 = 'power' | 'tech' | 'speed';
-
-/** 文字列→0..2^31 の決定論ハッシュ（同じ技IDは常に同じ値）。 */
-function hashId(id: string): number {
-  let h = 0;
-  for (let i = 0; i < id.length; i++) h = (Math.imul(h, 31) + id.charCodeAt(i)) >>> 0;
-  return h;
-}
-
-/**
- * わざを 力／技／速さ に振り分ける（Phase 17 三すくみ）。
- * 強い直感のあるものだけ固定ルールにする：
- * - 先制わざ → 速さ（先手＝すばやい）
- * - ものすごい大技（威力34+） → 力
- * - ごく軽いジャブ（威力1〜12） → 速さ
- * それ以外（補助わざ・中威力の攻撃わざ）は技IDのハッシュで3カテゴリに散らす。
- * 「補助わざ＝技」のように固定観念で偏らせず、絵ごとの得意カテゴリが本当に
- * バラける（同じ技は何度判定しても必ず同じカテゴリ＝決定論は保つ）。
- */
-/** 補助わざは「何をする技か」で系統を決める（まもり・かいふく=技、きょうか=力、すばやさ系=速さ）。 */
-function supportCategory(m: MoveDef): MoveCategory3 {
-  if (m.heal || m.cures || m.guardPct || m.reflect || m.buff?.stat === 'def') return 'tech';
-  if (m.buff?.stat === 'atk' || m.debuff?.stat === 'def') return 'power';
-  if (m.buff?.stat === 'spd' || m.debuff?.stat === 'spd') return 'speed';
-  const cats: MoveCategory3[] = ['power', 'tech', 'speed'];
-  return cats[hashId(m.id) % 3];
-}
-
-export function moveCategory(m: MoveDef): MoveCategory3 {
-  if (m.first) return 'speed';
-  if (m.power <= 0) return supportCategory(m);
-  if (m.power >= 34) return 'power';
-  if (m.power > 0 && m.power <= 12) return 'speed';
-  const cats: MoveCategory3[] = ['power', 'tech', 'speed'];
-  return cats[hashId(m.id) % 3];
-}
-
-/** 補助わざを「何をする技か」の一言に。リール表示用。 */
-export function supportKindWord(m: MoveDef): string {
-  if (m.cures) return 'かいふく';
-  if (m.heal) return 'かいふく';
-  if (m.guardPct) return 'ぼうぎょ';
-  if (m.reflect) return 'カウンター';
-  if (m.debuff) return 'よわらせ';
-  if (m.buff?.stat === 'atk') return 'こうげき↑';
-  if (m.buff?.stat === 'def') return 'ぼうぎょ↑';
-  if (m.buff?.stat === 'spd') return 'すばやさ↑';
-  if (m.buff?.stat === 'luck') return 'きゅうしょ↑';
-  return 'ほじょ';
-}
-
-export const ATTR_MOVE_TIERS: Record<Attribute, [MoveId, MoveId, MoveId]> = {
-  fire: ['fire_a1', 'fire_a2', 'fire_a3'],
-  water: ['water_a1', 'water_a2', 'water_a3'],
-  wood: ['wood_a1', 'wood_a2', 'wood_a3'],
-  bolt: ['bolt_a1', 'bolt_a2', 'bolt_a3'],
-  dark: ['dark_a1', 'dark_a2', 'dark_a3'] };
-
-export function attrMove(a: Attribute, skillLevel: number): MoveId {
-  return ATTR_MOVE_TIERS[a][Math.max(0, Math.min(2, skillLevel - 1))];
-}
-
-/** ある unlock タグを持つ技（属性ライン tier は除く）。 */
-export function movesByTag(tag: UnlockTag): MoveDef[] {
-  return Object.values(MOVES).filter((m) => m.unlock.includes(tag) && !m.unlock.some((t) => t.startsWith('attr-tier:')));
+/** 「先に動く」技か（先制・まもり・カウンター・ぼうぎょアップ）。 */
+export function hasPriority(m: MoveDef): boolean {
+  return !!(m.first || m.guardPct || m.reflect || (m.buff && m.buff.stat === 'def'));
 }

@@ -1,35 +1,60 @@
 import { describe, expect, it } from 'vitest';
 import { getKosei, KOSEI_LIST } from '../src/engine';
-import { getMove, moveCost, LOADOUT_BUDGET } from '../src/engine/moves';
+import { getMove, hasPriority, MOVES } from '../src/engine/moves';
 import { analyzeImageData } from '../src/engine/analyze';
 import { rectImage } from './helpers';
 
-// バトル本体（力/技/速さ 三すくみ）のテストは tests/clash.test.ts。
-// ここは「生成された技セット・こせい」の保証だけ。
+// バトル本体（手札方式）のテストは tests/clash.test.ts。
+// ここは「技データ・こせい」の保証だけ。
 
 function drawn(color: [number, number, number], w = 80, h = 90) {
   return analyzeImageData(rectImage(220, 220, w, h, color)).character;
 }
 
-describe('生成キャラの技セット・こせい', () => {
-  it('技候補プールは7個以上、初期おまかせ編成は★予算内', () => {
-    for (let seed = 0; seed < 30; seed++) {
-      const c = drawn([(seed * 53) % 256, (seed * 97) % 256, (seed * 29) % 256], 40 + (seed % 60), 50 + (seed % 60));
-      expect(c.movePool.length).toBeGreaterThanOrEqual(7);
-      expect(c.moveIds.length).toBeGreaterThanOrEqual(1);
-      const cost = c.moveIds.reduce((s, id) => s + moveCost(getMove(id)), 0);
-      expect(cost).toBeLessThanOrEqual(LOADOUT_BUDGET);
-      // 編成は必ず候補プールの部分集合
-      for (const id of c.moveIds) expect(c.movePool).toContain(id);
+describe('技データ・こせい', () => {
+  it('どの技も 名前・説明があり、攻撃は威力あり／補助は何かしらの効果を持つ', () => {
+    const ids = Object.keys(MOVES);
+    expect(ids.length).toBeGreaterThanOrEqual(35);
+    for (const m of Object.values(MOVES)) {
+      expect(m.name.length).toBeGreaterThan(0);
+      expect(m.desc.length).toBeGreaterThan(0);
+      if (m.category === 'attack') {
+        expect(m.power).toBeGreaterThan(0);
+      } else {
+        const hasEffect = !!(m.buff || m.debuff || m.heal || m.cures || m.guardPct || m.reflect);
+        expect(hasEffect).toBe(true);
+      }
     }
   });
 
-  it('候補プールに治療系のわざが必ず入る', () => {
-    const cures = ['ca_breath', 'ca_song', 'water_wash', 'fire_dry', 'u_detox', 'u_endure', 'ca_heal'];
-    for (let seed = 0; seed < 40; seed++) {
-      const c = drawn([(seed * 53) % 256, (seed * 97) % 256, (seed * 29) % 256], 50 + (seed % 50), 60 + (seed % 60));
-      expect(c.movePool.some((m) => cures.includes(m))).toBe(true);
-    }
+  it('名前の重複がない（手札に同じ名前が並ばない）', () => {
+    const names = Object.values(MOVES).map((m) => m.name);
+    expect(new Set(names).size).toBe(names.length);
+  });
+
+  it('手札の顔ぶれ：こうげき・まもり・かいふく・バフ・デバフ・先制・状態異常が すべてそろう', () => {
+    const all = Object.values(MOVES);
+    expect(all.some((m) => m.category === 'attack' && m.first)).toBe(true);
+    expect(all.some((m) => m.guardPct)).toBe(true);
+    expect(all.some((m) => m.reflect)).toBe(true);
+    expect(all.some((m) => m.heal)).toBe(true);
+    expect(all.some((m) => m.cures)).toBe(true);
+    expect(all.some((m) => m.buff)).toBe(true);
+    expect(all.some((m) => m.debuff)).toBe(true);
+    expect(all.some((m) => m.status)).toBe(true);
+    expect(all.some((m) => m.hits && m.hits > 1)).toBe(true);
+    const supportShare = all.filter((m) => m.category === 'support').length / all.length;
+    expect(supportShare).toBeGreaterThan(0.25);
+    expect(supportShare).toBeLessThan(0.5);
+  });
+
+  it('先に動く技の判定（先制・ガード・カウンター・ぼうぎょアップ）', () => {
+    expect(hasPriority(getMove('c_guard'))).toBe(true);
+    expect(hasPriority(getMove('sm_dart'))).toBe(true);
+    expect(hasPriority(getMove('sh_counter'))).toBe(true);
+    expect(hasPriority(getMove('wood_root'))).toBe(true);
+    expect(hasPriority(getMove('c_tackle'))).toBe(false);
+    expect(hasPriority(getMove('ca_heal'))).toBe(false);
   });
 
   it('こせい：120種（24テンプレ×5属性）で全て 属性＋形タグを持つ・生成キャラは有効なこせい', () => {

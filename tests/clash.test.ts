@@ -114,9 +114,11 @@ describe('手札バトル', () => {
     const names = acts(st.log).map((e) => e.moveName);
     expect(names).toContain(getMove('c_tackle').name);
     expect(names).toContain(getMove('c_scratch').name);
-    // 公開イベントに両者のカードが入る
-    const rev = st.log.find((e) => e.t === 'reveal');
-    expect(rev && rev.t === 'reveal' && rev.cards[0].name).toBe(getMove('c_tackle').name);
+    // 行動順のイベントが出る（すばやさ比べの演出用）
+    const ord = st.log.find((e) => e.t === 'order');
+    expect(ord && ord.t === 'order' && ord.spd.length).toBe(2);
+    // 行動イベントに技IDが入る
+    expect(acts(st.log).map((e) => e.moveId)).toEqual(expect.arrayContaining(['c_tackle', 'c_scratch']));
   });
 
   it('行動順：すばやさが高い方が先／まもり系・先制技は先に動く', () => {
@@ -130,7 +132,7 @@ describe('手札バトル', () => {
     st = resolveClashTurn(createClashState(slow, fast, 4), ['c_guard', 'c_tackle']);
     expect(acts(st.log)[0].side).toBe(0);
     // 遅い側が 先制技
-    st = resolveClashTurn(createClashState(slow, fast, 4), ['ta_stretch', 'c_tackle']);
+    st = resolveClashTurn(createClashState(slow, fast, 4), ['sm_dart', 'c_tackle']);
     expect(acts(st.log)[0].side).toBe(0);
   });
 
@@ -209,5 +211,50 @@ describe('手札バトル', () => {
     }
     expect(wins0 / decided).toBeGreaterThan(0.35);
     expect(wins0 / decided).toBeLessThan(0.65);
+  });
+
+  it('ふいうち：相手が こうげきを選んだときだけ決まる／ほかは しっぱい', () => {
+    const mk = () => createClashState(drawn([210, 40, 30]), drawn([30, 90, 210]), 21);
+    const hit = resolveClashTurn(mk(), ['as_sucker', 'c_tackle']);
+    expect(hit.log.some((e) => e.t === 'damage' && e.side === 1)).toBe(true);
+    const miss = resolveClashTurn(mk(), ['as_sucker', 'c_guard']);
+    expect(miss.log.some((e) => e.t === 'damage' && e.side === 1)).toBe(false);
+    expect(acts(miss.log).some((e) => e.side === 0 && e.kind === 'blocked')).toBe(true);
+  });
+
+  it('れんぞくぎり：1回の行動で3回ダメージが入る', () => {
+    const st = resolveClashTurn(
+      createClashState(drawn([210, 40, 30]), drawn([30, 90, 210]), 5),
+      ['sw_rapid', 'c_guard'],
+    );
+    const hits = st.log.filter((e) => e.t === 'damage' && e.side === 1).length;
+    expect(hits).toBe(3);
+  });
+
+  it('とどめのキバ：弱った相手には 大きく効く', () => {
+    const run = (hpPct: number) => {
+      let total = 0;
+      for (let seed = 1; seed <= 30; seed++) {
+        const st0 = createClashState(drawn([210, 40, 30]), drawn([30, 90, 210]), seed);
+        st0.combatants[1].hp = Math.round(st0.combatants[1].maxHp * hpPct);
+        const before = st0.combatants[1].hp;
+        const st = resolveClashTurn(st0, ['fi_finish', 'c_guard']);
+        total += before - st.combatants[1].hp;
+      }
+      return total;
+    };
+    expect(run(0.35)).toBeGreaterThan(run(0.9) * 1.3);
+  });
+
+  it('にじいろだま：ランダムな状態異常が付くことがある', () => {
+    let any = false;
+    for (let seed = 1; seed <= 40 && !any; seed++) {
+      const st = resolveClashTurn(
+        createClashState(drawn([210, 40, 30]), drawn([30, 90, 210]), seed),
+        ['co_rainbow', 'c_scratch'],
+      );
+      any = st.log.some((e) => e.t === 'status-apply' && e.side === 1);
+    }
+    expect(any).toBe(true);
   });
 });

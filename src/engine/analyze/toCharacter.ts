@@ -1,6 +1,6 @@
 import type { Attribute, AnalysisReason, Character, Stats, Weapon } from '../types';
 import { ATTRIBUTE_META } from '../attributes';
-import { assignMovePool, autoLoadout, activeTags } from '../moves';
+import { activeTags } from './tags';
 import { assignKosei, getKosei, koseiTitle } from '../personalities';
 import { mulberry32, randInt, type Rng } from '../rng';
 import { clamp01, type FeatureVector } from './features';
@@ -193,10 +193,7 @@ export function featuresToCharacter(
   );
 
   const baseStats: Stats = { hp, atk, def, spd, luck, heart };
-  const skillLevel = 1;
-  const movePool = assignMovePool({ features: f, attribute, weapon, personality, skillLevel }, seed);
-  const moveIds = autoLoadout(movePool, seed);
-  const tags = activeTags({ features: f, attribute, weapon, personality, skillLevel });
+  const tags = activeTags({ features: f, weapon, personality });
   const koseiId = assignKosei(attribute, tags, seed, archetypeLabel(baseStats));
   const kosei = getKosei(koseiId);
   const koseiName = koseiTitle(tags, seed);
@@ -212,11 +209,8 @@ export function featuresToCharacter(
     weapon,
     personality,
     baseStats,
-    moveIds,
-    movePool,
     koseiId,
     koseiTitle: koseiName,
-    skillLevel,
     analysis,
     seed: seed >>> 0,
     wins: 0,

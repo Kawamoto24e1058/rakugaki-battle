@@ -34,13 +34,11 @@ function ai(overrides: Partial<AiFeatures> = {}): AiFeatures {
 }
 
 describe('AI Vision の特徴 → キャラ変換', () => {
-  it('AI の属性・名前が反映され、キャラが妥当（5〜9技・有効なこせい・ステータス範囲内）', () => {
+  it('AI の属性・名前が反映され、キャラが妥当（有効なこせい・ステータス範囲内）', () => {
     for (let seed = 0; seed < 30; seed++) {
       const c = aiFeaturesToCharacter(ai({ attribute: (['fire', 'water', 'wood', 'bolt', 'dark'] as const)[seed % 5], name: `キャラ${seed}` }), seed * 101 + 7);
       expect(c.attribute).toBe((['fire', 'water', 'wood', 'bolt', 'dark'] as const)[seed % 5]);
       expect(c.name).toBe(`キャラ${seed}`);
-      expect(c.movePool.length).toBeGreaterThanOrEqual(6);
-      expect(c.moveIds.length).toBeGreaterThanOrEqual(1);
       expect(() => getKosei(c.koseiId)).not.toThrow();
       const { hp, atk, def, spd } = c.baseStats;
       expect(hp).toBeGreaterThanOrEqual(40);
@@ -54,7 +52,6 @@ describe('AI Vision の特徴 → キャラ変換', () => {
     const a = aiFeaturesToCharacter(ai(), 555);
     const b = aiFeaturesToCharacter(ai(), 555);
     expect(a.baseStats).toEqual(b.baseStats);
-    expect(a.moveIds).toEqual(b.moveIds);
     expect(a.koseiId).toBe(b.koseiId);
   });
 

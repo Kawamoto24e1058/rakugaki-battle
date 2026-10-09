@@ -10,7 +10,9 @@
 import type { Attribute, Character, StatusKind, Stats } from '../types';
 import { attributeStatusMult } from '../attributes';
 import { STATUS_META, type ActiveStatus } from '../status';
-import { MOVES, getMove, type MoveDef, type MoveId } from '../moves';
+import { MOVES, getMove, hasPriority, isRareMove, type MoveDef, type MoveId } from '../moves';
+import { ATTRIBUTE_STATUS } from '../status';
+import { ATTRIBUTES } from '../types';
 import { koseiOrDefault, type Kosei } from '../personalities';
 import { mulberry32, type Rng } from '../rng';
 
@@ -51,17 +53,13 @@ export interface ClashCombatant {
 
 export type ActKind = 'attack' | 'support' | 'kosei' | 'blocked';
 
-/** 公開された「選んだカード」の見せ方。 */
-export interface RevealCard {
-  name: string;
-  kind: 'attack' | 'support' | 'kosei';
-  attribute: Attribute | null;
-}
+/** どちらが先に動くか、の理由。 */
+export type OrderReason = 'kosei' | 'priority' | 'passive' | 'speed' | 'coin';
 
 export type ClashEvent =
   | { t: 'turn'; turn: number }
-  | { t: 'reveal'; cards: [RevealCard, RevealCard] }
-  | { t: 'act'; side: Side; moveName: string; kind: ActKind }
+  | { t: 'order'; first: Side; reason: OrderReason; spd: [number, number] }
+  | { t: 'act'; side: Side; moveName: string; kind: ActKind; moveId: string }
   | { t: 'damage'; side: Side; amount: number; hpAfter: number; tag: string | null }
   | { t: 'heal'; side: Side; amount: number; hpAfter: number }
   | { t: 'status-apply'; side: Side; kind: StatusKind }
@@ -139,11 +137,6 @@ export function effStat(c: ClashCombatant, stat: keyof Stats): number {
 
 const DRAW_POOL: MoveDef[] = Object.values(MOVES);
 
-/** 強い技（大技）かどうか。レアなので配られにくい（運が高いと出やすい）。 */
-function isRare(m: MoveDef): boolean {
-  return m.category === 'attack' && m.power >= 34;
-}
-
 function dealWeight(c: ClashCombatant, m: MoveDef): number {
   let w = 1;
   if (m.category === 'attack') {
@@ -151,7 +144,7 @@ function dealWeight(c: ClashCombatant, m: MoveDef): number {
   } else {
     w *= c.personality === 'calm' ? 1.4 : 0.9;
   }
-  if (isRare(m)) w *= 0.6 * (1 + c.base.luck / 40);
+  if (isRareMove(m)) w *= 0.6 * (1 + c.base.luck / 40);
   return w;
 }
 
@@ -191,11 +184,6 @@ function MOVES_SAFE(id: MoveId): MoveDef | null {
   }
 }
 
-/** 先に動く技か（まもり系・先制技）。 */
-function hasPriority(m: MoveDef): boolean {
-  return !!(m.first || m.guardPct || m.reflect || (m.buff && m.buff.stat === 'def'));
-}
-
 // ---------- ターン解決 ----------
 
 interface Pick {
@@ -212,11 +200,6 @@ function resolveChoice(state: ClashState, side: Side, choice: ClashChoice): Pick
   return { move: (fb && MOVES_SAFE(fb)) || MOVES.c_tackle };
 }
 
-function revealCard(c: ClashCombatant, p: Pick): RevealCard {
-  if (!p.move) return { name: kosei(c).activeName, kind: 'kosei', attribute: c.attribute };
-  return { name: p.move.name, kind: p.move.category === 'support' ? 'support' : 'attack', attribute: p.move.attribute };
-}
-
 export function resolveClashTurn(state: ClashState, choices: [ClashChoice, ClashChoice]): ClashState {
   if (state.done) return state;
   const rng = mulberry32((state.seed + state.turn * 0x9e3779b1) >>> 0);
@@ -224,15 +207,16 @@ export function resolveClashTurn(state: ClashState, choices: [ClashChoice, Clash
   const log: ClashEvent[] = [];
 
   const picks: [Pick, Pick] = [resolveChoice(next, 0, choices[0]), resolveChoice(next, 1, choices[1])];
+  const { order, reason } = decideOrder(next, picks, rng);
   log.push({
-    t: 'reveal',
-    cards: [revealCard(next.combatants[0], picks[0]), revealCard(next.combatants[1], picks[1])],
+    t: 'order',
+    first: order[0],
+    reason,
+    spd: [Math.round(effStat(next.combatants[0], 'spd')), Math.round(effStat(next.combatants[1], 'spd'))],
   });
-
-  const order = decideOrder(next, picks, rng);
   for (const side of order) {
     if (next.winner !== null) break;
-    act(next, side, picks[side], rng, log);
+    act(next, side, picks[side], picks[(1 - side) as Side], rng, log);
     checkFaint(next);
   }
 
@@ -299,23 +283,23 @@ export function resolveClashTurn(state: ClashState, choices: [ClashChoice, Clash
 }
 
 
-function decideOrder(state: ClashState, picks: [Pick, Pick], rng: Rng): Side[] {
+function decideOrder(state: ClashState, picks: [Pick, Pick], rng: Rng): { order: Side[]; reason: OrderReason } {
   const prio = (p: Pick) => (!p.move ? 2 : hasPriority(p.move) ? 1 : 0);
   const p0 = prio(picks[0]);
   const p1 = prio(picks[1]);
-  if (p0 !== p1) return p0 > p1 ? [0, 1] : [1, 0];
+  if (p0 !== p1) return { order: p0 > p1 ? [0, 1] : [1, 0], reason: Math.max(p0, p1) === 2 ? 'kosei' : 'priority' };
   const f0 = kosei(state.combatants[0]).passive.kind === 'firstMove';
   const f1 = kosei(state.combatants[1]).passive.kind === 'firstMove';
-  if (f0 !== f1) return f0 ? [0, 1] : [1, 0];
+  if (f0 !== f1) return { order: f0 ? [0, 1] : [1, 0], reason: 'passive' };
   const s0 = effStat(state.combatants[0], 'spd');
   const s1 = effStat(state.combatants[1], 'spd');
-  if (s0 === s1) return rng() < 0.5 ? [0, 1] : [1, 0];
-  return s0 > s1 ? [0, 1] : [1, 0];
+  if (s0 === s1) return { order: rng() < 0.5 ? [0, 1] : [1, 0], reason: 'coin' };
+  return { order: s0 > s1 ? [0, 1] : [1, 0], reason: 'speed' };
 }
 
-function act(state: ClashState, side: Side, pick: Pick, rng: Rng, log: ClashEvent[]): void {
+function act(state: ClashState, side: Side, pick: Pick, foePick: Pick, rng: Rng, log: ClashEvent[]): void {
   const c = state.combatants[side];
-  const blocked = (moveName: string) => log.push({ t: 'act', side, moveName, kind: 'blocked' });
+  const blocked = (moveName: string) => log.push({ t: 'act', side, moveName, kind: 'blocked', moveId: pick.move?.id ?? 'kosei' });
 
   // こおり：とけるか？（とけなければ行動不能）
   const frozen = c.statuses.find((s) => s.kind === 'freeze');
@@ -351,11 +335,29 @@ function act(state: ClashState, side: Side, pick: Pick, rng: Rng, log: ClashEven
     applyKosei(state, side, rng, log);
     return;
   }
-  const move = pick.move;
+  let move = pick.move;
+  // ふいうち：相手が こうげきを選んでいないと しっぱい
+  if (move.ambush && foePick.move?.category !== 'attack') {
+    blocked(`（${move.name}は しっぱい… あいては こうげきしなかった）`);
+    return;
+  }
   const isSupport = move.category === 'support';
-  log.push({ t: 'act', side, moveName: move.name, kind: isSupport ? 'support' : 'attack' });
-  if (isSupport) applySupport(state, side, move, log);
-  else dealDamage(state, side, move, {}, rng, log);
+  log.push({ t: 'act', side, moveName: move.name, kind: isSupport ? 'support' : 'attack', moveId: move.id });
+  if (isSupport) {
+    applySupport(state, side, move, log);
+    return;
+  }
+  // にじいろだま：ランダムな属性とその状態異常
+  if (move.randomAttr) {
+    const attr = ATTRIBUTES[Math.floor(rng() * ATTRIBUTES.length)];
+    move = { ...move, attribute: attr, status: { kind: ATTRIBUTE_STATUS[attr], chance: 0.5 } };
+  }
+  const target = state.combatants[1 - side as Side];
+  for (let i = 0; i < (move.hits ?? 1); i++) {
+    if (state.winner !== null || target.hp <= 0 || c.hp <= 0) break;
+    dealDamage(state, side, move, {}, rng, log);
+    checkFaint(state);
+  }
 }
 
 function applySupport(state: ClashState, side: Side, move: MoveDef, log: ClashEvent[]): void {
@@ -398,13 +400,13 @@ function applyKosei(state: ClashState, side: Side, rng: Rng, log: ClashEvent[]):
   const a = k.active;
   if (k.limit.kind === 'cooldown') c.koseiCd = k.limit.turns + 1;
   else c.koseiUses = Math.max(0, c.koseiUses - 1);
-  log.push({ t: 'act', side, moveName: k.activeName, kind: 'kosei' });
+  log.push({ t: 'act', side, moveName: k.activeName, kind: 'kosei', moveId: 'kosei' });
 
   const hit = (power: number, extra: Partial<MoveDef> = {}, tag: string | null = null) =>
     dealDamage(
       state,
       side,
-      { id: `kosei_${k.id}`, name: k.activeName, category: 'attack', attribute: c.attribute, power: Math.round(power * KOSEI_POWER_MULT), cooldown: 0, target: 'enemy', unlock: [], desc: '', ...extra },
+      { id: `kosei_${k.id}`, name: k.activeName, category: 'attack', attribute: c.attribute, power: Math.round(power * KOSEI_POWER_MULT), target: 'enemy', desc: '', ...extra },
       { tag },
       rng,
       log,
@@ -493,7 +495,7 @@ function dealDamage(
   const tPas = kosei(target).passive;
   const critChance = Math.max(
     0.04,
-    Math.min(0.4, 0.06 + luck / 130 + (aPas.kind === 'critUp' ? aPas.add : 0)),
+    Math.min(0.6, 0.06 + luck / 130 + (aPas.kind === 'critUp' ? aPas.add : 0) + (move.critBoost ?? 0)),
   );
   // 大振りな技（riskShift）は「かすり」になりやすい＝強い一撃のリスク。
   const grazeChance = 0.12 + (move.riskShift ?? 0) / 90;
@@ -523,6 +525,7 @@ function dealDamage(
   // こおった相手に ほのお技 → 大ダメージ（このあと とかす）
   if (hasAttr && move.attribute === 'fire' && has(target, 'freeze')) dmg *= 1.5;
 
+  if (move.execute && target.hp / target.maxHp < 0.4) dmg *= move.execute;
   if (!move.pierce) dmg *= 40 / (40 + effStat(target, 'def'));
   // 状態異常による被ダメ倍率（のろい＋・ガード−・ぼうぎょ↑↓ …）。ガードは貫通でも効くが、
   // 力で読み勝ちした「ぶち抜き」は軽減だけを無視する（増える側＝ぼうぎょ↓は効く）。
@@ -681,8 +684,13 @@ export function cpuChoose(state: ClashState, side: Side, rng: Rng): ClashChoice 
     if (!m) return 0;
     if (m.category === 'attack') {
       const atkTerm = 0.95 + effStat(me, 'atk') / 46;
-      let est = m.power * atkTerm * (m.pierce ? 1 : 40 / (40 + effStat(foe, 'def')));
-      est = Math.min(est, foe.maxHp * PER_HIT_CAP_PCT);
+      let per = m.power * atkTerm * (m.pierce ? 1 : 40 / (40 + effStat(foe, 'def')));
+      if (m.execute && foePct < 0.4) per *= m.execute;
+      if (m.critBoost) per *= 1 + m.critBoost * 0.7;
+      per = Math.min(per, foe.maxHp * PER_HIT_CAP_PCT);
+      let est = per * (m.hits ?? 1);
+      // ふいうちは、相手が こうげきしてきそうなときだけ
+      if (m.ambush) est *= 0.6;
       let s = est;
       if (est >= foe.hp) s += 60;
       if (m.status && !m.status.toSelf && !has(foe, m.status.kind)) s += m.status.chance * 8;

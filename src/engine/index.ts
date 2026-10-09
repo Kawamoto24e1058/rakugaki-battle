@@ -19,7 +19,7 @@ export {
   type ClashEvent,
   type ClashCombatant,
   type ClashChoice,
-  type RevealCard,
+  type OrderReason,
   type ActKind,
   type Side,
 } from './battle/clash';
