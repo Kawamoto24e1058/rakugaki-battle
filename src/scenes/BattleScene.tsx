@@ -20,6 +20,8 @@ import { HandTable } from '../components/HandTable';
 import { PlayArea, EMPTY_TABLE } from '../components/PlayArea';
 import { buildBeats, snapOf } from './battle/beats';
 import { HpBar, Stage } from './battle/Stage';
+import { buildRecap, TurnRecap, type RecapSide } from './battle/Recap';
+import { STATUS_META } from '../engine/status';
 import { sfx } from '../audio/sfx';
 import type { Beat, Snap } from './battle/types';
 
@@ -77,8 +79,6 @@ export function BattleScene() {
   const maxHp: [number, number] = [chars[0].baseStats.hp, chars[1].baseStats.hp];
   const images: [string | null, string | null] = [player.imageUrl, opponent.imageUrl];
 
-  const matchup = 'わざの ぞくせいが あいてに あうと じょうたいいじょうが 入りやすい（火→木→水→火）';
-
   const [phase, setPhase] = useState<Phase>('choose-p1');
   const [p1Pick, setP1Pick] = useState<ClashChoice | null>(null);
   const [beats, setBeats] = useState<Beat[]>([]);
@@ -87,6 +87,7 @@ export function BattleScene() {
   const [snap, setSnap] = useState<Snap>(() => snapOf(createClashState(player.character, opponent.character, seed)));
   const [banner, setBanner] = useState('ターン 1：カードを 1まい えらぶ');
   const [turnKey, setTurnKey] = useState(0);
+  const [recap, setRecap] = useState<[RecapSide, RecapSide] | null>(null);
 
   const curBeat: Beat = phase === 'animating' && beats[beatIdx] ? beats[beatIdx] : restBeat(snap, banner);
   const lastBeat = beatIdx >= beats.length - 1;
@@ -147,6 +148,7 @@ export function BattleScene() {
     setBeatIdx(0);
     setSnap(snapOf(next));
     setTurnKey((k) => k + 1);
+    setRecap(buildRecap(next.log.slice(state.log.length), (k) => STATUS_META[k as keyof typeof STATUS_META]?.jp ?? k));
     setBanner(
       next.done
         ? next.winner === 'draw'
@@ -215,10 +217,11 @@ export function BattleScene() {
     return dealHand(state, chooserSide);
   }, [state, chooserSide]);
   const impact = curBeat.impact;
+  const stageLabel = `ターン ${state.turn}${mode === 'versus' ? (phase === 'choose-p2' ? '・P2' : '・P1') : ''}：カードを 1まい えらぶ`;
   const [soundOff, setSoundOff] = useState(sfx.isMuted());
 
   return (
-    <div className="scene" style={{ justifyContent: 'flex-start', paddingTop: 'clamp(.4rem,1.5vh,.8rem)', gap: '0.5rem' }}>
+    <div className="scene" style={{ justifyContent: 'flex-start', paddingTop: 'clamp(.3rem,1vh,.7rem)', gap: '0.4rem' }}>
       {pinch && <div className="pinch-vignette" />}
       {impact && (
         <motion.div
@@ -258,33 +261,35 @@ export function BattleScene() {
         />
       )}
 
-      <div style={{ width: '100%', maxWidth: '52rem', display: 'grid', gap: '0.5rem' }}>
+      <div style={{ width: '100%', maxWidth: '52rem', display: 'grid', gap: '0.4rem' }}>
         <div style={{ display: 'flex', gap: 'clamp(.8rem,4vw,2rem)' }}>
           {([0, 1] as Side[]).map((s) => (
             <HpBar key={s} side={s} char={chars[s]} hp={curBeat.hp[s]} maxHp={maxHp[s]} chips={curBeat.chips[s]} hitNow={curBeat.hit === s} />
           ))}
         </div>
 
-        <Stage chars={chars} images={images} names={names} beat={curBeat} beatKey={phase === 'animating' ? beatIdx : -1 - turnKey} />
+        <Stage chars={chars} images={images} names={names} beat={curBeat} beatKey={phase === 'animating' ? beatIdx : -1 - turnKey} label={phase === 'animating' || phase === 'over' ? null : stageLabel} />
 
-        <div
-          className="sketch-card"
-          onClick={phase === 'animating' ? advance : undefined}
-          style={{
-            width: '100%',
-            minHeight: '2.8rem',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            textAlign: 'center',
-            fontWeight: 800,
-            fontSize: 'clamp(.9rem, 2.6vw, 1.1rem)',
-            padding: '0.35rem 0.9rem',
-            cursor: phase === 'animating' ? 'pointer' : 'default',
-          }}
-        >
-          {phase === 'animating' ? curBeat.banner : banner}
-        </div>
+        {(phase === 'animating' || phase === 'over') && (
+          <div
+            className="sketch-card"
+            onClick={phase === 'animating' ? advance : undefined}
+            style={{
+              width: '100%',
+              minHeight: '2.3rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              textAlign: 'center',
+              fontWeight: 800,
+              fontSize: 'clamp(.9rem, 2.6vw, 1.1rem)',
+              padding: '0.35rem 0.9rem',
+              cursor: phase === 'animating' ? 'pointer' : 'default',
+            }}
+          >
+            {phase === 'animating' ? curBeat.banner : banner}
+          </div>
+        )}
       </div>
 
       {phase === 'animating' ? (
@@ -308,7 +313,7 @@ export function BattleScene() {
         </div>
       ) : (
         <>
-          <div style={{ fontSize: '0.74rem', color: 'var(--ink-soft)' }}>{matchup}</div>
+          {recap && <TurnRecap recap={recap} names={names} />}
           {mode === 'versus' && (
             <div style={{ fontWeight: 700, color: phase === 'choose-p2' ? 'var(--crayon-blue)' : 'var(--crayon-red)' }}>
               {phase === 'choose-p2' ? `P2（${names[1]}）` : `P1（${names[0]}）`} の てふだ

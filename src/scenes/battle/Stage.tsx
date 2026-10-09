@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { CharacterSprite, AttributeBadge } from '../../components/bits';
 import { ATTRIBUTE_META } from '../../engine/attributes';
@@ -33,6 +34,13 @@ export function HpBar({
   chips: Chip[];
   hitNow: boolean;
 }) {
+  const prev = useRef(hp);
+  const [delta, setDelta] = useState<{ id: number; v: number } | null>(null);
+  useEffect(() => {
+    const d = Math.round(hp - prev.current);
+    prev.current = hp;
+    if (d !== 0) setDelta({ id: Math.random(), v: d });
+  }, [hp]);
   const pct = Math.max(0, Math.min(100, (hp / maxHp) * 100));
   const low = pct <= 30;
   const mid = pct <= 55;
@@ -59,7 +67,18 @@ export function HpBar({
           {Math.max(0, Math.round(hp))} / {maxHp}
         </div>
       </motion.div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, minHeight: 20, justifyContent: right ? 'flex-end' : 'flex-start' }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, minHeight: 20, justifyContent: right ? 'flex-end' : 'flex-start', position: 'relative' }}>
+        {delta && (
+          <motion.span
+            key={delta.id}
+            initial={{ opacity: 0, y: -14, scale: 0.6 }}
+            animate={{ opacity: [0, 1, 1, 0], y: [-14, 0, 2, 8], scale: [0.6, 1.25, 1, 1] }}
+            transition={{ duration: 1.6 }}
+            style={{ position: 'absolute', [right ? 'left' : 'right']: 0, top: -2, fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: '1.35rem', color: delta.v < 0 ? '#e83a2a' : '#2f9e58', WebkitTextStroke: '3px #fffdf5', paintOrder: 'stroke', pointerEvents: 'none', zIndex: 3 }}
+          >
+            {delta.v > 0 ? `+${delta.v}` : delta.v}
+          </motion.span>
+        )}
         {chips.map((c, i) => (
           <motion.span
             key={`${c.kind}-${i}`}
@@ -174,12 +193,15 @@ export function Stage({
   names,
   beat,
   beatKey,
+  label,
 }: {
   chars: [Character, Character];
   images: [string | null, string | null];
   names: [string, string];
   beat: Beat;
   beatKey: number;
+  /** ステージ上部のラベル（ターン数など）。 */
+  label?: string | null;
 }) {
   const shake = beat.shake;
   return (
@@ -187,7 +209,7 @@ export function Stage({
       key={`stage-${beatKey}`}
       animate={shake ? { x: [0, -shake, shake, -shake * 0.6, shake * 0.4, 0], y: [0, shake * 0.5, -shake * 0.5, shake * 0.3, 0, 0] } : { x: 0, y: 0 }}
       transition={{ duration: 0.38 }}
-      style={{ ['--stage-h' as string]: 'clamp(12rem, 34vh, 23rem)', position: 'relative', width: '100%', height: 'var(--stage-h)', border: '4px solid var(--ink)', borderRadius: 18, overflow: 'hidden', boxShadow: '5px 6px 0 rgba(51,48,43,.18)', background: '#fffdf6' }}
+      style={{ ['--stage-h' as string]: 'clamp(8.5rem, 31vh, 23rem)', position: 'relative', width: '100%', height: 'var(--stage-h)', minHeight: '8.5rem', border: '4px solid var(--ink)', borderRadius: 18, overflow: 'hidden', boxShadow: '5px 6px 0 rgba(51,48,43,.18)', background: '#fffdf6' }}
     >
       <Backdrop attrs={[chars[0].attribute, chars[1].attribute]} />
 
@@ -202,6 +224,11 @@ export function Stage({
         )}
       </AnimatePresence>
 
+      {label && (
+        <div style={{ position: 'absolute', top: 8, left: '50%', translate: '-50% 0', zIndex: 11, background: 'rgba(255,253,245,.92)', border: '2.5px solid var(--ink)', borderRadius: 99, padding: '0.05rem 0.9rem', fontFamily: 'var(--font-display)', fontSize: '0.95rem', whiteSpace: 'nowrap', pointerEvents: 'none' }}>
+          {label}
+        </div>
+      )}
       <AnimatePresence mode="wait">{beat.callout && <CalloutBand key={beat.callout.id} c={beat.callout} />}</AnimatePresence>
       <AnimatePresence>{beat.order && <OrderPanel key="order" o={beat.order} names={names} />}</AnimatePresence>
     </motion.div>
