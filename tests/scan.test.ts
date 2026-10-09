@@ -59,15 +59,18 @@ describe('warp: ホモグラフィ', () => {
   });
 });
 
+/** 実際の写真のように、紙の余白（margin）を挟んだ位置に 四隅マーカーを置く。 */
+function markerIn(size: number, margin: number, mk: number, x: number, y: number): boolean {
+  const lo = margin;
+  const hi = size - margin - mk;
+  const inX = (x >= lo && x < lo + mk) || (x >= hi && x < hi + mk);
+  const inY = (y >= lo && y < lo + mk) || (y >= hi && y < hi + mk);
+  return inX && inY;
+}
+
 describe('markers: 四隅マーカー検出', () => {
-  function imageWithMarkers(size = 200, mk = 12) {
-    return makeImage(size, size, (x, y) => {
-      const inTL = x < mk && y < mk;
-      const inTR = x >= size - mk && y < mk;
-      const inBL = x < mk && y >= size - mk;
-      const inBR = x >= size - mk && y >= size - mk;
-      return inTL || inTR || inBL || inBR ? [0, 0, 0, 255] : null;
-    });
+  function imageWithMarkers(size = 240, mk = 14, margin = 20) {
+    return makeImage(size, size, (x, y) => (markerIn(size, margin, mk, x, y) ? [0, 0, 0, 255] : null));
   }
 
   it('4隅の黒い■を検出できる', () => {
@@ -75,16 +78,48 @@ describe('markers: 四隅マーカー検出', () => {
     const corners = detectCornerMarkers(img);
     expect(corners).not.toBeNull();
     if (!corners) return;
-    expect(corners.tl.x).toBeCloseTo(5.5, 0);
-    expect(corners.tl.y).toBeCloseTo(5.5, 0);
-    expect(corners.tr.x).toBeCloseTo(193.5, 0);
-    expect(corners.br.x).toBeCloseTo(193.5, 0);
-    expect(corners.br.y).toBeCloseTo(193.5, 0);
+    // マーカー(14px)の中心 = 20 + 6.5 = 26.5 / 240-20-14+6.5 = 212.5
+    expect(corners.tl.x).toBeCloseTo(26.5, 0);
+    expect(corners.tl.y).toBeCloseTo(26.5, 0);
+    expect(corners.tr.x).toBeCloseTo(212.5, 0);
+    expect(corners.br.x).toBeCloseTo(212.5, 0);
+    expect(corners.br.y).toBeCloseTo(212.5, 0);
   });
 
   it('マーカーが無い真っ白な画像では null', () => {
     const img = makeImage(200, 200, () => null);
     expect(detectCornerMarkers(img)).toBeNull();
+  });
+
+  it('写真の端で見切れたマーカーは使わない（中心がずれるので null にする）', () => {
+    const size = 240;
+    const img = makeImage(size, size, (x, y) => {
+      // 左上だけ画像の端にぴったり接している
+      if (x < 14 && y < 14) return [0, 0, 0, 255];
+      if (markerIn(size, 20, 14, x, y) && !(x < 40 && y < 40)) return [0, 0, 0, 255];
+      return null;
+    });
+    expect(detectCornerMarkers(img)).toBeNull();
+  });
+
+  it('大きい黒いかたまり（マーカー）と小さい文字ブロックが混ざっても、マーカーの4つを選ぶ', () => {
+    const size = 300;
+    const mk = 20;
+    const margin = 30;
+    const img = makeImage(size, size, (x, y) => {
+      if (markerIn(size, margin, mk, x, y)) return [0, 0, 0, 255];
+      // 上の方に並んだ文字ブロック（20x8）
+      for (let i = 0; i < 6; i++) {
+        const x0 = 70 + i * 28;
+        if (x >= x0 && x < x0 + 16 && y >= 10 && y < 18) return [30, 30, 30, 255];
+      }
+      return null;
+    });
+    const c = detectCornerMarkers(img);
+    expect(c).not.toBeNull();
+    if (!c) return;
+    expect(c.tl.y).toBeGreaterThan(25); // 文字ブロック(y≈14)ではなくマーカー(y≈39.5)
+    expect(c.tr.y).toBeGreaterThan(25);
   });
 });
 
@@ -159,25 +194,26 @@ describe('illum: 照明ムラ推定', () => {
 });
 
 describe('scanDrawing: 一連の処理', () => {
-  it('マーカーがあれば補正して背景を抜く', () => {
-    const size = 200;
-    const mk = 12;
-    const img = makeImage(size, size, (x, y) => {
-      const inMarker =
-        (x < mk && y < mk) ||
-        (x >= size - mk && y < mk) ||
-        (x < mk && y >= size - mk) ||
-        (x >= size - mk && y >= size - mk);
-      if (inMarker) return [0, 0, 0, 255];
-      if (x >= 80 && x < 120 && y >= 80 && y < 120) return [30, 90, 200, 255];
-      return null;
+  const SIZE = 240;
+  const MK = 14;
+  const MARGIN = 20;
+  /** マーカー＋任意の絵を持つ「写真」を作る。絵は paint で返す。 */
+  function photo(paint: (x: number, y: number) => [number, number, number, number] | null) {
+    return makeImage(SIZE, SIZE, (x, y) => {
+      if (markerIn(SIZE, MARGIN, MK, x, y)) return [0, 0, 0, 255];
+      return paint(x, y);
     });
+  }
+  const alphaAtOf = (out: ImageData) => (x: number, y: number) => out.data[(y * out.width + x) * 4 + 3];
+
+  it('マーカーがあれば補正して背景を抜く', () => {
+    const img = photo((x, y) => (x >= 100 && x < 140 && y >= 100 && y < 140 ? [30, 90, 200, 255] : null));
     const { output, cornersFound } = scanDrawing(img, { outSize: 120 });
     expect(cornersFound).toBe(true);
     expect(output.width).toBe(120);
-    const alphaAt = (x: number, y: number) => output.data[(y * 120 + x) * 4 + 3];
+    const alphaAt = alphaAtOf(output);
     expect(alphaAt(60, 60)).toBeGreaterThan(150); // 中央の絵は残る
-    expect(alphaAt(0, 0)).toBeLessThan(10); // 角＝マーカーの位置は内側マージンで画角の外に追い出される
+    expect(alphaAt(0, 0)).toBeLessThan(10); // 角＝マーカー残りは消える
     expect(alphaAt(30, 30)).toBeLessThan(40); // 角から離れた背景はふつうに透明
   });
 
@@ -189,23 +225,16 @@ describe('scanDrawing: 一連の処理', () => {
   });
 
   it('回帰：わっか（閉じた輪）の内側の地の紙もちゃんと透明になる', () => {
-    // floodfillだった頃は、輪の内側が外周と繋がらず背景として抜けずに残っていた。
-    const size = 240;
-    const mk = 16;
-    const cx = size / 2;
-    const cy = size / 2;
-    const img = makeImage(size, size, (x, y) => {
-      const inMarker =
-        (x < mk && y < mk) || (x >= size - mk && y < mk) || (x < mk && y >= size - mk) || (x >= size - mk && y >= size - mk);
-      if (inMarker) return [0, 0, 0, 255];
+    const cx = SIZE / 2;
+    const cy = SIZE / 2;
+    const img = photo((x, y) => {
       const d = Math.hypot(x - cx, y - cy);
       if (d < 60 && d > 48) return [220, 180, 20, 255]; // 黄色い輪っかの線
       return null; // 輪の内側も外側も地の白紙
     });
     const { output, cornersFound } = scanDrawing(img, { outSize: 200 });
     expect(cornersFound).toBe(true);
-    const alphaAt = (x: number, y: number) => output.data[(y * 200 + x) * 4 + 3];
-    // 輪の線そのものは（内側マージンでの縮小補正を受けつつ）どこかに残っているはず
+    const alphaAt = alphaAtOf(output);
     let ringFound = false;
     for (let k = 20; k <= 70; k++) {
       if (alphaAt(100, 100 - k) > 150) {
@@ -213,44 +242,35 @@ describe('scanDrawing: 一連の処理', () => {
         break;
       }
     }
-    expect(ringFound).toBe(true);
-    // 輪の内側（中心）は外周と繋がっていなくても、ちゃんと透明になる
-    expect(alphaAt(100, 100)).toBeLessThan(40);
+    expect(ringFound).toBe(true); // 輪の線は残る
+    expect(alphaAt(100, 100)).toBeLessThan(40); // 輪の内側（中心）は透明
   });
 
   it('回帰：マーカーの黒インクは角だけ消える（辺の途中には影響しない）', () => {
-    // したがき用紙は今はわく線を廃止し四隅マーカーのみ。角のマーカー残りは
-    // 消しつつ、辺の途中（マーカーから離れた場所）の絵には一切影響しないことを確認。
-    const size = 200;
-    const mk = 12;
-    const img = makeImage(size, size, (x, y) => {
-      const inMarker =
-        (x < mk && y < mk) || (x >= size - mk && y < mk) || (x < mk && y >= size - mk) || (x >= size - mk && y >= size - mk);
-      if (inMarker) return [0, 0, 0, 255];
-      if (x >= 90 && x < 110 && y >= 90 && y < 110) return [30, 90, 200, 255]; // 中央のキャラ
-      return null;
-    });
+    const img = photo((x, y) => (x >= 110 && x < 130 && y >= 110 && y < 130 ? [30, 90, 200, 255] : null));
     const { output } = scanDrawing(img, { outSize: 120 });
-    const alphaAt = (x: number, y: number) => output.data[(y * 120 + x) * 4 + 3];
-    expect(alphaAt(0, 0)).toBeLessThan(10); // 角＝マーカー残りは消える
-    expect(alphaAt(60, 60)).toBeGreaterThan(150); // 中央のキャラは残る
+    const alphaAt = alphaAtOf(output);
+    expect(alphaAt(0, 0)).toBeLessThan(10);
+    expect(alphaAt(60, 60)).toBeGreaterThan(150);
   });
 
   it('回帰：わくの際（辺の途中）に描いた絵はコーナーの処理に巻き込まれず残る', () => {
-    // わく線の印刷を廃止したので、辺の真ん中あたりぎりぎりに描いた絵は
-    // マーカーのある角から離れていれば一切削られてはいけない。
-    const size = 200;
-    const mk = 12;
-    const img = makeImage(size, size, (x, y) => {
-      const inMarker =
-        (x < mk && y < mk) || (x >= size - mk && y < mk) || (x < mk && y >= size - mk) || (x >= size - mk && y >= size - mk);
-      if (inMarker) return [0, 0, 0, 255];
-      // 上辺のまん中ぎりぎり（マーカーからは離れている）に描いた黄色い線
-      if (y < mk + 4 && x >= 90 && x < 110) return [232, 196, 20, 255];
-      return null;
-    });
+    // マーカー間の上辺ぎりぎり（マーカーの高さの付近）に描いた、辺のまん中あたりの太い線
+    const img = photo((x, y) => (y >= MARGIN + 1 && y < MARGIN + 8 && x >= 105 && x < 135 ? [232, 150, 20, 255] : null));
     const { output } = scanDrawing(img, { outSize: 120 });
-    const alphaAt = (x: number, y: number) => output.data[(y * 120 + x) * 4 + 3];
-    expect(alphaAt(60, 4)).toBeGreaterThan(150); // 辺の途中の絵はマーカーと無関係に残る
+    const alphaAt = alphaAtOf(output);
+    // 出力では上辺ちかく・左右まん中あたりのどこかに不透明な線が残るはず
+    let found = false;
+    for (let y = 0; y < 14 && !found; y++) for (let x = 40; x < 80; x++) if (alphaAt(x, y) > 150) found = true;
+    expect(found).toBe(true);
+  });
+
+  it('回帰：画面に対して大きい塗りつぶし（暗い色）の中心が穴にならない', () => {
+    const cx = SIZE / 2;
+    const cy = SIZE / 2;
+    const img = photo((x, y) => (Math.hypot(x - cx, y - cy) < 46 ? [110, 110, 110, 255] : null));
+    const { output } = scanDrawing(img, { outSize: 200 });
+    const alphaAt = alphaAtOf(output);
+    expect(alphaAt(100, 100)).toBeGreaterThan(200);
   });
 });

@@ -307,7 +307,7 @@ export function CaptureScene() {
             />
           </div>
           <p style={{ fontSize: '0.8rem', color: 'var(--ink-soft)', textAlign: 'center', maxWidth: '24rem' }}>
-            したがきようし（四隅に ■ マーカー）を つかうと、かたむき補正＋きりぬきが きれいに できるよ
+            したがきようし の 四すみの くろい ■ が 4つとも わくの なかに はいるように とると、きれいに きりぬけるよ
           </p>
           <div style={{ display: 'flex', gap: '0.8rem', flexWrap: 'wrap', justifyContent: 'center' }}>
             <button className="crayon-btn" onClick={grabFromVideo} disabled={!!cameraError}>
@@ -350,10 +350,10 @@ export function CaptureScene() {
             <img src={imageUrl} alt="とりこんだ え" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
           </div>
           {cornersFound !== null && (
-            <p style={{ fontSize: '0.82rem', color: cornersFound ? 'var(--crayon-green)' : 'var(--ink-soft)' }}>
+            <p style={{ fontSize: '0.82rem', color: cornersFound ? 'var(--crayon-green)' : 'var(--crayon-red)' }}>
               {cornersFound
                 ? '✅ よう紙の マーカーを みつけたよ！ まっすぐ・きりぬき ずみ'
-                : 'ℹ️ マーカーが 見つからなかったので、そのまま きりぬいたよ'}
+                : '⚠️ 四すみの くろい ■ が ぜんぶ 見つからなかったよ。■ が 4つとも うつるように、とりなおすと きれいに きりぬけるよ'}
             </p>
           )}
 

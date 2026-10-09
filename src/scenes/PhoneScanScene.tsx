@@ -147,8 +147,8 @@ export function PhoneScanScene({ code }: { code: string }) {
           >
             <img src={imageUrl} alt="とりこんだ え" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
           </div>
-          <p style={{ fontSize: '0.82rem', color: cornersFound ? 'var(--crayon-green)' : 'var(--ink-soft)' }}>
-            {cornersFound ? '✅ マーカーを みつけたよ！' : 'ℹ️ マーカーが 見つからなかったよ'}
+          <p style={{ fontSize: '0.82rem', color: cornersFound ? 'var(--crayon-green)' : 'var(--crayon-red)' }}>
+            {cornersFound ? '✅ マーカーを みつけたよ！' : '⚠️ 四すみの くろい ■ が ぜんぶ 見つからなかったよ。■ が 4つとも うつるように とりなおしてね'}
           </p>
           {errorMsg && <p style={{ fontSize: '0.85rem', color: 'var(--crayon-red)', textAlign: 'center' }}>{errorMsg}</p>}
           <div style={{ display: 'flex', gap: '0.8rem', flexWrap: 'wrap', justifyContent: 'center' }}>

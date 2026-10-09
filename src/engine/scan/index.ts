@@ -13,13 +13,19 @@ export interface ScanResult {
   cornersFound: boolean;
 }
 
-function resizeNearest(img: ImageData, size: number): ImageData {
-  if (img.width === size && img.height === size) return img;
+/**
+ * マーカーが見つからなかった時の代替：写真の中央の正方形を切り出して size×size に縮小する。
+ * （以前は縦長の写真を正方形に押し潰していたため、絵が縦に細長くゆがんでいた）
+ */
+function centerSquareResize(img: ImageData, size: number): ImageData {
+  const side = Math.min(img.width, img.height);
+  const ox = Math.floor((img.width - side) / 2);
+  const oy = Math.floor((img.height - side) / 2);
   const data = new Uint8ClampedArray(size * size * 4);
   for (let y = 0; y < size; y++) {
-    const sy = Math.min(img.height - 1, Math.floor((y * img.height) / size));
+    const sy = Math.min(img.height - 1, oy + Math.floor(((y + 0.5) * side) / size));
     for (let x = 0; x < size; x++) {
-      const sx = Math.min(img.width - 1, Math.floor((x * img.width) / size));
+      const sx = Math.min(img.width - 1, ox + Math.floor(((x + 0.5) * side) / size));
       const si = (sy * img.width + sx) * 4;
       const di = (y * size + x) * 4;
       data[di] = img.data[si];
@@ -65,7 +71,7 @@ export function scanDrawing(img: ImageData, opts: { outSize?: number } = {}): Sc
     working = warpPerspective(img, H, outSize, outSize);
     cornersFound = true;
   } else {
-    working = resizeNearest(img, outSize);
+    working = centerSquareResize(img, outSize);
   }
 
   const paper = estimatePaperColor(working);
