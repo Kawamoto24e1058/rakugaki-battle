@@ -88,7 +88,7 @@ export function RevealScene() {
               }}
               style={{ fontSize: '0.8rem', padding: '0.15rem 0.6rem' }}
             >
-              ✏️ なまえをかえる
+              なまえをかえる
             </button>
           </>
         )}
@@ -102,7 +102,7 @@ export function RevealScene() {
           background: analyzedBy === 'ai' ? 'rgba(58,166,97,.18)' : 'rgba(0,0,0,.06)',
         }}
       >
-        {analyzedBy === 'ai' ? '🤖 AI が解析' : '✏️ かんたん解析（AIオフ / キー確認）'}
+        {analyzedBy === 'ai' ? 'AI が解析' : 'かんたん解析（AIオフ / キー確認）'}
       </div>
 
       <motion.div

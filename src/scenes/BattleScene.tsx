@@ -538,7 +538,7 @@ export function BattleScene() {
                 transition={{ repeat: Infinity, duration: 0.7 }}
                 style={{ fontFamily: 'var(--font-display)', fontSize: '1.6rem', color: SIDE_COLOR[chooserSide] }}
               >
-                ⚡ ためた ちからを はなつ！
+                ためた ちからを はなつ！
               </motion.div>
               <div style={{ fontSize: '0.85rem', color: 'var(--ink-soft)' }}>
                 {mode === 'versus' ? `${names[chooserSide]} は えらべない（じどうで はなつ）` : 'このターンは じどうで はなつよ'}
@@ -646,7 +646,7 @@ function KoseiCutIn({
         style={{ position: 'absolute', bottom: '22%', display: 'grid', placeItems: 'center', gap: 4 }}
       >
         <div style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: 'clamp(1rem,3.4vw,1.3rem)', color: '#ffe08a' }}>
-          ★ こせい はつどう！
+          こせい はつどう！
         </div>
         <div
           style={{
@@ -760,7 +760,7 @@ function VictoryOverlay({ name, char, image }: { name: string; char: Character; 
             boxShadow: '3px 4px 0 rgba(0,0,0,.2)',
           }}
         >
-          🎉 おめでとう 🎉
+          おめでとう！
         </div>
       </motion.div>
     </div>
@@ -804,7 +804,7 @@ function FighterPanel({
         const k = getKosei(char.koseiId);
         return (
           <div style={{ fontSize: '0.66rem', color: 'var(--crayon-purple)', lineHeight: 1.25, marginTop: 1 }}>
-            ★{char.koseiTitle ?? ''}{k.name}
+            こせい：{char.koseiTitle ?? ''}{k.name}
             <br />
             <span style={{ color: 'var(--ink-soft)' }}>パッシブ：{k.passiveJp}</span>
           </div>

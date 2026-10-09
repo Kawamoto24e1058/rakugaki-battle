@@ -28,7 +28,7 @@ export function ResultScene() {
           animate={{ scale: 1, opacity: 1 }}
           style={{ fontSize: '2rem', color: 'var(--crayon-red)' }}
         >
-          {winnerName ? `${winnerName} の かち！🎉` : 'あいこ！'}
+          {winnerName ? `${winnerName} の かち！` : 'あいこ！'}
         </motion.h2>
         <p style={{ color: 'var(--ink-soft)' }}>
           {pending?.character.name} vs {player?.character.name}
@@ -54,7 +54,7 @@ export function ResultScene() {
           color: won ? 'var(--crayon-green)' : 'var(--crayon-blue)',
         }}
       >
-        {won ? 'かった！ 🎉' : 'まけちゃった…'}
+        {won ? 'かった！' : 'まけちゃった…'}
       </motion.div>
 
       {player && (

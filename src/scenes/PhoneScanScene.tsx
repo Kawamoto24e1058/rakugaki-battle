@@ -114,7 +114,7 @@ export function PhoneScanScene({ code }: { code: string }) {
           </div>
           <div style={{ display: 'flex', gap: '0.8rem', flexWrap: 'wrap', justifyContent: 'center' }}>
             <button className="crayon-btn primary big" onClick={grabFromVideo} disabled={!!cameraError}>
-              📸 さつえい
+              さつえい
             </button>
             <label className="crayon-btn" style={{ display: 'inline-flex', alignItems: 'center' }}>
               しゃしんを えらぶ
@@ -126,9 +126,7 @@ export function PhoneScanScene({ code }: { code: string }) {
 
       {stage === 'scanning' && (
         <div style={{ display: 'grid', placeItems: 'center', gap: '0.8rem', minHeight: '14rem' }}>
-          <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1.1, ease: 'linear' }} style={{ fontSize: '2.4rem' }}>
-            🔍
-          </motion.div>
+          <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 0.9, ease: 'linear' }} style={{ width: '2.6rem', height: '2.6rem', borderRadius: '50%', border: '0.4rem solid var(--paper-line)', borderTopColor: 'var(--crayon-red)' }} />
           <p style={{ fontSize: '1rem', color: 'var(--ink-soft)' }}>よみとっているよ…</p>
         </div>
       )}
@@ -148,7 +146,7 @@ export function PhoneScanScene({ code }: { code: string }) {
             <img src={imageUrl} alt="とりこんだ え" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
           </div>
           <p style={{ fontSize: '0.82rem', color: cornersFound ? 'var(--crayon-green)' : 'var(--crayon-red)' }}>
-            {cornersFound ? '✅ マーカーを みつけたよ！' : '⚠️ 四すみの くろい ■ が ぜんぶ 見つからなかったよ。■ が 4つとも うつるように とりなおしてね'}
+            {cornersFound ? 'マーカーを みつけたよ！' : '四すみの くろい ■ が ぜんぶ 見つからなかったよ。■ が 4つとも うつるように とりなおしてね'}
           </p>
           {errorMsg && <p style={{ fontSize: '0.85rem', color: 'var(--crayon-red)', textAlign: 'center' }}>{errorMsg}</p>}
           <div style={{ display: 'flex', gap: '0.8rem', flexWrap: 'wrap', justifyContent: 'center' }}>
@@ -164,7 +162,7 @@ export function PhoneScanScene({ code }: { code: string }) {
 
       {stage === 'sent' && (
         <div style={{ display: 'grid', placeItems: 'center', gap: '1rem', minHeight: '14rem' }}>
-          <div style={{ fontSize: '3rem' }}>✅</div>
+          <div style={{ fontFamily: 'var(--font-display)', fontSize: '2rem', color: 'var(--crayon-green)' }}>おくれたよ</div>
           <p style={{ fontSize: '1.1rem', textAlign: 'center' }}>
             PCに おくったよ！
             <br />

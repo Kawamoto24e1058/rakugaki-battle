@@ -43,7 +43,7 @@ export function PrintTemplateScene() {
         className="no-print sketch-card"
         style={{ maxWidth: '26rem', padding: '0.6rem 1rem', fontSize: '0.82rem', color: 'var(--ink-soft)', textAlign: 'left' }}
       >
-        いんさつ画面で ⚠️ この2つを かくにんしてね：
+        いんさつ画面で この2つを かくにんしてね：
         <br />
         ・「背景のグラフィック」を ON（黒い四角が消えるのを ふせぐ）
         <br />
@@ -51,7 +51,7 @@ export function PrintTemplateScene() {
       </div>
       <div className="no-print" style={{ display: 'flex', gap: '0.8rem' }}>
         <button className="crayon-btn primary big" onClick={() => window.print()}>
-          🖨️ いんさつする
+          いんさつする
         </button>
         <button className="crayon-btn" onClick={reset}>
           もどる

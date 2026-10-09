@@ -30,20 +30,20 @@ export function TitleScene() {
           ふたりで たいせん
         </button>
         <button className="crayon-btn" onClick={openCards}>
-          🃏 カードずかん
+          カードずかん
         </button>
         <button className="crayon-btn" onClick={openZukan}>
           ずかんを みる（{zukanCount}）
         </button>
         <button className="crayon-btn" onClick={openPrintTemplate}>
-          🖨️ したがきようしを いんさつ
+          したがきようしを いんさつ
         </button>
         <button
           className="crayon-btn"
           style={{ fontSize: '0.85rem', opacity: 0.7, borderStyle: 'dashed' }}
           onClick={() => devQuickBattle('solo')}
         >
-          ⚔ バトル直行（開発・撮影スキップ）
+          バトル直行（開発・撮影スキップ）
         </button>
       </div>
     </div>

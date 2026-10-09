@@ -38,7 +38,7 @@ export function GameCard({
         </div>
       )}
       <div className="gcard-band" style={card.power == null ? { paddingLeft: '0.55em' } : undefined}>
-        <span>{card.kind === 'kosei' ? '★ ' : card.kind === 'support' ? '✚ ' : '⚔ '}{card.tag}</span>
+        <span>{card.tag}</span>
       </div>
       <div className="gcard-art">
         <CardArt art={card.art} />
@@ -48,7 +48,7 @@ export function GameCard({
         {card.name}
       </div>
       <div className="gcard-gist">{card.gist}</div>
-      {card.quick && <div className="gcard-chip">⚡ 先に うごく</div>}
+      {card.quick && <div className="gcard-chip">先に うごく</div>}
     </div>
   );
 }

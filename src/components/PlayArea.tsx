@@ -85,7 +85,7 @@ export function PlayArea({ table, names, colors }: { table: TableState; names: [
               animate={{ scale: 1, rotate: 0 }}
               style={{ background: 'var(--crayon-yellow)', border: '2px solid var(--ink)', borderRadius: 99, padding: '0 0.45em', color: 'var(--ink)', fontSize: '0.7rem' }}
             >
-              ⚡先
+              先
             </motion.span>
           )}
         </div>

@@ -259,7 +259,7 @@ export function CaptureScene() {
           </motion.p>
           {isLocalhost && (
             <p style={{ fontSize: '0.78rem', color: 'var(--crayon-red)', textAlign: 'center', maxWidth: '24rem' }}>
-              ⚠️ 今 localhost で開いています。スマホから開くには、この PC の ローカルIPアドレスで
+              今 localhost で開いています。スマホから開くには、この PC の ローカルIPアドレスで
               開きなおしてね（例：http://192.168.x.x:5273）
             </p>
           )}
@@ -273,7 +273,7 @@ export function CaptureScene() {
         <>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'center' }}>
             <button className="crayon-btn primary big" onClick={startPhoneSession}>
-              📱 スマホで よみとる
+              スマホで よみとる
             </button>
             {phoneError && <p style={{ fontSize: '0.8rem', color: 'var(--crayon-red)' }}>{phoneError}</p>}
           </div>
@@ -311,7 +311,7 @@ export function CaptureScene() {
           </p>
           <div style={{ display: 'flex', gap: '0.8rem', flexWrap: 'wrap', justifyContent: 'center' }}>
             <button className="crayon-btn" onClick={grabFromVideo} disabled={!!cameraError}>
-              📸 さつえい
+              さつえい
             </button>
             <label className="crayon-btn" style={{ display: 'inline-flex', alignItems: 'center' }}>
               しゃしんを えらぶ
@@ -323,13 +323,7 @@ export function CaptureScene() {
 
       {stage === 'scanning' && (
         <div style={{ display: 'grid', placeItems: 'center', gap: '0.8rem', minHeight: '16rem' }}>
-          <motion.div
-            animate={{ rotate: 360 }}
-            transition={{ repeat: Infinity, duration: 1.1, ease: 'linear' }}
-            style={{ fontSize: '2.4rem' }}
-          >
-            🔍
-          </motion.div>
+          <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 0.9, ease: 'linear' }} style={{ width: '2.6rem', height: '2.6rem', borderRadius: '50%', border: '0.4rem solid var(--paper-line)', borderTopColor: 'var(--crayon-red)' }} />
           <p style={{ fontSize: '1rem', color: 'var(--ink-soft)' }}>よう紙を よみとっているよ…</p>
         </div>
       )}
@@ -352,8 +346,8 @@ export function CaptureScene() {
           {cornersFound !== null && (
             <p style={{ fontSize: '0.82rem', color: cornersFound ? 'var(--crayon-green)' : 'var(--crayon-red)' }}>
               {cornersFound
-                ? '✅ よう紙の マーカーを みつけたよ！ まっすぐ・きりぬき ずみ'
-                : '⚠️ 四すみの くろい ■ が ぜんぶ 見つからなかったよ。■ が 4つとも うつるように、とりなおすと きれいに きりぬけるよ'}
+                ? 'よう紙の マーカーを みつけたよ！ まっすぐ・きりぬき ずみ'
+                : '四すみの くろい ■ が ぜんぶ 見つからなかったよ。■ が 4つとも うつるように、とりなおすと きれいに きりぬけるよ'}
             </p>
           )}
 

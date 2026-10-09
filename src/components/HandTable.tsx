@@ -72,7 +72,7 @@ export function HandTable({
           animate={{ opacity: 1, y: 0, scale: 1 }}
           style={{ background: '#fff4c9', border: '2.5px solid #d9a400', borderRadius: 99, padding: '0.1rem 0.9rem', fontSize: '0.82rem', fontWeight: 800, color: '#7a5a00' }}
         >
-          ✨ {note}
+          {note}
         </motion.div>
       )}
       {/* 山札＋手札 */}
