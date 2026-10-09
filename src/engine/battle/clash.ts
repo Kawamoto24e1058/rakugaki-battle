@@ -53,18 +53,14 @@ export const STANCE_BEATS: Record<TriStance, TriStance> = {
 
 const SUDDEN_DEATH_TURN = 14;
 // クラッシュ勝ち＝相手は行動できない（発動不可）。勝者側の上乗せは控えめに。
-const CLASH_WIN_MULT = 1.25;
+const CLASH_WIN_MULT = 1.5;
 const PER_HIT_CAP_PCT = 0.42;
 /** 全体の火力。試合が「時間切れ（サドンデス）」でなく選択で決着するように底上げ。 */
 const DMG_SCALE = 1.0;
 /** 回復の底上げ（火力を上げたぶん回復が置いていかれないように）。 */
 const HEAL_SCALE = 1.5;
-/** カテゴリごとの個性：力＝一撃が重い／技＝ふつう（状態異常が本領）／速さ＝軽い（追撃で手数）。 */
-const CAT_DMG: Record<TriStance, number> = { power: 1.3, tech: 1.0, speed: 0.85 };
 /** 得意カテゴリの技・補助の底上げ。 */
 const FAVORITE_MULT = 1.25;
-/** 速さで読み勝ち → 追撃（もう一撃）の威力。 */
-const FOLLOWUP_MULT = 0.55;
 /** こせいのアクティブ技の威力の底上げ（絵の個性の主役にする）。 */
 const KOSEI_POWER_MULT = 1.25;
 
@@ -494,34 +490,9 @@ function act(
   }
 
   const won = result === 'win';
-  // カテゴリの個性（力＝重い／技＝ふつう／速さ＝軽い）× 得意カテゴリ × 読み勝ち
-  const catMult = CAT_DMG[stance as TriStance] * (favored ? FAVORITE_MULT : 1);
-  const clashMult = (won ? CLASH_WIN_MULT : 1) * catMult;
-  const target = state.combatants[1 - side as Side];
-
-  // 勝ち方ごとのごほうび：
-  //  力  … ぶち抜き（ぼうぎょ・ガードを無視して通す）
-  //  技  … みきり（状態異常がほぼ必中＋次のターンの被ダメ軽減）
-  //  速さ… おいうち（もう一撃）
-  dealDamage(
-    state,
-    side,
-    move,
-    {
-      clashMult,
-      statusMult: stance === 'tech' && won ? 2.5 : 1,
-      ignoreDefense: stance === 'power' && won,
-      tag: stance === 'power' && won ? 'ぶち抜き' : null,
-    },
-    rng,
-    log,
-  );
-  if (stance === 'tech' && won && c.hp > 0) {
-    if (applyStatus(c, 'defUp', 2)) log.push({ t: 'status-apply', side, kind: 'defUp' });
-  }
-  if (stance === 'speed' && won && target.hp > 0 && c.hp > 0) {
-    dealDamage(state, side, move, { clashMult: catMult * FOLLOWUP_MULT, noStatus: true, tag: 'おいうち' }, rng, log);
-  }
+  // ルールは2つだけ：読み勝ち → つよい／とくいカテゴリ → つよい
+  const clashMult = (won ? CLASH_WIN_MULT : 1) * (favored ? FAVORITE_MULT : 1);
+  dealDamage(state, side, move, { clashMult }, rng, log);
 }
 
 function applySupport(state: ClashState, side: Side, move: MoveDef, log: ClashEvent[], favored = false, won = false): void {
@@ -642,14 +613,11 @@ function applyKosei(state: ClashState, side: Side, rng: Rng, log: ClashEvent[]):
 interface DamageOpts {
   clashMult: number;
   /** 命中時に付与する状態異常の成功率にかかる倍率（クラッシュ結果で変わる）。 */
-  statusMult?: number;
   ignoreCap?: boolean;
   /** かすり・クリティカル等のタグが無いときに使う表示タグ。 */
   tag?: string | null;
   /** ぼうぎょ・ガード・ぼうぎょ↑を無視して通す（力で読み勝ちした時）。 */
-  ignoreDefense?: boolean;
   /** 状態異常を付けない（追撃用）。 */
-  noStatus?: boolean;
 }
 
 function dealDamage(
@@ -704,16 +672,15 @@ function dealDamage(
   // こおった相手に ほのお技 → 大ダメージ（このあと とかす）
   if (hasAttr && move.attribute === 'fire' && has(target, 'freeze')) dmg *= 1.5;
 
-  if (!move.pierce && !opts.ignoreDefense) dmg *= 40 / (40 + effStat(target, 'def'));
+  if (!move.pierce) dmg *= 40 / (40 + effStat(target, 'def'));
   // 状態異常による被ダメ倍率（のろい＋・ガード−・ぼうぎょ↑↓ …）。ガードは貫通でも効くが、
   // 力で読み勝ちした「ぶち抜き」は軽減だけを無視する（増える側＝ぼうぎょ↓は効く）。
   for (const s of target.statuses) {
     const im = STATUS_META[s.kind].incomingMult;
     if (im === 1) continue;
-    if (opts.ignoreDefense && im < 1) continue;
     dmg *= im;
   }
-  if (tPas.kind === 'ironWill' && !opts.ignoreDefense) dmg *= 0.88;
+  if (tPas.kind === 'ironWill') dmg *= 0.88;
 
   const hpPct = actor.hp / actor.maxHp;
   if (hpPct < 0.35) {
@@ -764,7 +731,7 @@ function dealDamage(
     log.push({ t: 'damage', side, amount: rec, hpAfter: actor.hp, tag: null });
   }
   // 状態異常
-  if (move.status && final > 0 && !opts.noStatus) {
+  if (move.status && final > 0) {
     const s = move.status;
     const victim = s.toSelf ? actor : target;
     const vside = (s.toSelf ? side : (1 - side)) as Side;
@@ -774,7 +741,7 @@ function dealDamage(
       0.03,
       Math.min(
         0.97,
-        (s.chance * (opts.statusMult ?? 1) * attrMult + (aPas.kind === 'venom' ? aPas.add : 0)) *
+        (s.chance * (1) * attrMult + (aPas.kind === 'venom' ? aPas.add : 0)) *
           (0.85 + effStat(actor, 'heart') / 60) -
           effStat(victim, 'luck') / 200,
       ),

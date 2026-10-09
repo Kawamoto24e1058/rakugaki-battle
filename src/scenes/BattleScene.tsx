@@ -78,14 +78,7 @@ const BTN_COLOR: Record<ClashStance, string> = {
   kosei: 'var(--crayon-purple)',
 };
 /** 大きく見せたい damage tag。 */
-const LOUD_TAGS = new Set(['クリティカル', 'カウンター', 'こんじょう', 'ばつぐん', 'ぶち抜き', 'おいうち']);
-
-/** 読み勝ちしたカテゴリごとのごほうび（実況用）。 */
-const WIN_PERK: Record<'power' | 'tech' | 'speed', string> = {
-  power: 'ぼうぎょを ぶち抜く！',
-  tech: 'みきって ぼうぎょ↑！',
-  speed: 'おいうちが くる！',
-};
+const LOUD_TAGS = new Set(['クリティカル', 'カウンター', 'こんじょう', 'ばつぐん']);
 
 function catCounts(c: Character): Record<TriStance, number> {
   const out: Record<TriStance, number> = { power: 0, tech: 0, speed: 0 };
@@ -192,13 +185,7 @@ function buildBeats(
         break;
       case 'clash':
         add(
-          ev.winner === null
-            ? 'おなじ かまえ！ どうじに うごく'
-            : `${names[ev.winner]} が よんだ！ あいては うごけない${
-                pending && (pending[ev.winner] === 'power' || pending[ev.winner] === 'tech' || pending[ev.winner] === 'speed')
-                  ? `（${WIN_PERK[pending[ev.winner] as 'power' | 'tech' | 'speed']}）`
-                  : ''
-              }`,
+          ev.winner === null ? 'おなじ かまえ！ どうじに うごく' : `${names[ev.winner]} が よんだ！ あいては うごけない`,
           { cut: pending ? { a: pending[0], b: pending[1], winner: ev.winner } : null, ms: 2400 },
         );
         break;
@@ -589,7 +576,7 @@ function TriangleGuide() {
   return (
     <div style={{ display: 'grid', placeItems: 'center', gap: 3 }}>
       <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--ink-soft)' }}>
-        じゃんけん：矢印の むきに かつ
+        じゃんけんに かつと ダメージ 1.5ばい！（矢印の むきに かつ）
       </span>
       <svg width="212" height="164" viewBox="0 0 300 232" role="img" aria-label="速さは力に、力は技に、技は速さに勝つ">
         <defs>
@@ -721,6 +708,9 @@ function MoveButtons({ onPick, me }: { onPick: (c: ClashChoice) => void; me: Cla
           <span style={{ fontSize: '0.72rem', color: BTN_COLOR[s], opacity: 0.9 }}>
             {ICON[s]} {STANCE_JP[s]}（{STANCE_JP[STANCE_BEATS[s]]}に かつ）
           </span>
+          {me.favorite === s && (
+            <span style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--crayon-green)' }}>★ とくい！ つよくなる</span>
+          )}
         </button>
       </div>
     );
