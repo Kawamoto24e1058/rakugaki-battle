@@ -9,7 +9,6 @@ export type Screen =
   | 'print'
   | 'capture'
   | 'reveal'
-  | 'loadout'
   | 'opponent'
   | 'battle'
   | 'result'
@@ -55,8 +54,6 @@ interface GameState {
   /** リビール画面で名前を手直しする。 */
   renamePlayer: (name: string) => void;
   confirmReveal: () => void;
-  /** 編成画面で技セットを決めて次へ進む。 */
-  confirmLoadout: (moveIds: string[]) => void;
   chooseCpu: (character: Character) => void;
   finishBattle: (won: boolean) => void;
   nextRound: () => void;
@@ -116,22 +113,15 @@ export const useGame = create<GameState>((set, get) => ({
     set({ player: { ...player, character: { ...player.character, name: trimmed } } });
   },
 
-  confirmReveal: () => set({ screen: 'loadout' }),
-
-  confirmLoadout: (moveIds) => {
+  confirmReveal: () => {
     const { mode, player, pendingChallenger } = get();
-    const p =
-      player && moveIds.length > 0
-        ? { ...player, character: { ...player.character, moveIds: [...moveIds] } }
-        : player;
     if (mode === 'versus') {
       if (!pendingChallenger) {
         // 1人目 → 保持して2人目の撮影へ
-        set({ pendingChallenger: p, player: null, screen: 'capture' });
+        set({ pendingChallenger: player, player: null, screen: 'capture' });
       } else {
         // 2人目まで揃った → 対戦
         set({
-          player: p,
           opponent: {
             character: pendingChallenger.character,
             imageUrl: pendingChallenger.imageUrl,
@@ -141,7 +131,7 @@ export const useGame = create<GameState>((set, get) => ({
         });
       }
     } else {
-      set({ player: p, screen: 'opponent' });
+      set({ screen: 'opponent' });
     }
   },
 

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useGame } from '../store/gameStore';
 import { AttributeBadge, AnimatedStatBar, STAT_MAX, STAT_LABEL_JP as STAT_JP, CharacterSprite } from '../components/bits';
-import { MOVES, moveStars, archetypeLabel, getKosei, limitJp, favoriteCategory, STANCE_JP } from '../engine';
+import { archetypeLabel, getKosei, limitJp } from '../engine';
 import type { Stats } from '../engine/types';
 
 const WEAPON_JP: Record<string, string> = { sword: 'ツメ・剣', wand: '杖', shield: '盾', wing: '翼' };
@@ -38,7 +38,6 @@ export function RevealScene() {
   const reasons = character.analysis;
   const reasonOf = (key: string) => reasons.find((r) => r.key === key);
   const kosei = getKosei(character.koseiId);
-  const fav = favoriteCategory(character.baseStats);
   const attrReason = reasonOf('color');
 
   return (
@@ -132,17 +131,6 @@ export function RevealScene() {
               >
                 {archetypeLabel(character.baseStats)}
               </span>
-              {fav && (
-                <span
-                  style={{
-                    fontFamily: 'var(--font-display)', fontSize: '0.85rem',
-                    border: '2px solid var(--border)', borderRadius: 999, padding: '0.05rem 0.6rem',
-                    background: 'var(--crayon-green)',
-                  }}
-                >
-                  とくい：{STANCE_JP[fav]}
-                </span>
-              )}
             </div>
             {attrReason && (
               <div style={{ fontSize: '0.76rem', color: 'var(--ink-soft)' }}>
@@ -199,28 +187,13 @@ export function RevealScene() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.25 + STAT_ORDER.length * 0.16 + 0.35 }}
-          style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap', justifyContent: 'center' }}
+          style={{ fontSize: '0.78rem', color: 'var(--ink-soft)', textAlign: 'center' }}
         >
-          <span style={{ width: '100%', textAlign: 'center', fontSize: '0.74rem', color: 'var(--ink-soft)' }}>
-            わざの こうほ（つぎの がめんで えらぶ）
-          </span>
-          {character.movePool.map((m) => {
-            const mv = MOVES[m];
-            const stars = mv ? moveStars(mv) : 1;
-            return (
-              <span
-                key={m}
-                style={{
-                  fontSize: '0.75rem', border: '2px solid var(--border)', borderRadius: 8,
-                  padding: '0.1rem 0.5rem', background: '#fff', fontFamily: 'var(--font-display)',
-                  display: 'inline-flex', gap: '0.3rem', alignItems: 'center',
-                }}
-              >
-                {mv?.name ?? m}
-                <span style={{ color: '#b8860b', letterSpacing: '-1px' }}>{'★'.repeat(stars)}</span>
-              </span>
-            );
-          })}
+          わざは まいターン ランダムに 3まい くばられる！
+          <br />
+          {character.personality === 'aggressive'
+            ? 'あばれん坊だから こうげきわざが 出やすいよ'
+            : 'おだやかだから ほじょわざが 出やすいよ'}
         </motion.div>
       </motion.div>
 
@@ -232,7 +205,7 @@ export function RevealScene() {
         style={{ marginTop: '0.8rem' }}
         onClick={confirmReveal}
       >
-        わざを えらぶ →
+        たたかいへ →
       </motion.button>
     </div>
   );

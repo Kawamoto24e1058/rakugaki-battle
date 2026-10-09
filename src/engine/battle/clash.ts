@@ -1,93 +1,37 @@
 /**
- * 「力・技・速さ」三すくみバトル（Phase 17 プロトタイプ）。
+ * 手札バトル。
  *
- * 毎ターン、両者が 力 / 技 / 速さ / こせい / こんしん を1つ伏せて選ぶ → 同時公開。
- * 三すくみ：速さ → 力 → 技 → 速さ（勝つと先手＋威力ボーナス、負けると威力ダウン＋小さな慰め）。
- * こせいは三すくみの外（相手が「力」なら晒されて余計に食らう）。こんしんは HP35%以下で解禁。
+ * 毎ターン、全ワザの中から「3枚」がランダムに配られ（性格・運でかたよりが出る）、
+ * その中から1枚を伏せて選ぶ → 同時公開 → 速さ順（まもり系・先制技・こせいは先に）に発動する。
+ * こせい技は、ときどき手札に混ざる。絵が決めるのはステータス・性格・こせい。
  *
- * ★重要：三すくみのクラッシュ判定はステータス・属性に一切依存しない（＝生成された絵で
- *   有利不利が固定されない）。絵の個性は「どのカテゴリに良い技を持つか」だけで出る。
- *
- * この engine はまだ本体（battle/engine.ts のわざリール方式）を置き換えていない。
- * プロトタイプで手触りを確認してから移行する。
+ * ターンの手札は state.seed と turn から決まる（dealHand）ので、UI は選ぶ前に手札を表示できる。
  */
 import type { Attribute, Character, StatusKind, Stats } from '../types';
 import { attributeStatusMult } from '../attributes';
 import { STATUS_META, type ActiveStatus } from '../status';
-import { getMove, moveCategory, type MoveDef, type MoveId } from '../moves';
+import { MOVES, getMove, type MoveDef, type MoveId } from '../moves';
 import { koseiOrDefault, type Kosei } from '../personalities';
 import { mulberry32, type Rng } from '../rng';
 
-export { moveCategory } from '../moves';
-
 export type Side = 0 | 1;
 
-/** 三すくみの構え＋外枠（こせい）。 */
-export type ClashStance = 'power' | 'tech' | 'speed' | 'kosei';
-/**
- * バトルの「1手」。技IDそのもの（編成した技を直接えらぶ）／
- * 後方互換で 'power'|'tech'|'speed'（そのカテゴリの代表技）／'kosei'。
- */
+/** バトルの「1手」。技ID か 'kosei'。 */
 export type ClashChoice = string;
-/** 三すくみに参加する3つ。 */
-export type TriStance = 'power' | 'tech' | 'speed';
-
-export const STANCE_JP: Record<ClashStance, string> = {
-  power: '力',
-  tech: '技',
-  speed: '速さ',
-  kosei: 'こせい',
-};
-/** 力＝赤／技＝緑／速さ＝青（RGB。色覚配慮でUI側はアイコン＋文字も併記）。 */
-export const STANCE_COLOR: Record<TriStance, string> = {
-  power: '#e8503a',
-  tech: '#1f9d63',
-  speed: '#3b82f6',
-};
-/** その構えが「勝つ」相手。速さ→力→技→速さ。 */
-export const STANCE_BEATS: Record<TriStance, TriStance> = {
-  speed: 'power',
-  power: 'tech',
-  tech: 'speed',
-};
 
 const SUDDEN_DEATH_TURN = 14;
-// クラッシュ勝ち＝相手は行動できない（発動不可）。勝者側の上乗せは控えめに。
-const CLASH_WIN_MULT = 1.5;
 const PER_HIT_CAP_PCT = 0.42;
-/** 全体の火力。試合が「時間切れ（サドンデス）」でなく選択で決着するように底上げ。 */
-const DMG_SCALE = 1.0;
-/** 回復の底上げ（火力を上げたぶん回復が置いていかれないように）。 */
+/** 全体の火力。試合が「時間切れ（サドンデス）」でなく選択で決着するように調整。 */
+const DMG_SCALE = 0.8;
+/** 回復の底上げ。 */
 const HEAL_SCALE = 1.5;
-/** 得意カテゴリの技・補助の底上げ。 */
-const FAVORITE_MULT = 1.25;
 /** こせいのアクティブ技の威力の底上げ（絵の個性の主役にする）。 */
 const KOSEI_POWER_MULT = 1.25;
 
-/**
- * 絵から決まったステータスで「得意なカテゴリ」を決める。
- *  力 ＝ こうげき／速さ ＝ すばやさ／技 ＝ ぼうぎょ・こころ・きゅうしょ（がんじょう・器用・運）。
- * 上位2つがほぼ同じ（バランス型）なら null＝得意なし。
- */
-export function favoriteCategory(stats: Stats): TriStance | null {
-  const scores: [TriStance, number][] = [
-    ['power', stats.atk],
-    ['speed', stats.spd],
-    ['tech', 0.5 * stats.def + 0.5 * (stats.heart + stats.luck)],
-  ];
-  scores.sort((a, b) => b[1] - a[1]);
-  return scores[0][1] - scores[1][1] < 3 ? null : scores[0][0];
-}
-
-// ---------- わざのカテゴリ分け（力／技／速さ）----------
-// moveCategory 本体は moves/data.ts（上で re-export）。
-
-/** どのキャラも各カテゴリに1つは持てるよう保証する基本技。 */
-const BASIC: Record<TriStance, MoveDef> = {
-  power: { id: 'basic_power', name: 'たいあたり', category: 'attack', attribute: null, power: 15, cooldown: 0, target: 'enemy', unlock: [], desc: '' },
-  speed: { id: 'basic_speed', name: 'はやわざ', category: 'attack', attribute: null, power: 12, cooldown: 0, target: 'enemy', unlock: [], desc: '', first: true },
-  tech: { id: 'basic_tech', name: 'けんせい', category: 'attack', attribute: null, power: 8, cooldown: 0, target: 'enemy', unlock: [], desc: '', status: { kind: 'flinch', chance: 0.3 } },
-};
+/** 手札の枚数。 */
+export const HAND_SIZE = 3;
+/** こせいが使えるとき、手札に混ざる確率。 */
+const KOSEI_DEAL_CHANCE = 0.3;
 
 // ---------- 状態 ----------
 
@@ -95,31 +39,35 @@ export interface ClashCombatant {
   characterId: string;
   name: string;
   attribute: Attribute;
+  personality: Character['personality'];
   base: Stats;
-  /** 得意カテゴリ（絵のステータスから決まる）。 */
-  favorite: TriStance | null;
-  moveIds: MoveId[];
   koseiId: string;
   koseiCd: number;
   koseiUses: number;
   maxHp: number;
   hp: number;
   statuses: ActiveStatus[];
-  cooldowns: Record<MoveId, number>;
+}
+
+export type ActKind = 'attack' | 'support' | 'kosei' | 'blocked';
+
+/** 公開された「選んだカード」の見せ方。 */
+export interface RevealCard {
+  name: string;
+  kind: 'attack' | 'support' | 'kosei';
+  attribute: Attribute | null;
 }
 
 export type ClashEvent =
   | { t: 'turn'; turn: number }
-  | { t: 'reveal'; stances: [ClashStance, ClashStance] }
-  | { t: 'clash'; winner: Side | null; note: string }
-  | { t: 'act'; side: Side; stance: ClashStance; moveName: string; support?: boolean }
+  | { t: 'reveal'; cards: [RevealCard, RevealCard] }
+  | { t: 'act'; side: Side; moveName: string; kind: ActKind }
   | { t: 'damage'; side: Side; amount: number; hpAfter: number; tag: string | null }
   | { t: 'heal'; side: Side; amount: number; hpAfter: number }
   | { t: 'status-apply'; side: Side; kind: StatusKind }
   | { t: 'status-resist'; side: Side; kind: StatusKind }
   | { t: 'status-tick'; side: Side; kind: StatusKind; amount: number; hpAfter: number }
   | { t: 'status-end'; side: Side; kind: StatusKind }
-  | { t: 'consolation'; side: Side; amount: number }
   | { t: 'sudden-death'; leader: Side; chipLeader: number; chipTrailer: number }
   | { t: 'end'; winner: Side | 'draw' };
 
@@ -138,16 +86,14 @@ function toCombatant(c: Character): ClashCombatant {
     characterId: c.id,
     name: c.name,
     attribute: c.attribute,
+    personality: c.personality,
     base: { ...c.baseStats },
-    favorite: favoriteCategory(c.baseStats),
-    moveIds: [...c.moveIds],
     koseiId: k.id,
     koseiCd: 0,
     koseiUses: k.limit.kind === 'count' ? k.limit.n : 99,
     maxHp: c.baseStats.hp,
     hp: c.baseStats.hp,
     statuses: [],
-    cooldowns: {},
   };
 }
 
@@ -189,7 +135,53 @@ export function effStat(c: ClashCombatant, stat: keyof Stats): number {
   return Math.max(1, v);
 }
 
-// ---------- カテゴリ別の持ち技 ----------
+// ---------- 手札 ----------
+
+const DRAW_POOL: MoveDef[] = Object.values(MOVES);
+
+/** 強い技（大技）かどうか。レアなので配られにくい（運が高いと出やすい）。 */
+function isRare(m: MoveDef): boolean {
+  return m.category === 'attack' && m.power >= 34;
+}
+
+function dealWeight(c: ClashCombatant, m: MoveDef): number {
+  let w = 1;
+  if (m.category === 'attack') {
+    if (c.personality === 'aggressive') w *= 1.3;
+  } else {
+    w *= c.personality === 'calm' ? 1.4 : 0.9;
+  }
+  if (isRare(m)) w *= 0.6 * (1 + c.base.luck / 40);
+  return w;
+}
+
+/**
+ * side のこのターンの手札（技ID 3枚。こせいが使えるときは、ときどき1枚が 'kosei' になる）。
+ * state.seed・turn・side だけで決まるので、何度呼んでも同じ。
+ */
+export function dealHand(state: ClashState, side: Side): ClashChoice[] {
+  const c = state.combatants[side];
+  const rng = mulberry32((state.seed ^ Math.imul(state.turn + 1, 0x9e3779b1) ^ Math.imul(side + 7, 0x85ebca6b)) >>> 0);
+  rng();
+  rng();
+  const pool = DRAW_POOL.map((m) => ({ id: m.id, w: dealWeight(c, m) }));
+  const hand: ClashChoice[] = [];
+  for (let i = 0; i < HAND_SIZE && pool.length > 0; i++) {
+    const total = pool.reduce((s, p) => s + p.w, 0);
+    let r = rng() * total;
+    let idx = 0;
+    for (; idx < pool.length - 1; idx++) {
+      r -= pool[idx].w;
+      if (r < 0) break;
+    }
+    hand.push(pool[idx].id);
+    pool.splice(idx, 1);
+  }
+  if (koseiReady(c) && rng() < KOSEI_DEAL_CHANCE) {
+    hand[Math.floor(rng() * hand.length)] = 'kosei';
+  }
+  return hand;
+}
 
 function MOVES_SAFE(id: MoveId): MoveDef | null {
   try {
@@ -199,136 +191,49 @@ function MOVES_SAFE(id: MoveId): MoveDef | null {
   }
 }
 
-/** 各カテゴリで「一番いい技」の順に並べる（力＝威力／速さ＝先制優先／技＝効果）。 */
-function rankCategory(moveIds: MoveId[], cat: TriStance): MoveDef[] {
-  const pool = moveIds.map(MOVES_SAFE).filter((m): m is MoveDef => !!m && moveCategory(m) === cat);
-  if (pool.length === 0) return [BASIC[cat]];
-  if (cat === 'power') return [...pool].sort((a, b) => b.power - a.power);
-  if (cat === 'speed') {
-    return [...pool].sort((a, b) => Number(!!b.first) - Number(!!a.first) || b.power - a.power);
-  }
-  const score = (m: MoveDef) =>
-    (m.cures === 'all' ? 3 : m.cures ? 2 : 0) +
-    (m.heal ? m.heal / 12 : 0) +
-    (m.guardPct ? m.guardPct / 30 : 0) +
-    (m.status ? 2 : 0) +
-    (m.debuff ? 2 : 0) +
-    (m.pierce ? 1 : 0) +
-    m.power / 20;
-  return [...pool].sort((a, b) => score(b) - score(a));
-}
-
-/** そのカテゴリで実際に出るわざ：強い順の先頭 → なければ基本技。 */
-function pickMove(c: ClashCombatant, cat: TriStance): MoveDef {
-  return rankCategory(c.moveIds, cat)[0] ?? BASIC[cat];
-}
-
-/** キャラがそのカテゴリの技を1つでも編成しているか（0なら その構えは選べない）。 */
-export function hasCategoryMove(moveIds: MoveId[], cat: TriStance): boolean {
-  return moveIds.some((id) => {
-    const m = MOVES_SAFE(id);
-    return !!m && moveCategory(m) === cat;
-  });
-}
-
-// ---------- クラッシュ判定 ----------
-
-type ClashResult = 'win' | 'even' | 'lose';
-
-function triOf(s: ClashStance): TriStance | null {
-  return s === 'power' || s === 'tech' || s === 'speed' ? s : null;
-}
-
-/** side から見たクラッシュ結果。三すくみ外（こせい/こんしん）は even 扱い。 */
-function clashResult(mine: ClashStance, theirs: ClashStance): ClashResult {
-  const a = triOf(mine);
-  const b = triOf(theirs);
-  if (!a || !b) return 'even';
-  if (a === b) return 'even';
-  if (STANCE_BEATS[a] === b) return 'win';
-  if (STANCE_BEATS[b] === a) return 'lose';
-  return 'even';
-}
-
-function clashNote(win: Side, wStance: TriStance): string {
-  const who = win === 0 ? '' : '';
-  void who;
-  if (wStance === 'power') return '力で ぶち抜いた！';
-  if (wStance === 'tech') return '見切った！';
-  return '先手を取った！';
+/** 先に動く技か（まもり系・先制技）。 */
+function hasPriority(m: MoveDef): boolean {
+  return !!(m.first || m.guardPct || m.reflect || (m.buff && m.buff.stat === 'def'));
 }
 
 // ---------- ターン解決 ----------
 
-export function resolveClashTurn(
-  state: ClashState,
-  choices: [ClashChoice, ClashChoice],
-): ClashState {
+interface Pick {
+  move: MoveDef | null; // null = こせい
+}
+
+function resolveChoice(state: ClashState, side: Side, choice: ClashChoice): Pick {
+  const c = state.combatants[side];
+  if (choice === 'kosei' && koseiReady(c)) return { move: null };
+  const m = choice === 'kosei' ? null : MOVES_SAFE(choice);
+  if (m) return { move: m };
+  // 使えない/知らない技 → 手札の先頭
+  const fb = dealHand(state, side).find((h) => h !== 'kosei' && MOVES_SAFE(h));
+  return { move: (fb && MOVES_SAFE(fb)) || MOVES.c_tackle };
+}
+
+function revealCard(c: ClashCombatant, p: Pick): RevealCard {
+  if (!p.move) return { name: kosei(c).activeName, kind: 'kosei', attribute: c.attribute };
+  return { name: p.move.name, kind: p.move.category === 'support' ? 'support' : 'attack', attribute: p.move.attribute };
+}
+
+export function resolveClashTurn(state: ClashState, choices: [ClashChoice, ClashChoice]): ClashState {
   if (state.done) return state;
   const rng = mulberry32((state.seed + state.turn * 0x9e3779b1) >>> 0);
   const next = clone(state);
   const log: ClashEvent[] = [];
 
-  // 「1手」を { カテゴリ, 実際に出る技 } に解決する
-  const r0c = resolveChoice(next.combatants[0], choices[0]);
-  const r1c = resolveChoice(next.combatants[1], choices[1]);
-  const eff: [ClashStance, ClashStance] = [r0c.stance, r1c.stance];
-  const chosenMoves: [MoveDef | null, MoveDef | null] = [r0c.move, r1c.move];
-  log.push({ t: 'reveal', stances: eff });
+  const picks: [Pick, Pick] = [resolveChoice(next, 0, choices[0]), resolveChoice(next, 1, choices[1])];
+  log.push({
+    t: 'reveal',
+    cards: [revealCard(next.combatants[0], picks[0]), revealCard(next.combatants[1], picks[1])],
+  });
 
-  // こせいは三すくみと完全に無関係：こせいを含むターンはクラッシュ判定なし
-  // （こせい側は発動、もう片方はふつうに行動＝有利不利なし）。
-  const koseiTurn = eff[0] === 'kosei' || eff[1] === 'kosei';
-  const r0 = clashResult(eff[0], eff[1]);
-  let clashWinner: Side | null = null;
-  const t0 = triOf(eff[0]);
-  const t1 = triOf(eff[1]);
-  if (koseiTurn) {
-    // クラッシュ演出は出さない（こせいのカットインが主役）
-  } else if (r0 === 'win' && t0) {
-    clashWinner = 0;
-    log.push({ t: 'clash', winner: 0, note: clashNote(0, t0) });
-  } else if (r0 === 'lose' && t1) {
-    clashWinner = 1;
-    log.push({ t: 'clash', winner: 1, note: clashNote(1, t1) });
-  } else {
-    log.push({ t: 'clash', winner: null, note: '五分！' });
-  }
-
-  // 行動順：こせいは必ず先制 → クラッシュ勝者 → 「速さ」構え → すばやさ
-  let order: Side[];
-  if (eff[0] === 'kosei' && eff[1] !== 'kosei') order = [0, 1];
-  else if (eff[1] === 'kosei' && eff[0] !== 'kosei') order = [1, 0];
-  else order = decideOrder(next, eff, clashWinner, rng);
-
+  const order = decideOrder(next, picks, rng);
   for (const side of order) {
     if (next.winner !== null) break;
-    const foe = eff[(1 - side) as Side];
-    const res = clashResult(eff[side], foe);
-    // 三すくみに負けた側は「見切られて」発動できない（勝った側の技の種類を問わない＝
-    // バフ技で勝っても攻撃技と同じく相手を止められる）。
-    const winnerMove = chosenMoves[(1 - side) as Side];
-    const interrupted = res === 'lose' && !!winnerMove;
-    if (interrupted) {
-      log.push({ t: 'act', side, stance: eff[side], moveName: '（見切られて うごけない）' });
-      continue;
-    }
-    act(next, side, eff[side], chosenMoves[side], res === 'lose' ? 'even' : res, rng, log);
+    act(next, side, picks[side], rng, log);
     checkFaint(next);
-  }
-
-  // クラッシュ負け側の慰め（発動できないぶん、連敗が苦行にならないように）
-  if (next.winner === null) {
-    for (const side of [0, 1] as Side[]) {
-      if (clashResult(eff[side], eff[1 - side as Side]) === 'lose') {
-        const c = next.combatants[side];
-        if (c.hp > 0 && c.hp < c.maxHp) {
-          const amt = Math.max(4, Math.round(c.maxHp * 0.08));
-          c.hp = Math.min(c.maxHp, c.hp + amt);
-          log.push({ t: 'consolation', side, amount: amt });
-        }
-      }
-    }
   }
 
   // 状態異常 tick（両者を処理してから決着判定＝同時death は draw）
@@ -354,7 +259,6 @@ export function resolveClashTurn(
   for (const side of [0, 1] as Side[]) {
     const c = next.combatants[side];
     if (c.koseiCd > 0) c.koseiCd -= 1;
-    for (const k of Object.keys(c.cooldowns)) c.cooldowns[k] = Math.max(0, c.cooldowns[k] - 1);
     c.statuses = c.statuses
       .map((s) => ({ ...s, turnsLeft: s.turnsLeft - 1, age: s.age + 1 }))
       .filter((s) => {
@@ -394,35 +298,12 @@ export function resolveClashTurn(
   return next;
 }
 
-/** ClashChoice（技ID / 'power'|'tech'|'speed' / 'kosei'）→ { カテゴリ, 実際に出る技 }。 */
-function resolveChoice(c: ClashCombatant, choice: ClashChoice): { stance: ClashStance; move: MoveDef | null } {
-  if (choice === 'kosei') {
-    if (koseiReady(c)) return { stance: 'kosei', move: null };
-    choice = 'power'; // こせいが使えない → 力カテゴリの代表技に落とす
-  }
-  if (choice === 'power' || choice === 'tech' || choice === 'speed') {
-    return { stance: choice, move: pickMove(c, choice) };
-  }
-  // 技ID 指定
-  const m = MOVES_SAFE(choice);
-  if (m && c.moveIds.includes(m.id)) {
-    return { stance: moveCategory(m), move: m };
-  }
-  // 未編成の技ID → 同カテゴリの代表技 or 基本技
-  const cat = m ? moveCategory(m) : 'power';
-  return { stance: cat, move: pickMove(c, cat) };
-}
 
-function decideOrder(
-  state: ClashState,
-  eff: [ClashStance, ClashStance],
-  clashWinner: Side | null,
-  rng: Rng,
-): Side[] {
-  if (clashWinner !== null) return [clashWinner, (1 - clashWinner) as Side];
-  const fast0 = eff[0] === 'speed';
-  const fast1 = eff[1] === 'speed';
-  if (fast0 !== fast1) return fast0 ? [0, 1] : [1, 0];
+function decideOrder(state: ClashState, picks: [Pick, Pick], rng: Rng): Side[] {
+  const prio = (p: Pick) => (!p.move ? 2 : hasPriority(p.move) ? 1 : 0);
+  const p0 = prio(picks[0]);
+  const p1 = prio(picks[1]);
+  if (p0 !== p1) return p0 > p1 ? [0, 1] : [1, 0];
   const f0 = kosei(state.combatants[0]).passive.kind === 'firstMove';
   const f1 = kosei(state.combatants[1]).passive.kind === 'firstMove';
   if (f0 !== f1) return f0 ? [0, 1] : [1, 0];
@@ -432,16 +313,9 @@ function decideOrder(
   return s0 > s1 ? [0, 1] : [1, 0];
 }
 
-function act(
-  state: ClashState,
-  side: Side,
-  stance: ClashStance,
-  chosenMove: MoveDef | null,
-  result: ClashResult,
-  rng: Rng,
-  log: ClashEvent[],
-): void {
+function act(state: ClashState, side: Side, pick: Pick, rng: Rng, log: ClashEvent[]): void {
   const c = state.combatants[side];
+  const blocked = (moveName: string) => log.push({ t: 'act', side, moveName, kind: 'blocked' });
 
   // こおり：とけるか？（とけなければ行動不能）
   const frozen = c.statuses.find((s) => s.kind === 'freeze');
@@ -450,64 +324,47 @@ function act(
       c.statuses = c.statuses.filter((s) => s.kind !== 'freeze');
       log.push({ t: 'status-end', side, kind: 'freeze' });
     } else {
-      log.push({ t: 'act', side, stance, moveName: '（こおって うごけない）' });
+      blocked('（こおって うごけない）');
       return;
     }
   }
-  // ねむり：起きるか？（duration が尽きたら起きる。それまでは行動不能）
-  const asleep = c.statuses.find((s) => s.kind === 'sleep');
-  if (asleep) {
-    log.push({ t: 'act', side, stance, moveName: '（ぐうぐう ねむっている）' });
+  // ねむり：duration が尽きるまで行動不能
+  if (c.statuses.some((s) => s.kind === 'sleep')) {
+    blocked('（ぐうぐう ねむっている）');
     return;
   }
   // まひ：ときどき動けない
   if (has(c, 'paralysis') && rng() < STATUS_META.paralysis.skipChance) {
-    log.push({ t: 'act', side, stance, moveName: '（まひして うごけない）' });
+    blocked('（まひして うごけない）');
     return;
   }
   // こんらん：ときどき自分を攻撃
   if (has(c, 'confuse') && rng() < STATUS_META.confuse.selfHitChance) {
     const dmg = Math.max(2, Math.round(c.maxHp * 0.06));
     c.hp = Math.max(0, c.hp - dmg);
-    log.push({ t: 'act', side, stance, moveName: '（こんらんして じめん を なぐった）' });
+    blocked('（こんらんして じめん を なぐった）');
     log.push({ t: 'damage', side, amount: dmg, hpAfter: c.hp, tag: null });
     return;
   }
 
-  if (stance === 'kosei') {
+  if (!pick.move) {
     applyKosei(state, side, rng, log);
     return;
   }
-
-  const move = chosenMove ?? pickMove(c, stance);
+  const move = pick.move;
   const isSupport = move.category === 'support';
-  log.push({ t: 'act', side, stance, moveName: move.name, support: isSupport });
-
-  const favored = c.favorite === stance;
-  if (isSupport) {
-    applySupport(state, side, move, log, favored, result === 'win');
-    return;
-  }
-
-  const won = result === 'win';
-  // ルールは2つだけ：読み勝ち → つよい／とくいカテゴリ → つよい
-  const clashMult = (won ? CLASH_WIN_MULT : 1) * (favored ? FAVORITE_MULT : 1);
-  dealDamage(state, side, move, { clashMult }, rng, log);
+  log.push({ t: 'act', side, moveName: move.name, kind: isSupport ? 'support' : 'attack' });
+  if (isSupport) applySupport(state, side, move, log);
+  else dealDamage(state, side, move, {}, rng, log);
 }
 
-function applySupport(state: ClashState, side: Side, move: MoveDef, log: ClashEvent[], favored = false, won = false): void {
+function applySupport(state: ClashState, side: Side, move: MoveDef, log: ClashEvent[]): void {
   const c = state.combatants[side];
-  // 得意カテゴリ・読み勝ちのとき、補助は効きがのびる（回復×、ターン+1）
-  const fv = (favored ? FAVORITE_MULT : 1) * (won ? CLASH_WIN_MULT : 1);
-  if (move.cures) {
-    const before = c.statuses.length;
-    c.statuses = c.statuses.filter((s) => STATUS_META[s.kind].kind !== 'debuff');
-    void before;
-  }
+  if (move.cures) c.statuses = c.statuses.filter((s) => STATUS_META[s.kind].kind !== 'debuff');
   if (move.buff) {
     const map: Record<string, StatusKind> = { atk: 'atkUp', def: 'defUp', spd: 'spdUp', luck: 'luckUp' };
     const k = map[move.buff.stat] ?? 'atkUp';
-    applyStatus(c, k, move.buff.turns + (favored ? 1 : 0) + (won ? 1 : 0));
+    applyStatus(c, k, move.buff.turns);
     log.push({ t: 'status-apply', side, kind: k });
   }
   if (move.guardPct) {
@@ -519,7 +376,7 @@ function applySupport(state: ClashState, side: Side, move: MoveDef, log: ClashEv
     log.push({ t: 'status-apply', side, kind: 'thorns' });
   }
   if (move.heal) {
-    const amt = Math.round(move.heal * HEAL_SCALE * fv * (1 + effStat(c, 'heart') / 55));
+    const amt = Math.round(move.heal * HEAL_SCALE * (1 + effStat(c, 'heart') / 55));
     const b = c.hp;
     c.hp = Math.min(c.maxHp, c.hp + amt);
     if (c.hp > b) log.push({ t: 'heal', side, amount: c.hp - b, hpAfter: c.hp });
@@ -541,14 +398,14 @@ function applyKosei(state: ClashState, side: Side, rng: Rng, log: ClashEvent[]):
   const a = k.active;
   if (k.limit.kind === 'cooldown') c.koseiCd = k.limit.turns + 1;
   else c.koseiUses = Math.max(0, c.koseiUses - 1);
-  log.push({ t: 'act', side, stance: 'kosei', moveName: k.activeName });
+  log.push({ t: 'act', side, moveName: k.activeName, kind: 'kosei' });
 
   const hit = (power: number, extra: Partial<MoveDef> = {}, tag: string | null = null) =>
     dealDamage(
       state,
       side,
       { id: `kosei_${k.id}`, name: k.activeName, category: 'attack', attribute: c.attribute, power: Math.round(power * KOSEI_POWER_MULT), cooldown: 0, target: 'enemy', unlock: [], desc: '', ...extra },
-      { clashMult: 1, tag },
+      { tag },
       rng,
       log,
     );
@@ -611,20 +468,14 @@ function applyKosei(state: ClashState, side: Side, rng: Rng, log: ClashEvent[]):
 }
 
 interface DamageOpts {
-  clashMult: number;
-  /** 命中時に付与する状態異常の成功率にかかる倍率（クラッシュ結果で変わる）。 */
-  ignoreCap?: boolean;
-  /** かすり・クリティカル等のタグが無いときに使う表示タグ。 */
   tag?: string | null;
-  /** ぼうぎょ・ガード・ぼうぎょ↑を無視して通す（力で読み勝ちした時）。 */
-  /** 状態異常を付けない（追撃用）。 */
 }
 
 function dealDamage(
   state: ClashState,
   side: Side,
   move: MoveDef,
-  opts: DamageOpts,
+  opts: DamageOpts = {},
   rng: Rng,
   log: ClashEvent[],
 ): void {
@@ -646,10 +497,10 @@ function dealDamage(
   );
   // 大振りな技（riskShift）は「かすり」になりやすい＝強い一撃のリスク。
   const grazeChance = 0.12 + (move.riskShift ?? 0) / 90;
-  // すばやさ：相手のほうが素早いほど かわされやすい（かわす＝かすり扱い）。
+  // すばやさ：相手のほうが素早いほど かわされやすい（かわされると ダメージが大きく減る）。
   const aSpd = effStat(actor, 'spd');
   const tSpd = effStat(target, 'spd');
-  const dodgeChance = 0.5 * (tSpd / (tSpd + aSpd + 15));
+  const dodgeChance = 0.9 * (tSpd / (tSpd + aSpd + 10));
   const dodgeRoll = rng();
   // ひるみ：次の攻撃が かすり になる（1回で消える）
   const flinched = has(actor, 'flinch');
@@ -657,8 +508,8 @@ function dealDamage(
   if (flinched || roll < grazeChance) {
     kimeMult = 0.55;
     kimeTag = 'かすった';
-  } else if (dodgeRoll < dodgeChance * 0.5) {
-    kimeMult = 0.55;
+  } else if (dodgeRoll < dodgeChance) {
+    kimeMult = 0.3;
     kimeTag = 'かわされた';
   } else if (roll > 1 - critChance) {
     kimeMult = 1.7;
@@ -667,7 +518,7 @@ function dealDamage(
   let tag: string | null = kimeTag ?? opts.tag ?? null;
 
   const atkTerm = 0.95 + effStat(actor, 'atk') / 46;
-  let dmg = move.power * opts.clashMult * kimeMult * atkTerm * DMG_SCALE;
+  let dmg = move.power * kimeMult * atkTerm * DMG_SCALE;
 
   // こおった相手に ほのお技 → 大ダメージ（このあと とかす）
   if (hasAttr && move.attribute === 'fire' && has(target, 'freeze')) dmg *= 1.5;
@@ -693,7 +544,7 @@ function dealDamage(
   dmg *= 0.92 + rng() * 0.16;
 
   let final = Math.max(1, Math.round(dmg));
-  if (!opts.ignoreCap) final = Math.min(final, Math.round(target.maxHp * PER_HIT_CAP_PCT));
+  final = Math.min(final, Math.round(target.maxHp * PER_HIT_CAP_PCT));
 
   target.hp = Math.max(0, target.hp - final);
   log.push({ t: 'damage', side: (1 - side) as Side, amount: final, hpAfter: target.hp, tag });
@@ -806,38 +657,64 @@ function clone(s: ClashState): ClashState {
   };
 }
 function cloneC(c: ClashCombatant): ClashCombatant {
-  return {
-    ...c,
-    base: { ...c.base },
-    moveIds: [...c.moveIds],
-    statuses: c.statuses.map((s) => ({ ...s })),
-    cooldowns: { ...c.cooldowns },
-  };
+  return { ...c, base: { ...c.base }, statuses: c.statuses.map((s) => ({ ...s })) };
 }
+
 
 // ---------- CPU ----------
 
-/** ソロ相手の構え。単純ルール＋シード乱数。三すくみは基本ランダム＋クセ。 */
-export function cpuClashStance(state: ClashState, side: Side, rng: Rng): ClashStance {
+/** CPU が手札から1枚えらぶ。ダメージ見込み・回復の必要度などで点数をつけ、ときどき気まぐれ。 */
+export function cpuChoose(state: ClashState, side: Side, rng: Rng): ClashChoice {
   const me = state.combatants[side];
   const foe = state.combatants[1 - side as Side];
   const myPct = me.hp / me.maxHp;
   const foePct = foe.hp / foe.maxHp;
+  const hand = dealHand(state, side);
 
-  if (koseiReady(me)) {
-    const offensive = !KOSEI_SUPPORT.has(kosei(me).active.kind);
-    if (offensive && foePct < 0.4 && rng() < 0.6) return 'kosei';
-    if (!offensive && myPct < 0.55 && rng() < 0.5) return 'kosei';
-    if (offensive && state.turn >= 3 && rng() < 0.2) return 'kosei';
+  const score = (choice: ClashChoice): number => {
+    if (choice === 'kosei') {
+      const offensive = !KOSEI_SUPPORT.has(kosei(me).active.kind);
+      if (offensive) return foePct < 0.5 ? 40 : 22;
+      return myPct < 0.6 ? 36 : 6;
+    }
+    const m = MOVES_SAFE(choice);
+    if (!m) return 0;
+    if (m.category === 'attack') {
+      const atkTerm = 0.95 + effStat(me, 'atk') / 46;
+      let est = m.power * atkTerm * (m.pierce ? 1 : 40 / (40 + effStat(foe, 'def')));
+      est = Math.min(est, foe.maxHp * PER_HIT_CAP_PCT);
+      let s = est;
+      if (est >= foe.hp) s += 60;
+      if (m.status && !m.status.toSelf && !has(foe, m.status.kind)) s += m.status.chance * 8;
+      if (m.status?.toSelf) s -= 4;
+      if (m.recoil) s -= 3;
+      if (m.drain && myPct < 0.7) s += 5;
+      if (m.first) s += 2;
+      return s;
+    }
+    let s = 3;
+    const missing = me.maxHp - me.hp;
+    if (m.heal) s += Math.min(missing, m.heal * HEAL_SCALE) * 0.9;
+    if (m.cures && me.statuses.some((x) => STATUS_META[x.kind].kind === 'debuff')) s += m.cures === 'all' ? 16 : 11;
+    if ((m.guardPct || m.reflect || m.buff?.stat === 'def') && !has(me, 'guard') && !has(me, 'defUp')) s += 8 + (foePct > myPct ? 6 : 0);
+    if (m.buff?.stat === 'atk' && !has(me, 'atkUp')) s += state.turn <= 6 ? 14 : 6;
+    if (m.buff?.stat === 'spd' && !has(me, 'spdUp')) s += 5;
+    if (m.buff?.stat === 'luck' && !has(me, 'luckUp')) s += 3;
+    if (m.debuff && !has(foe, m.debuff.stat === 'atk' ? 'atkDown' : m.debuff.stat === 'def' ? 'defDown' : 'spdDown')) s += 9;
+    return s;
+  };
+
+  if (rng() < 0.15) return hand[Math.floor(rng() * hand.length)];
+  let best = hand[0];
+  let bestScore = -Infinity;
+  for (const h of hand) {
+    const sc = score(h) + rng() * 1.5;
+    if (sc > bestScore) {
+      bestScore = sc;
+      best = h;
+    }
   }
-  // 編成している技のカテゴリだけ候補にする（偏った編成なら偏って戦う）
-  const owned = (['power', 'tech', 'speed'] as TriStance[]).filter((cat) => hasCategoryMove(me.moveIds, cat));
-  const cats = owned.length > 0 ? owned : (['power'] as TriStance[]);
-  const strength = (cat: TriStance) => rankCategory(me.moveIds, cat)[0].power;
-  const best = [...cats].sort((a, b) => strength(b) - strength(a))[0];
-  const r = rng();
-  if (r < 0.55) return best;
-  return cats[Math.floor(rng() * cats.length)];
+  return best;
 }
 
 export function playClashToEnd(state: ClashState, seed = state.seed): ClashState {
@@ -845,9 +722,9 @@ export function playClashToEnd(state: ClashState, seed = state.seed): ClashState
   let guard = 0;
   while (!cur.done && guard++ < 60) {
     const rng = mulberry32((seed + cur.turn * 7919) >>> 0);
-    const s0 = cpuClashStance(cur, 0, rng);
-    const s1 = cpuClashStance(cur, 1, rng);
-    cur = resolveClashTurn(cur, [s0, s1]);
+    const c0 = cpuChoose(cur, 0, rng);
+    const c1 = cpuChoose(cur, 1, rng);
+    cur = resolveClashTurn(cur, [c0, c1]);
   }
   return cur;
 }
