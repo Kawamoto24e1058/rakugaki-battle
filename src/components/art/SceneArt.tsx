@@ -63,16 +63,6 @@ function NumBadge({ x, y, text, color = '#d8321c', r = 11 }: { x: number; y: num
   );
 }
 
-function Arrow({ x1, x2, y, color }: { x1: number; x2: number; y: number; color: string }) {
-  return (
-    <g>
-      <path d={`M${x1},${y} L${x2 - 7},${y}`} stroke={INK} strokeWidth={7} strokeLinecap="round" />
-      <path d={`M${x1},${y} L${x2 - 7},${y}`} stroke={color} strokeWidth={3.6} strokeLinecap="round" strokeDasharray="7 5" />
-      <path d={`M${x2 - 9},${y - 8} L${x2 + 2},${y} L${x2 - 9},${y + 8}Z`} fill={color} stroke={INK} strokeWidth={2} strokeLinejoin="round" />
-    </g>
-  );
-}
-
 /** 条件を ちいさな絵で。 */
 function CondGlyph({ cond, pal }: { cond: Cond; pal: Pal }): ReactElement | null {
   switch (cond.t) {
@@ -146,180 +136,220 @@ function CondGlyph({ cond, pal }: { cond: Cond; pal: Pal }): ReactElement | null
   }
 }
 
-function HandBadge({ m, pal, x, y }: { m: MoveDef; pal: Pal; x: number; y: number }) {
-  const h = m.hand!;
-  const text = h.kind === 'extra' ? `+${h.n}` : h.kind === 'foeLess' ? `-${h.n}` : h.kind === 'guarantee' ? `${h.n}` : '';
-  const sub =
-    h.kind === 'guarantee'
-      ? ({ attack: 'burst', support: 'cure', guard: 'shield', heal: 'heart', first: 'wing', rare: 'wishstar', status: 'venom' } as Record<string, string>)[h.pred]
-      : h.kind === 'luck'
-        ? 'wishstar'
-        : null;
+/** 効果ステッカー：丸いシールに ちいさな絵。 */
+function Sticker({ x, y, children }: { x: number; y: number; children: ReactElement }) {
   return (
     <g transform={`translate(${x} ${y})`}>
-      <Glyph motif="cards" pal={pal} x={0} y={0} s={0.5} />
-      {text && (
-        <g transform="translate(16 -14)">
-          <circle r={9} fill={h.kind === 'foeLess' ? '#e8503a' : '#2f9e58'} stroke={INK} strokeWidth={1.8} />
-          <text textAnchor="middle" y={4.6} fontSize={12} fontWeight={900} fill="#fff" fontFamily="var(--font-display)">
-            {text}
-          </text>
-        </g>
-      )}
-      {sub && <Glyph motif={sub} pal={pal} x={-17} y={-12} s={0.22} />}
+      <circle r={11} fill={PAPER} stroke={INK} strokeWidth={2} />
+      {children}
     </g>
   );
+}
+
+/** 絵の下に ならべる「効果ステッカー」。左端が対象（じぶん／あいて）、そのあとに効果。 */
+function stickersFor(move: MoveDef, pal: Pal): ReactElement[] {
+  const out: ReactElement[] = [];
+  const g = (motif: string, p: Pal, s = 0.22, dx = 0, dy = 0) => <Glyph key={motif + out.length} motif={motif} pal={p} x={dx} y={dy} s={s} />;
+  if (move.first || move.guardPct || move.reflect || (move.buff && move.buff.stat === 'def')) {
+    out.push(
+      <g key="q">
+        <path d="M-9,-4 L-2,-4 M-10,1 L-3,1 M-9,6 L-2,6" stroke={pal.dark} strokeWidth={1.6} strokeLinecap="round" />
+        <text x={4} y={5} textAnchor="middle" fontSize={13} fontWeight={900} fill={INK} fontFamily="var(--font-display)">1</text>
+      </g>,
+    );
+  }
+  if (move.hits && move.hits > 1) {
+    out.push(
+      <text key="h" textAnchor="middle" y={4.5} fontSize={11} fontWeight={900} fill={pal.dark} fontFamily="var(--font-display)">
+        ×{move.hits}
+      </text>,
+    );
+  }
+  if (move.pierce) out.push(<path key="pi" d="M0,-8 L7,-5 Q8,4 0,9 Q-8,4 -7,-5Z" fill="none" stroke={INK} strokeWidth={1.8} strokeDasharray="2.6 2.6" />);
+  if (move.status && !move.status.toSelf && STATUS_GLYPH[move.status.kind]) {
+    const sg = STATUS_GLYPH[move.status.kind]!;
+    out.push(g(sg.motif, PALETTES[sg.pal], 0.22));
+  }
+  if (move.drain) out.push(g('heart', PALETTES.sup, 0.2));
+  if (move.critBoost) out.push(g('crit', pal, 0.2));
+  if (move.execute) {
+    out.push(
+      <g key="ex">
+        <rect x={-8} y={-2} width={16} height={5} rx={2.5} fill="#fff" stroke={INK} strokeWidth={1.4} />
+        <rect x={-7} y={-1} width={4} height={3} rx={1.5} fill="#e83a2a" />
+      </g>,
+    );
+  }
+  if (move.ambush) out.push(g('ninja', pal, 0.2));
+  if (move.randomAttr) out.push(g('rainbow', pal, 0.2, 0, 2));
+  if (move.recoil) out.push(g('recoil', PALETTES.atk, 0.18));
+  if (move.cures) {
+    out.push(
+      <g key="cu">
+        <Glyph motif="venom" pal={PALETTES.dark} x={0} y={0} s={0.2} />
+        <path d="M-7,-7 L7,7 M7,-7 L-7,7" stroke="#e83a2a" strokeWidth={2.6} strokeLinecap="round" />
+      </g>,
+    );
+  }
+  if (move.guardPct) out.push(g('shield', PALETTES.water, 0.2));
+  if (move.reflect) out.push(g('counter', PALETTES.sup, 0.2));
+  if (move.buff) {
+    const m = ({ atk: ['muscle', 'atk'], spd: ['wing', 'bolt'], luck: ['clover', 'wood'], def: ['shield', 'water'] } as Record<string, [string, keyof typeof PALETTES]>)[move.buff.stat];
+    if (m) out.push(g(m[0], PALETTES[m[1]], 0.2));
+    out.push(
+      <g key="up">
+        <Glyph motif="up" pal={PALETTES.atk} x={0} y={0} s={0.2} />
+      </g>,
+    );
+  }
+  if (move.debuff) {
+    const m = ({ atk: 'fist', spd: 'wing', def: 'shield' } as Record<string, string>)[move.debuff.stat] ?? 'fist';
+    out.push(g(m, PALETTES.dark, 0.2));
+    out.push(<Glyph key="dn" motif="down" pal={PALETTES.dark} x={0} y={0} s={0.2} />);
+  }
+  if (move.hand) {
+    const h = move.hand;
+    out.push(
+      <g key="hd">
+        <Glyph motif="cards" pal={pal} x={-1} y={1} s={0.2} />
+        {(h.kind === 'extra' || h.kind === 'foeLess' || h.kind === 'guarantee') && (
+          <text x={7} y={-3} textAnchor="middle" fontSize={9} fontWeight={900} fill={h.kind === 'foeLess' ? '#d8321c' : '#1b7a47'} fontFamily="var(--font-display)" stroke="#fff" strokeWidth={2} paintOrder="stroke">
+            {h.kind === 'extra' ? `+${h.n}` : h.kind === 'foeLess' ? `-${h.n}` : h.n}
+          </text>
+        )}
+      </g>,
+    );
+  }
+  return out;
+}
+
+/** 属性ごとの やわらかい背景（うすく・ごちゃつかせない）。 */
+function Backdrop({ attr, pal }: { attr: MoveDef['attribute']; pal: Pal }) {
+  switch (attr) {
+    case 'fire':
+      return (
+        <g opacity={0.5}>
+          <path d="M0,90 Q20,60 40,84 Q60,52 80,86 Q104,56 124,84 Q144,62 160,88 L160,100 L0,100Z" fill={pal.light} />
+          {[[24, 26, 3], [140, 22, 2.6], [112, 12, 2], [46, 14, 2.2]].map(([x, y, r], i) => (
+            <circle key={i} cx={x} cy={y} r={r} fill={pal.main} opacity={0.5} />
+          ))}
+        </g>
+      );
+    case 'water':
+      return (
+        <g opacity={0.5} fill="none" stroke="#fff" strokeWidth={2.4} strokeLinecap="round">
+          <path d="M-4,70 Q16,64 36,70 T76,70 T116,70 T164,70" />
+          <path d="M-4,82 Q18,76 40,82 T84,82 T128,82 T170,82" />
+          <circle cx={26} cy={24} r={5} />
+          <circle cx={136} cy={30} r={3.6} />
+        </g>
+      );
+    case 'wood':
+      return (
+        <g opacity={0.45} fill={pal.light} stroke={pal.main} strokeWidth={1.2}>
+          <path d="M-2,20 Q18,8 30,28 Q10,34 -2,20Z" />
+          <path d="M162,60 Q142,44 128,64 Q148,72 162,60Z" />
+          <path d="M120,6 Q138,0 146,16 Q128,20 120,6Z" />
+        </g>
+      );
+    case 'bolt':
+      return (
+        <g opacity={0.45} fill={pal.light}>
+          <path d="M20,0 L36,0 L10,100 L-6,100Z" />
+          <path d="M120,0 L132,0 L110,100 L98,100Z" />
+          <path d="M152,0 L162,0 L150,100 L140,100Z" />
+        </g>
+      );
+    case 'dark':
+      return (
+        <g opacity={0.55} fill="#fff">
+          {[[22, 20, 2], [140, 16, 2.6], [46, 62, 1.6], [128, 54, 1.8], [96, 12, 1.6], [16, 74, 2]].map(([x, y, r], i) => (
+            <circle key={i} cx={x} cy={y} r={r} />
+          ))}
+        </g>
+      );
+    default:
+      return (
+        <g opacity={0.5} fill={pal.light}>
+          <circle cx={24} cy={72} r={14} />
+          <circle cx={140} cy={70} r={18} />
+          <circle cx={128} cy={14} r={7} />
+        </g>
+      );
+  }
 }
 
 export function SceneArt({ move }: { move: MoveDef }) {
   const art = artFor(move);
   const pal = art.pal;
-  const main = art.motifs[0] ?? 'burst';
-  const ME_TINT = '#ffe9a8';
-  const FOE_TINT = '#cfd8ea';
   const atk = move.category === 'attack';
-
   const toFoe = atk || move.target === 'enemy';
-  const hasSelfEffect = !atk && !!(move.heal || move.cures || move.guardPct || move.reflect || move.buff);
-  const onlyHand = !atk && !hasSelfEffect && !move.debuff && !move.status && !!move.hand;
-  const selfOnly = !toFoe && !onlyHand;
+  const explicit = art.motifs[0]?.includes(':');
+  const toks = explicit ? art.motifs : art.motifs.slice(0, 1);
 
-  const els: ReactElement[] = [];
-
-  if (atk) {
-    const num = `${move.power}${move.hits && move.hits > 1 ? `×${move.hits}` : ''}`;
-    els.push(
-      <g key="a">
-        <Blob x={28} y={66} tint={ME_TINT} />
-        <Blob x={132} y={66} tint={FOE_TINT} />
-        {move.charge && (
-          <g>
-            <circle cx={28} cy={64} r={25} fill="none" stroke={pal.main} strokeWidth={2.6} strokeDasharray="6 5" />
-            <Glyph motif="hourglass" pal={pal} x={80} y={36} s={0.34} />
-          </g>
-        )}
-        <Arrow x1={move.charge ? 54 : 52} x2={98} y={move.charge ? 60 : 46} color={pal.main} />
-        {/* あたった絵 */}
-        <g transform="translate(128 44)">
-          <g filter="url(#crayon)">
-            <g transform="scale(0.5)">{MOTIFS.burst({ ...pal })}</g>
-          </g>
-        </g>
-        <Glyph motif={main} pal={pal} x={128} y={44} s={0.46} />
-        {move.hits && move.hits > 1 && (
-          <g stroke={INK} strokeWidth={2.4} strokeLinecap="round">
-            {Array.from({ length: Math.min(5, move.hits) }, (_, i) => (
-              <path key={i} d={`M${96 + i * 8},${60} l5,-9`} stroke={pal.dark} />
-            ))}
-          </g>
-        )}
-        {move.pierce && (
-          <g transform="translate(110 64)" opacity={0.9}>
-            <path d="M0,-12 L9,-8 Q10,5 0,13 Q-10,5 -9,-8Z" fill="none" stroke={INK} strokeWidth={1.8} strokeDasharray="3 3" />
-          </g>
-        )}
-        {move.status && !move.status.toSelf && STATUS_GLYPH[move.status.kind] && (
-          <Glyph motif={STATUS_GLYPH[move.status.kind]!.motif} pal={PALETTES[STATUS_GLYPH[move.status.kind]!.pal]} x={150} y={44} s={0.3} />
-        )}
-        {move.drain && <Glyph motif="heart" pal={PALETTES.sup} x={28} y={36} s={0.3} />}
-        {move.recoil && <Glyph motif="burst" pal={PALETTES.atk} x={12} y={44} s={0.22} />}
-        {move.critBoost && <Glyph motif="crit" pal={pal} x={104} y={32} s={0.26} />}
-        {move.execute && (
-          <g>
-            <rect x={116} y={26} width={26} height={5} rx={2.5} fill="#fff" stroke={INK} strokeWidth={1.4} />
-            <rect x={117.2} y={27.2} width={7} height={2.6} rx={1.3} fill="#e83a2a" />
-          </g>
-        )}
-        {move.randomAttr && <Glyph motif="rainbow" pal={pal} x={80} y={30} s={0.4} />}
-        {move.ambush && <Glyph motif="ninja" pal={pal} x={28} y={42} s={0.3} />}
-        <NumBadge x={132} y={16} text={num} />
-      </g>,
-    );
-  } else if (onlyHand) {
-    els.push(
-      <g key="h">
-        <Blob x={30} y={66} s={0.9} tint={ME_TINT} />
-        <Blob x={132} y={66} s={0.9} tint={FOE_TINT} faded={move.hand!.kind !== 'foeLess'} />
-        <HandBadge m={move} pal={pal} x={move.hand!.kind === 'foeLess' ? 126 : 80} y={move.hand!.kind === 'foeLess' ? 38 : 40} />
-      </g>,
-    );
-  } else if (selfOnly || (!toFoe && hasSelfEffect)) {
-    // じぶんに かかる効果
-    els.push(<Blob key="me" x={80} y={68} s={1.2} tint={ME_TINT} />);
-    if (move.heal) {
-      els.push(<Glyph key="heal" motif="heart" pal={PALETTES.sup} x={80} y={28} s={0.55} />);
-      els.push(<NumBadge key="n" x={124} y={30} text={`+${move.heal}`} color="#1b7a47" r={12} />);
-    }
-    if (move.cures) {
-      els.push(<Glyph key="cure" motif="bubble" pal={PALETTES.water} x={42} y={48} s={0.4} />);
-      els.push(
-        <g key="x" transform="translate(120 44)">
-          <Glyph motif="venom" pal={PALETTES.dark} x={0} y={0} s={0.32} />
-          <path d="M-13,-13 L13,13 M13,-13 L-13,13" stroke="#e83a2a" strokeWidth={5} strokeLinecap="round" />
-        </g>,
-      );
-    }
-    if (move.guardPct || move.reflect || move.buff?.stat === 'def') {
-      els.push(<Glyph key="sh" motif="shield" pal={PALETTES.water} x={80} y={52} s={0.95} />);
-      els.push(
-        <g key="in">
-          <path d="M150,34 L110,50" stroke={INK} strokeWidth={6} strokeLinecap="round" />
-          <path d="M150,34 L110,50" stroke="#e8503a" strokeWidth={3.2} strokeLinecap="round" />
-          <path d="M118,38 l-10,13 l16,2z" fill="#e8503a" stroke={INK} strokeWidth={1.8} strokeLinejoin="round" />
-        </g>,
-      );
-      if (move.reflect) els.push(<Glyph key="rf" motif="counter" pal={PALETTES.sup} x={30} y={34} s={0.4} />);
-    }
-    if (move.buff && move.buff.stat !== 'def') {
-      const glyph = ({ atk: 'muscle', spd: 'wing', luck: 'clover' } as Record<string, string>)[move.buff.stat] ?? 'up';
-      els.push(<Glyph key="up" motif="up" pal={PALETTES.atk} x={80} y={26} s={0.6} />);
-      els.push(<Glyph key="st" motif={glyph} pal={PALETTES[move.buff.stat === 'luck' ? 'wood' : move.buff.stat === 'spd' ? 'bolt' : 'atk']} x={124} y={42} s={0.5} />);
-      els.push(<NumBadge key="t" x={36} y={30} text={`${move.buff.turns}T`} color="#164f93" r={11} />);
-    }
-    if (move.hand) els.push(<HandBadge key="hb" m={move} pal={pal} x={28} y={86} />);
-  } else {
-    // あいてに かかる効果（弱体・状態異常・手札へらし）
-    els.push(<Blob key="me" x={28} y={66} tint={ME_TINT} />, <Blob key="foe" x={132} y={66} tint={FOE_TINT} />);
-    els.push(<Arrow key="ar" x1={52} x2={98} y={48} color={pal.main} />);
-    if (move.debuff) {
-      els.push(<Glyph key="d" motif="down" pal={PALETTES.dark} x={132} y={28} s={0.6} />);
-      const g = ({ atk: 'fist', spd: 'wing', def: 'shield' } as Record<string, string>)[move.debuff.stat] ?? 'fist';
-      els.push(<Glyph key="dg" motif={g} pal={PALETTES.dark} x={104} y={36} s={0.3} />);
-    }
-    if (move.status && STATUS_GLYPH[move.status.kind]) {
-      els.push(<Glyph key="s" motif={STATUS_GLYPH[move.status.kind]!.motif} pal={PALETTES[STATUS_GLYPH[move.status.kind]!.pal]} x={132} y={32} s={0.55} />);
-    }
-    if (move.hand) els.push(<HandBadge key="hb" m={move} pal={pal} x={78} y={86} />);
-  }
+  const num = atk ? `${move.power}` : move.heal ? `+${move.heal}` : null;
+  const numColor = atk ? '#d8321c' : '#1b7a47';
+  const stickers = stickersFor(move, pal).slice(0, 4);
+  // 対象（左端）＋効果
+  const all: ReactElement[] = [
+    <Blob key="tg" x={0} y={4} s={0.5} tint={toFoe ? '#cfd8ea' : '#ffe9a8'} />,
+    ...stickers,
+  ];
 
   return (
-    <svg viewBox="0 4 160 90" width="100%" height="100%" preserveAspectRatio="xMidYMid slice" style={{ display: 'block' }}>
+    <svg viewBox="0 6 160 84" width="100%" height="100%" preserveAspectRatio="xMidYMid slice" style={{ display: 'block' }}>
       <defs>
-        <linearGradient id="scn" x1="0" y1="0" x2="0" y2="1">
+        <linearGradient id="mav" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0" stopColor={pal.bg1} />
           <stop offset="1" stopColor={pal.bg2} />
         </linearGradient>
+        <radialGradient id="maglow" cx="0.5" cy="0.5" r="0.5">
+          <stop offset="0" stopColor="#fff" stopOpacity="0.85" />
+          <stop offset="1" stopColor="#fff" stopOpacity="0" />
+        </radialGradient>
+        <filter id="masoft" x="-20%" y="-20%" width="140%" height="150%">
+          <feDropShadow dx="1.5" dy="3" stdDeviation="1.6" floodColor="#33302b" floodOpacity="0.28" />
+        </filter>
       </defs>
-      <rect y="-10" width="160" height="120" fill="url(#scn)" />
-      <path d="M0,86 Q80,80 160,86 L160,100 L0,100Z" fill="rgba(51,48,43,.07)" />
-      {art.quick && atk && (
-        <g>
-          <path d="M2,52 L18,52 M0,62 L14,62 M3,72 L16,72" stroke={pal.dark} strokeWidth={2.4} strokeLinecap="round" opacity={0.45} />
-          <NumBadge x={12} y={18} text="1" color="#3a2a00" r={9} />
+      <rect y="-10" width="160" height="120" fill="url(#mav)" />
+      <Backdrop attr={move.attribute} pal={pal} />
+      <ellipse cx={80} cy={46} rx={66} ry={46} fill="url(#maglow)" />
+      <ellipse cx={80} cy={64} rx={36} ry={4} fill="rgba(51,48,43,.12)" />
+      <g filter="url(#masoft)">
+        <g filter="url(#crayon)">
+          {toks.map((tok, i) => {
+            const [name, rest] = tok.split(':');
+            const Draw = MOTIFS[name];
+            if (!Draw) return null;
+            const [x, y, sc, r] = rest ? rest.split(',').map(Number) : [80, 40, 1.02, 0];
+            return (
+              <g key={i} transform={`translate(${x} ${y - 8}) rotate(${r}) scale(${sc})`}>
+                {Draw(pal)}
+              </g>
+            );
+          })}
         </g>
-      )}
-      {els}
+      </g>
+      {/* 効果ステッカー（下の列）。左端＝対象 */}
+      <g>
+        {all.map((el, i) => (
+          <Sticker key={i} x={16 + i * 26} y={77}>
+            {el}
+          </Sticker>
+        ))}
+      </g>
+      {num && <NumBadge x={17} y={19} text={num} color={numColor} r={13} />}
       {move.when && move.whenMult && (
         <g>
-          <g transform="translate(8 6)">
-            <rect width={34} height={30} rx={8} fill={PAPER} stroke={INK} strokeWidth={1.8} strokeDasharray="4 3" />
-            <g transform="translate(17 16)">
+          <g transform="translate(106 10)">
+            <rect width={30} height={26} rx={7} fill={PAPER} stroke={INK} strokeWidth={1.8} strokeDasharray="4 3" />
+            <g transform="translate(15 14) scale(0.9)">
               <CondGlyph cond={move.when} pal={pal} />
             </g>
           </g>
-          <g transform="translate(148 12)">
-            <polygon points="0,-14 4,-5 14,-5 6,2 9,12 0,6 -9,12 -6,2 -14,-5 -4,-5" fill="#f2b705" stroke={INK} strokeWidth={1.8} strokeLinejoin="round" />
-            <text textAnchor="middle" y={4} fontSize={9} fontWeight={900} fill={INK} fontFamily="var(--font-display)">
+          <g transform="translate(146 24)">
+            <polygon points="0,-15 4.5,-5.5 15,-5.5 6.5,2 9.5,13 0,6.5 -9.5,13 -6.5,2 -15,-5.5 -4.5,-5.5" fill="#f2b705" stroke={INK} strokeWidth={1.8} strokeLinejoin="round" />
+            <text textAnchor="middle" y={4} fontSize={9.5} fontWeight={900} fill={INK} fontFamily="var(--font-display)">
               ×{move.whenMult}
             </text>
           </g>

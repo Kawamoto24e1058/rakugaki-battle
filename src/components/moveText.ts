@@ -76,38 +76,34 @@ export interface EffectChip {
   tone: ChipTone;
 }
 
-/** カードに はっきり見せる「効果」。色分けした短い札（多くて3つ）。 */
+/**
+ * カードに文字で見せる「効果」。数字・マークで絵に出ているもの（ダメージ・かいふく・連続・状態異常のマークなど）は
+ * 絵にまかせ、絵では伝わりにくいもの（条件・確率・ターン数・手札）だけを短い札にする。
+ */
 export function moveChips(m: MoveDef): EffectChip[] {
   const out: EffectChip[] = [];
   const pct = (n: number) => `${Math.round(n * 100)}%`;
   if (m.charge) out.push({ text: 'ため技：次のターン', tone: 'quick' });
-  if (m.category === 'attack') {
-    out.push({ text: `ダメージ ${m.power}${m.hits && m.hits > 1 ? ` ×${m.hits}かい` : ''}`, tone: 'dmg' });
-    if (m.pierce) out.push({ text: 'ぼうぎょ むし', tone: 'dmg' });
-    if (m.execute) out.push({ text: `HPすくないと ×${m.execute}`, tone: 'cond' });
-    if (m.critBoost) out.push({ text: 'きゅうしょ ねらい', tone: 'buff' });
-    if (m.drain) out.push({ text: 'ダメージを すいとる', tone: 'heal' });
-  }
-  if (m.heal) out.push({ text: `HP +${m.heal}`, tone: 'heal' });
-  if (m.cures) out.push({ text: m.cures === 'all' ? 'じょうたい ぜんぶ なおす' : 'じょうたい 1つ なおす', tone: 'heal' });
-  if (m.guardPct) out.push({ text: 'うけるダメージ 半分', tone: 'buff' });
-  if (m.reflect) out.push({ text: 'こうげきを はんぶん 返す', tone: 'buff' });
-  if (m.buff?.stat === 'def') out.push({ text: 'ダメージ -40%', tone: 'buff' });
-  else if (m.buff) out.push({ text: `${STAT_JP[m.buff.stat]} ↑ ${m.buff.turns}ターン`, tone: 'buff' });
-  if (m.debuff?.stat === 'def') out.push({ text: 'あいて ダメージ +30%', tone: 'debuff' });
-  else if (m.debuff) out.push({ text: `あいて ${STAT_JP[m.debuff.stat]} ↓`, tone: 'debuff' });
+  else if (hasPriority(m)) out.push({ text: '先に うごく', tone: 'quick' });
+  if (m.when && m.whenMult) out.push({ text: `${condShort(m.when)} ×${m.whenMult}`, tone: 'cond' });
+  if (m.ambush) out.push({ text: 'あいてが こうげきなら', tone: 'cond' });
+  if (m.execute) out.push({ text: `HPすくないと ×${m.execute}`, tone: 'cond' });
   if (m.status && !m.status.toSelf) out.push({ text: `${STATUS_META[m.status.kind].jp} ${pct(m.status.chance)}`, tone: statusTone(m.status.kind) });
   if (m.randomAttr) out.push({ text: 'ランダム じょうたい', tone: 'status' });
-  if (m.ambush) out.push({ text: 'あいてが こうげきなら', tone: 'cond' });
-  if (m.when && m.whenMult) out.push({ text: `${condShort(m.when)} ×${m.whenMult}`, tone: 'cond' });
+  if (m.guardPct) out.push({ text: 'ダメージ 半分（2T）', tone: 'buff' });
+  if (m.reflect) out.push({ text: 'こうげきを 返す（2T）', tone: 'buff' });
+  if (m.buff?.stat === 'def') out.push({ text: 'ダメージ -40%（3T）', tone: 'buff' });
+  else if (m.buff) out.push({ text: `${STAT_JP[m.buff.stat]} ↑（${m.buff.turns}T）`, tone: 'buff' });
+  if (m.debuff?.stat === 'def') out.push({ text: 'あいて ダメージ +30%', tone: 'debuff' });
+  else if (m.debuff) out.push({ text: `あいて ${STAT_JP[m.debuff.stat]} ↓`, tone: 'debuff' });
+  if (m.cures) out.push({ text: m.cures === 'all' ? 'じょうたい ぜんぶ なおす' : 'じょうたい 1つ なおす', tone: 'heal' });
   if (m.hand) out.push({ text: handShort(m.hand), tone: 'hand' });
+  if (m.critBoost) out.push({ text: 'きゅうしょ ねらい', tone: 'buff' });
+  if (m.drain) out.push({ text: 'ダメージを すいとる', tone: 'heal' });
   if (m.recoil) out.push({ text: `はんどう ${m.recoil}%`, tone: 'info' });
-  if (m.riskShift && m.riskShift >= 6) out.push({ text: 'かすりやすい', tone: 'info' });
-  if (hasPriority(m) && !m.charge) out.unshift({ text: '先に うごく', tone: 'quick' });
-  // 先頭（ダメージ/かいふく）→ 条件 → ほか の順に並べて3つまで
-  const rank = (t: ChipTone) => ({ quick: 0, cond: 1, dmg: 2, heal: 2, hand: 4, info: 5 } as Record<string, number>)[t] ?? 3;
-  const sorted = out.map((c, i) => ({ c, i })).sort((a, b) => rank(a.c.tone) - rank(b.c.tone) || a.i - b.i).map((x) => x.c);
-  return sorted.slice(0, 2);
+  if (m.pierce) out.push({ text: 'ぼうぎょ むし', tone: 'dmg' });
+  if (out.length === 0) out.push({ text: m.category === 'attack' ? 'ふつうの こうげき' : 'ほじょ', tone: 'info' });
+  return out.slice(0, 3);
 }
 
 function handShort(h: HandEffect): string {
