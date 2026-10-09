@@ -21,7 +21,7 @@ describe('技データ・こせい', () => {
       if (m.category === 'attack') {
         expect(m.power).toBeGreaterThan(0);
       } else {
-        const hasEffect = !!(m.buff || m.debuff || m.heal || m.cures || m.guardPct || m.reflect || m.status || m.hand);
+        const hasEffect = !!(m.buff || m.debuff || m.heal || m.cures || m.guardPct || m.reflect || m.status || m.hand || m.field || m.barrier || m.delay || m.trap || m.bond || m.endure || m.copy || m.swap || m.read);
         expect(hasEffect).toBe(true);
       }
     }
@@ -45,7 +45,7 @@ describe('技データ・こせい', () => {
     expect(all.some((m) => m.hits && m.hits > 1)).toBe(true);
     const supportShare = all.filter((m) => m.category === 'support').length / all.length;
     expect(supportShare).toBeGreaterThan(0.2);
-    expect(supportShare).toBeLessThan(0.5);
+    expect(supportShare).toBeLessThan(0.55);
   });
 
   it('先に動く技の判定（先制・ガード・カウンター・ぼうぎょアップ）', () => {

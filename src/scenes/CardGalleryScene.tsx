@@ -4,10 +4,10 @@ import { MOVES } from '../engine/moves';
 import { GameCard } from '../components/GameCard';
 import { moveCard } from '../components/moveText';
 
-type Filter = 'all' | 'attack' | 'support' | 'charge' | 'cond' | 'hand' | 'fire' | 'water' | 'wood' | 'bolt' | 'dark';
+type Filter = 'all' | 'attack' | 'support' | 'charge' | 'cond' | 'hand' | 'special' | 'fire' | 'water' | 'wood' | 'bolt' | 'dark';
 
 const FILTERS: [Filter, string][] = [
-  ['all', 'ぜんぶ'], ['attack', 'こうげき'], ['support', 'ほじょ'], ['charge', 'ため技'], ['cond', 'コンボ・じょうけん'], ['hand', '手札いじり'],
+  ['all', 'ぜんぶ'], ['attack', 'こうげき'], ['support', 'ほじょ'], ['charge', 'ため技'], ['cond', 'コンボ・じょうけん'], ['hand', '手札いじり'], ['special', 'とくしゅ'],
   ['fire', 'ほのお'], ['water', 'みず'], ['wood', 'き'], ['bolt', 'かみなり'], ['dark', 'やみ'],
 ];
 
@@ -25,6 +25,7 @@ export function CardGalleryScene() {
         if (filter === 'charge') return !!m.charge;
         if (filter === 'cond') return !!m.when;
         if (filter === 'hand') return !!m.hand;
+        if (filter === 'special') return !!(m.field || m.barrier || m.cost || m.delay || m.trap || m.bond || m.endure || m.copy || m.swap || m.dice || m.coin || m.allOrNothing != null || m.read || (m.hand && (m.hand.kind === 'ban' || m.hand.kind === 'only')));
         return m.attribute === filter;
       }),
     [filter],

@@ -1,8 +1,8 @@
 import type { ClashEvent, ClashState, Side } from '../../engine';
-import { getKosei } from '../../engine';
+import { getKosei, FIELD_META } from '../../engine';
 import { STATUS_META } from '../../engine/status';
-import { getMove, type MoveDef } from '../../engine/moves';
-import type { Character, StatusKind } from '../../engine/types';
+import { getMove, MOVES, type MoveDef } from '../../engine/moves';
+import type { Character } from '../../engine/types';
 import { koseiCard, moveCard, type CardData } from '../../components/moveText';
 import { artFor, koseiArt } from '../../components/art/artSpec';
 import { PALETTES } from '../../components/art/palette';
@@ -16,15 +16,18 @@ let seq = 0;
 export function chipsOf(c: ClashCombatant): Chip[] {
   const chips: Chip[] = c.statuses.map((x) => ({ kind: x.kind, jp: STATUS_META[x.kind].jp, good: STATUS_META[x.kind].kind === 'buff' }));
   if (c.charging && !c.statuses.some((x) => x.kind === 'charging')) chips.push({ kind: 'charged', jp: 'ためた！', good: true });
+  if (c.barrier) chips.push({ kind: 'barrier', jp: `バリア ${c.barrier.amount}`, good: true });
+  if (c.timers.length > 0) chips.push({ kind: 'timer', jp: 'じげん', good: true });
+  if (c.traps.length > 0) chips.push({ kind: 'trap', jp: 'わな', good: false });
   return chips;
 }
 
 export function snapOf(s: ClashState): Snap {
-  return { hp: [s.combatants[0].hp, s.combatants[1].hp], chips: [chipsOf(s.combatants[0]), chipsOf(s.combatants[1])] };
+  return { hp: [s.combatants[0].hp, s.combatants[1].hp], field: s.field ? { ...s.field } : null, chips: [chipsOf(s.combatants[0]), chipsOf(s.combatants[1])] };
 }
 
 /** 状態異常ごとの絵（エフェクト・オーラ共通）。 */
-export const STATUS_ART: Partial<Record<StatusKind | 'charged', { pal: keyof typeof PALETTES; motif: string }>> = {
+export const STATUS_ART: Partial<Record<Chip['kind'], { pal: keyof typeof PALETTES; motif: string }>> = {
   burn: { pal: 'fire', motif: 'flame' },
   freeze: { pal: 'water', motif: 'iceblock' },
   poison: { pal: 'dark', motif: 'venom' },
@@ -43,6 +46,11 @@ export const STATUS_ART: Partial<Record<StatusKind | 'charged', { pal: keyof typ
   spdDown: { pal: 'dark', motif: 'down' },
   charging: { pal: 'kosei', motif: 'chargeorb' },
   charged: { pal: 'kosei', motif: 'chargeorb' },
+  bond: { pal: 'dark', motif: 'chain' },
+  endure: { pal: 'sup', motif: 'heart' },
+  barrier: { pal: 'water', motif: 'dome' },
+  timer: { pal: 'atk', motif: 'bomb' },
+  trap: { pal: 'wood', motif: 'spikes' },
 };
 
 const WIN_BANNER_DRAW = 'ひきわけ！';
@@ -57,6 +65,7 @@ export function buildBeats(
 ): Beat[] {
   const beats: Beat[] = [];
   let hp: [number, number] = [...start.hp];
+  let field = start.field ? { ...start.field } : null;
   let chips: [Chip[], Chip[]] = [[...start.chips[0]], [...start.chips[1]]];
   let table: TableState = EMPTY_TABLE;
   let first: Side | null = null;
@@ -74,6 +83,7 @@ export function buildBeats(
   ) => {
     beats.push({
       hp: [...hp],
+      field: field ? { ...field } : null,
       chips: [[...chips[0]], [...chips[1]]],
       banner,
       acting: o.acting ?? null,
@@ -109,7 +119,7 @@ export function buildBeats(
     };
   };
 
-  const statusFx = (kind: StatusKind | 'charged', target: Side, fxKind: FxSpec['kind']): FxSpec | null => {
+  const statusFx = (kind: Chip['kind'], target: Side, fxKind: FxSpec['kind']): FxSpec | null => {
     const a = STATUS_ART[kind];
     if (!a) return null;
     return { id: ++seq, kind: fxKind, target, pal: PALETTES[a.pal], motifs: [a.motif], size: 1, crit: false, release: false };
@@ -241,6 +251,71 @@ export function buildBeats(
           keepCallout: false,
           ms: 1200,
         });
+        break;
+      }
+      case 'field': {
+        const m = FIELD_META[ev.kind];
+        field = { kind: ev.kind, turnsLeft: ev.turns };
+        add(`${names[ev.side]} が「${m.jp}」にした！（${m.desc}）`, { impact: `${m.jp}！`, ms: 2200 });
+        break;
+      }
+      case 'field-end':
+        field = null;
+        add('てんきが もとに もどった', { keepCallout: false, ms: 1100 });
+        break;
+      case 'barrier': {
+        const mkChip = (c: Chip[]) => [...c.filter((x) => x.kind !== 'barrier'), { kind: 'barrier' as const, jp: `バリア ${ev.amount}`, good: true }];
+        chips = [ev.side === 0 ? mkChip(chips[0]) : chips[0], ev.side === 1 ? mkChip(chips[1]) : chips[1]];
+        add(`${names[ev.side]} は バリアを はった！（${ev.amount}）`, { fx: statusFx('barrier', ev.side, 'guard'), ms: 1400 });
+        break;
+      }
+      case 'barrier-hit': {
+        const mkChip = (c: Chip[]) => c.map((x) => (x.kind === 'barrier' ? { ...x, jp: `バリア ${ev.left}` } : x));
+        chips = [ev.side === 0 ? mkChip(chips[0]) : chips[0], ev.side === 1 ? mkChip(chips[1]) : chips[1]];
+        add(`バリアが ${ev.absorbed} ダメージを うけとめた！（のこり ${ev.left}）`, {
+          hit: ev.side,
+          floats: [{ id: ++seq, side: ev.side, text: `${ev.absorbed}`, kind: 'info', big: false, tag: 'バリア' }],
+          fx: statusFx('barrier', ev.side, 'guard'),
+          shake: 3,
+          ms: 1200,
+        });
+        break;
+      }
+      case 'barrier-end': {
+        const rm = (c: Chip[]) => c.filter((x) => x.kind !== 'barrier');
+        chips = [ev.side === 0 ? rm(chips[0]) : chips[0], ev.side === 1 ? rm(chips[1]) : chips[1]];
+        add(`${names[ev.side]} の バリアが なくなった`, { impact: ev.side != null ? 'バリア はれつ！' : null, ms: 1100 });
+        break;
+      }
+      case 'timer-set': {
+        const mk = (c: Chip[]) => [...c.filter((x) => x.kind !== 'timer'), { kind: 'timer' as const, jp: 'じげん', good: true }];
+        chips = [ev.side === 0 ? mk(chips[0]) : chips[0], ev.side === 1 ? mk(chips[1]) : chips[1]];
+        add(`${ev.name}：${ev.turns}ターンあとに ${ev.kind === 'damage' ? 'ばくはつ' : 'かいふく'}するよ`, { ms: 1500 });
+        break;
+      }
+      case 'timer': {
+        const found = Object.values(MOVES).find((m) => m.name === ev.name) ?? null;
+        lastAct = { side: ev.side, move: found };
+        lastRelease = false;
+        const rm = (c: Chip[]) => c.filter((x) => x.kind !== 'timer');
+        chips = [ev.side === 0 ? rm(chips[0]) : chips[0], ev.side === 1 ? rm(chips[1]) : chips[1]];
+        callout = null;
+        add(`「${ev.name}」が はつどう！`, { impact: ev.kind === 'damage' ? 'どかん！' : 'かいふく！', ms: 1300 });
+        break;
+      }
+      case 'trap-set':
+        add(`${names[ev.side]} は わなを しかけた！`, { ms: 1300 });
+        break;
+      case 'trap':
+        add(`${names[ev.side]} は わなに ひっかかった！`, { impact: 'わな！', ms: 1100 });
+        break;
+      case 'swap': {
+        if (ev.kind === 'hp') {
+          hp = [ev.hp[0], ev.hp[1]];
+          add('HPの わりあいが いれかわった！', { impact: 'いれかえ！', fx: statusFx('barrier', ev.side, 'buff'), ms: 1800 });
+        } else {
+          add(ev.kind === 'debuffs' ? `${names[ev.side]} は じょうたいいじょうを あいてに うつした！` : `${names[ev.side]} は あいての 強化を うばった！`, { ms: 1500 });
+        }
         break;
       }
       case 'sudden-death':

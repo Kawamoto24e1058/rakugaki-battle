@@ -8,7 +8,7 @@ import type { Chip } from './types';
 export function Aura({ chips, side }: { chips: Chip[]; side: 0 | 1 }) {
   const has = (k: string) => chips.some((c) => c.kind === k);
   const frozen = has('freeze');
-  const items = chips.filter((c) => STATUS_ART[c.kind] && c.kind !== 'freeze' && c.kind !== 'charging');
+  const items = chips.filter((c) => STATUS_ART[c.kind] && c.kind !== 'freeze' && c.kind !== 'charging' && c.kind !== 'barrier' && c.kind !== 'timer' && c.kind !== 'trap');
   return (
     <>
       {/* こおり：絵を氷づけに */}
@@ -20,6 +20,14 @@ export function Aura({ chips, side }: { chips: Chip[]; side: 0 | 1 }) {
             </g>
           </svg>
         </motion.div>
+      )}
+      {/* バリア：まもりの泡 */}
+      {has('barrier') && (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
+          style={{ position: 'absolute', inset: '-6%', borderRadius: '50%', border: '0.28rem solid rgba(59,130,246,.85)', background: 'radial-gradient(circle at 30% 25%, rgba(255,255,255,.55), rgba(165,212,255,.25) 55%, rgba(59,130,246,.12))', pointerEvents: 'none', zIndex: 4 }}
+        />
       )}
       {/* ため中・ためた：光るリング */}
       {(has('charged') || has('charging')) && (

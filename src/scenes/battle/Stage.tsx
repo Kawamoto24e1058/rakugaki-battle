@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { CharacterSprite, AttributeBadge } from '../../components/bits';
 import { ATTRIBUTE_META } from '../../engine/attributes';
 import type { Character } from '../../engine/types';
-import type { OrderReason, Side } from '../../engine';
+import { FIELD_META, type OrderReason, type Side } from '../../engine';
 import { Aura } from './Aura';
 import { Fx } from './Fx';
 import type { Beat, Callout, Chip, Floating, OrderInfo } from './types';
@@ -33,6 +33,11 @@ const CHIP_COLOR: Record<string, string> = {
   spdDown: '#e1ddd2',
   charged: '#e9defc',
   charging: '#e9defc',
+  barrier: '#d6e8ff',
+  timer: '#ffe9c2',
+  trap: '#e6f0d2',
+  bond: '#e9defc',
+  endure: '#d7f2e1',
 };
 
 export function HpBar({
@@ -228,6 +233,7 @@ export function Stage({
       style={{ ['--stage-h' as string]: 'clamp(8.5rem, 28vh, 23rem)', position: 'relative', width: '100%', height: 'var(--stage-h)', minHeight: '8.5rem', border: '4px solid var(--ink)', borderRadius: 18, overflow: 'hidden', boxShadow: '5px 6px 0 rgba(51,48,43,.18)', background: '#fffdf6' }}
     >
       <Backdrop attrs={[chars[0].attribute, chars[1].attribute]} />
+      {beat.field && <FieldLayer kind={beat.field.kind} />}
 
       {([0, 1] as Side[]).map((s) => (
         <Fighter key={s} side={s} char={chars[s]} image={images[s]} beat={beat} />
@@ -240,6 +246,12 @@ export function Stage({
         )}
       </AnimatePresence>
 
+      {beat.field && (
+        <div style={{ position: 'absolute', top: 8, left: 8, zIndex: 11, background: 'rgba(255,253,245,.92)', border: '2.5px solid var(--ink)', borderRadius: 10, padding: '0.05rem 0.6rem', fontSize: '0.74rem', fontWeight: 800, lineHeight: 1.25, pointerEvents: 'none' }}>
+          <span style={{ fontFamily: 'var(--font-display)', fontSize: '0.9rem' }}>{FIELD_META[beat.field.kind].jp}</span> のこり {beat.field.turnsLeft}ターン
+          <div style={{ fontWeight: 700, color: 'var(--ink-soft)' }}>{FIELD_META[beat.field.kind].desc}</div>
+        </div>
+      )}
       {label && (
         <div style={{ position: 'absolute', top: 8, left: '50%', translate: '-50% 0', zIndex: 11, background: 'rgba(255,253,245,.92)', border: '2.5px solid var(--ink)', borderRadius: 99, padding: '0.05rem 0.9rem', fontFamily: 'var(--font-display)', fontSize: '0.95rem', whiteSpace: 'nowrap', pointerEvents: 'none' }}>
           {label}
@@ -248,6 +260,31 @@ export function Stage({
       <AnimatePresence mode="wait">{beat.callout && <CalloutBand key={beat.callout.id} c={beat.callout} />}</AnimatePresence>
       <AnimatePresence>{beat.order && <OrderPanel key="order" o={beat.order} names={names} />}</AnimatePresence>
     </motion.div>
+  );
+}
+
+/** 場の効果の背景（うすく）。 */
+function FieldLayer({ kind }: { kind: 'rain' | 'sun' | 'thunder' | 'night' }) {
+  if (kind === 'rain')
+    return (
+      <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 1, background: 'linear-gradient(180deg, rgba(80,120,190,.28), rgba(120,170,230,.10))' }}>
+        <svg viewBox="0 0 800 400" preserveAspectRatio="none" width="100%" height="100%" style={{ opacity: 0.5 }}>
+          {Array.from({ length: 26 }, (_, i) => (
+            <line key={i} x1={(i * 61) % 800} y1={(i * 37) % 160} x2={((i * 61) % 800) - 14} y2={((i * 37) % 160) + 44} stroke="#fff" strokeWidth={2.4} strokeLinecap="round" />
+          ))}
+        </svg>
+      </div>
+    );
+  if (kind === 'sun') return <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 1, background: 'radial-gradient(circle at 80% 0%, rgba(255,214,102,.65), rgba(255,160,60,.18) 55%, transparent 75%)' }} />;
+  if (kind === 'thunder') return <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 1, background: 'linear-gradient(180deg, rgba(90,90,120,.38), rgba(250,215,90,.10))' }} />;
+  return (
+    <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 1, background: 'linear-gradient(180deg, rgba(40,30,90,.5), rgba(120,100,200,.12))' }}>
+      <svg viewBox="0 0 800 400" preserveAspectRatio="none" width="100%" height="100%">
+        {[[90, 50, 3], [250, 90, 2.4], [420, 40, 3], [600, 80, 2.4], [720, 30, 3.2], [160, 140, 2]].map(([x, y, r], i) => (
+          <circle key={i} cx={x} cy={y} r={r} fill="#fffdf5" opacity={0.85} />
+        ))}
+      </svg>
+    </div>
   );
 }
 

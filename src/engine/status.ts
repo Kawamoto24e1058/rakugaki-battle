@@ -62,6 +62,8 @@ export const STATUS_META: Record<StatusKind, StatusMeta> = {
   flinch: meta({ id: 'flinch', jp: 'ひるみ', kind: 'debuff', duration: 1, description: 'つぎの攻撃が「かすり」になる。' }),
   guard: meta({ id: 'guard', jp: 'ガード', kind: 'buff', incomingMult: 0.5, duration: 2, description: '受けるダメージが 半分に なる（2ターン）。' }),
   charging: meta({ id: 'charging', jp: 'ため中', kind: 'debuff', incomingMult: 1.3, duration: 1, description: 'ちからを ためている あいだは むぼうび（うけるダメージ 3わり ふえる）。' }),
+  bond: meta({ id: 'bond', jp: 'みちづれ', kind: 'buff', duration: 1, description: 'このターンにやられたら、あいても 大ダメージ。' }),
+  endure: meta({ id: 'endure', jp: 'ふんばり', kind: 'buff', duration: 1, description: 'このターンは やられても HP1で のこる。' }),
   thorns: meta({ id: 'thorns', jp: 'トゲ', kind: 'buff', reflectPct: 0.5, duration: 2, description: '攻撃してきた相手に ダメージの 半分 を返す（2ターン）。' }),
 };
 

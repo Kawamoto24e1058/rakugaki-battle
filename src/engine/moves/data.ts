@@ -21,7 +21,14 @@ export type HandEffect =
   | { kind: 'guarantee'; pred: HandPred; n: number }
   | { kind: 'extra'; n: number }
   | { kind: 'foeLess'; n: number }
-  | { kind: 'luck' };
+  | { kind: 'luck' }
+  /** あいての つぎの手札から、この種類のカードを出なくする。 */
+  | { kind: 'ban'; pred: HandPred }
+  /** あいての つぎの手札を、この種類のカードだけにする。 */
+  | { kind: 'only'; pred: HandPred };
+
+/** 場の効果（天気）。数ターン、属性わざが強く／弱くなる。 */
+export type FieldKind = 'rain' | 'sun' | 'thunder' | 'night';
 
 /**
  * 手札バトルで配られる技。
@@ -79,6 +86,32 @@ export interface MoveDef {
   whenMult?: number;
   /** つかうと、次のターンの手札が変わる。 */
   hand?: HandEffect;
+  /** 場の効果をはじめる（両者に効く）。 */
+  field?: { kind: FieldKind; turns: number };
+  /** バリア：最大HPの割合ぶん、ダメージを肩代わりする（こわれるか数ターンで消える）。 */
+  barrier?: number;
+  /** HPをはらって つかう（最大HPの割合。HPは1までしか へらない）。 */
+  cost?: { hpPct: number };
+  /** 数ターンあとに 発動：あいてに ダメージ／じぶんが かいふく（どちらも最大HPの割合）。 */
+  delay?: { turns: number; damage?: number; heal?: number };
+  /** あいてに わなをしかける：あいてが次にこうげきすると ダメージ（あいての最大HPの割合）＋状態異常。 */
+  trap?: { damage: number; status?: { kind: StatusKind; chance: number } };
+  /** みちづれ：このターンにやられたら、あいてにも大ダメージ。 */
+  bond?: boolean;
+  /** ふんばり：このターンは やられても HP1で のこる。 */
+  endure?: boolean;
+  /** あいてが えらんだ技を そのまま つかう。 */
+  copy?: boolean;
+  /** HPの割合を入れ替え／じぶんの状態異常をあいてにうつす／あいての強化をうばう。 */
+  swap?: 'hp' | 'debuffs' | 'steal';
+  /** さいころ：威力が ランダム（min〜max を6段階）。 */
+  dice?: [number, number];
+  /** コイン：おもてなら こうげき、うらなら じぶんがダメージ（最大HPの割合）。 */
+  coin?: { selfPct: number };
+  /** いちかばちか：この確率で成功（失敗はなにも起きない）。 */
+  allOrNothing?: number;
+  /** みきり：あいてが こうげきを選んでいたら、それをふせいで はんげき（威力）。 */
+  read?: { power: number };
   desc: string;
 }
 
@@ -259,6 +292,62 @@ export const MOVES: Record<MoveId, MoveDef> = Object.fromEntries(
       sup('ta_look', 'みおろす', 'あいての すばやさを 2ターン さげる。', { target: 'enemy', debuff: { stat: 'spd', turns: 2 } }),
       sup('bg_roar', 'ほえる', 'あいてが うけるダメージを 2ターン 3わり ふやす。', { target: 'enemy', debuff: { stat: 'def', turns: 2 } }),
       sup('c_disturb', 'じゃまをする', 'あいての つぎの手札を 1まい へらす。', { target: 'enemy', hand: { kind: 'foeLess', n: 1 } }),
+
+      // ============================================================
+      //  とくしゅ：場の効果（天気）
+      // ============================================================
+      sup('f_rain', 'あまごい', '4ターン あめ：みず技が 強く、ほのお技が 弱くなる（りょうほうに こうか）。', { attribute: 'water', field: { kind: 'rain', turns: 4 } }),
+      sup('f_sun', 'ひでり', '4ターン はれ：ほのお技が 強く、みず技が 弱くなる（りょうほうに こうか）。', { attribute: 'fire', field: { kind: 'sun', turns: 4 } }),
+      sup('f_thunder', 'かみなりぐも', '4ターン らいうん：かみなり技が 強く、き技が 弱くなる（りょうほうに こうか）。', { attribute: 'bolt', field: { kind: 'thunder', turns: 4 } }),
+      sup('f_night', 'よぞらのまじない', '4ターン よる：やみ技が 強く、かみなり技が 弱くなる（りょうほうに こうか）。', { attribute: 'dark', field: { kind: 'night', turns: 4 } }),
+
+      // ============================================================
+      //  とくしゅ：バリア・みがわり
+      // ============================================================
+      sup('br_sub', 'みがわり', 'HPを 12% はらって、大きな バリアを はる。', { barrier: 0.42, cost: { hpPct: 0.12 } }),
+      sup('br_magic', 'マジックバリア', '先に うごく。バリアを はる。', { barrier: 0.3, first: true }),
+      sup('br_ice', 'こおりのかべ', 'バリアを はって、じょうたいいじょうを 1つ なおす。', { attribute: 'water', barrier: 0.34, cures: 'one' }),
+
+      // ============================================================
+      //  とくしゅ：時限・わな
+      // ============================================================
+      sup('tm_bomb', 'じげんばくだん', '2ターンあと、あいてに 大ダメージ（さいだいHPの 3.6わり）。', { delay: { turns: 2, damage: 0.36 } }),
+      sup('tm_trap', 'まきびし', 'あいてが つぎに こうげきすると ダメージ＋すばやさダウン。', { trap: { damage: 0.14, status: { kind: 'spdDown', chance: 1 } } }),
+      sup('tm_gift', 'おくりもの', '2ターンあと、HPが 大きく かいふくする。', { delay: { turns: 2, heal: 0.45 } }),
+
+      // ============================================================
+      //  とくしゅ：いのちがけ
+      // ============================================================
+      atk('sc_life', 'いのちがけアタック', 52, 'HPを 28% はらって、とても強く うつ。', { cost: { hpPct: 0.28 }, tags: ['blow'] }),
+      sup('sc_bond', 'みちづれ', '先に うごく。このターンに やられたら、あいても 大ダメージ。', { bond: true }),
+      sup('sc_endure', 'ふんばり', '先に うごく。このターンは やられても HP1で のこる。', { endure: true }),
+
+      // ============================================================
+      //  とくしゅ：まねる・ふうじる
+      // ============================================================
+      sup('cp_copy', 'まねっこ', 'あいてが えらんだ技を そのまま つかう。', { copy: true }),
+      sup('cp_nobig', 'だいわざふうじ', 'あいての つぎの手札に 大技・ため技が 出なくなる。', { target: 'enemy', hand: { kind: 'ban', pred: 'rare' } }),
+      sup('cp_noguard', 'まもりふうじ', 'あいての つぎの手札に まもりが 出なくなる。', { target: 'enemy', hand: { kind: 'ban', pred: 'guard' } }),
+
+      // ============================================================
+      //  とくしゅ：いれかえ
+      // ============================================================
+      sup('sw_heart', 'ハートスワップ', 'じぶんと あいての HPの わりあいを いれかえる。', { swap: 'hp' }),
+      sup('sw_dump', 'やっかいばらい', 'じぶんの じょうたいいじょうを ぜんぶ あいてに うつす。', { swap: 'debuffs' }),
+      sup('sw_steal', 'ものぬすみ', 'あいての 強化（バフ）を うばって じぶんのものにする。', { swap: 'steal' }),
+
+      // ============================================================
+      //  とくしゅ：ギャンブル
+      // ============================================================
+      atk('gm_dice', 'さいころアタック', 10, 'さいころの目で 威力が かわる（弱い〜とても強い）。', { dice: [6, 44] }),
+      atk('gm_coin', 'コイントス', 50, 'おもてなら 大ダメージ。うらなら じぶんが 15% ダメージ。', { coin: { selfPct: 0.15 } }),
+      atk('gm_all', 'いちかばちか', 64, '45% で 大成功。はずれたら なにも おきない。', { allOrNothing: 0.45 }),
+
+      // ============================================================
+      //  とくしゅ：きょうせい・よみ
+      // ============================================================
+      sup('fc_taunt', 'ちょうはつ', 'あいての つぎの手札が こうげきだけに なる。', { target: 'enemy', hand: { kind: 'only', pred: 'attack' } }),
+      sup('fc_read', 'みきり', '先に うごく。あいてが こうげきなら ふせいで 30の はんげき。', { read: { power: 30 } }),
     ] as MoveDef[]
   ).map((m) => [m.id, m]),
 );
@@ -290,7 +379,7 @@ export function matchesPred(m: MoveDef, pred: HandPred): boolean {
   switch (pred) {
     case 'attack': return m.category === 'attack';
     case 'support': return m.category === 'support';
-    case 'guard': return !!(m.guardPct || m.reflect || (m.buff && m.buff.stat === 'def'));
+    case 'guard': return !!(m.guardPct || m.reflect || m.barrier || (m.buff && m.buff.stat === 'def'));
     case 'heal': return !!(m.heal || m.cures);
     case 'first': return hasPriority(m);
     case 'rare': return isRareMove(m) || !!m.charge;
@@ -299,5 +388,5 @@ export function matchesPred(m: MoveDef, pred: HandPred): boolean {
 }
 
 export function hasPriority(m: MoveDef): boolean {
-  return !!(m.first || m.guardPct || m.reflect || (m.buff && m.buff.stat === 'def'));
+  return !!(m.first || m.guardPct || m.reflect || m.bond || m.endure || m.read || (m.buff && m.buff.stat === 'def'));
 }

@@ -515,6 +515,165 @@ export const MOTIFS: Record<string, Draw> = {
       <polygon points={star(13, 6, 5, -Math.PI / 2)} fill={WHITE} {...S(p, 1.4)} />
     </g>
   ),
+  // ---------- とくしゅ ----------
+  rain: (p) => (
+    <g>
+      <path d="M-30,6 Q-42,6 -40,-6 Q-38,-18 -26,-16 Q-22,-34 -2,-32 Q14,-44 26,-26 Q42,-24 40,-6 Q42,6 28,6Z" fill="#dfe6f2" {...S(p)} />
+      {[[-22, 16], [-6, 22], [10, 14], [24, 22], [-14, 32], [4, 36], [18, 34]].map(([x, y], i) => (
+        <path key={i} d={`M${x},${y - 7} Q${x + 5},${y + 1} ${x},${y + 5} Q${x - 5},${y + 1} ${x},${y - 7}Z`} fill={p.main} {...S(p, 1.6)} />
+      ))}
+    </g>
+  ),
+  sun: (p) => (
+    <g>
+      {Array.from({ length: 12 }, (_, i) => (
+        <path key={i} transform={`rotate(${i * 30})`} d="M-4,-26 L0,-42 L4,-26Z" fill={p.light} {...S(p, 1.6)} />
+      ))}
+      <circle r={22} fill={p.main} {...S(p)} />
+      <circle r={13} fill={p.light} opacity={0.85} />
+      <circle cx={-7} cy={-6} r={3} fill="#fffdf5" />
+    </g>
+  ),
+  thundercloud: (p) => (
+    <g>
+      <path d="M-30,4 Q-42,4 -40,-8 Q-38,-20 -26,-18 Q-22,-36 -2,-34 Q14,-46 26,-28 Q42,-26 40,-8 Q42,4 28,4Z" fill="#8a8fa8" {...S(p)} />
+      <path d="M6,2 L-10,22 L0,22 L-8,42 L16,16 L4,16 L12,2Z" fill={p.main} {...S(p, 2)} />
+    </g>
+  ),
+  night: (p) => (
+    <g>
+      <path d="M10,-36 Q-38,-28 -32,12 Q-24,40 12,36 Q-18,20 -10,-8 Q-6,-24 10,-36Z" fill={p.light} {...S(p)} />
+      {[[24, -20, 7], [34, 6, 5], [20, 26, 4.5]].map(([x, y, r], i) => (
+        <polygon key={i} points={star(r, r * 0.4, 4, 0)} transform={`translate(${x} ${y})`} fill="#fffdf5" {...S(p, 1.3)} />
+      ))}
+    </g>
+  ),
+  dome: (p) => (
+    <g>
+      <path d="M-34,26 A34,34 0 0 1 34,26Z" fill={p.light} opacity={0.55} {...S(p)} />
+      <path d="M-34,26 A34,34 0 0 1 34,26" fill="none" {...S(p, 3)} />
+      <path d="M-22,10 Q-16,-8 0,-12" fill="none" stroke="#fffdf5" strokeWidth={4.4} strokeLinecap="round" />
+      <ellipse cx={0} cy={28} rx={36} ry={5} fill={p.main} opacity={0.6} />
+      <polygon points={star(7, 3, 4, 0)} transform="translate(22 -6)" fill="#fffdf5" {...S(p, 1.2)} />
+    </g>
+  ),
+  bomb: (p) => (
+    <g>
+      <circle cy={8} r={26} fill={p.dark} {...S(p)} />
+      <circle cx={-9} cy={-1} r={6} fill="#fffdf5" opacity={0.55} />
+      <path d="M6,-18 Q14,-30 24,-28" fill="none" stroke={p.ink} strokeWidth={5} strokeLinecap="round" />
+      <polygon points={star(9, 3.6, 5, 0)} transform="translate(28 -30)" fill={p.light} {...S(p, 1.4)} />
+    </g>
+  ),
+  spikes: (p) => (
+    <g>
+      <path d="M-40,28 L40,28" stroke={p.ink} strokeWidth={4} strokeLinecap="round" />
+      {[-30, -15, 0, 15, 30].map((x, i) => (
+        <path key={i} d={`M${x - 8},28 L${x},${-6 - (i % 2) * 8} L${x + 8},28Z`} fill={i % 2 ? p.light : p.main} {...S(p, 2)} />
+      ))}
+    </g>
+  ),
+  gift: (p) => (
+    <g>
+      <rect x={-28} y={-6} width={56} height={36} rx={4} fill={p.main} {...S(p)} />
+      <rect x={-32} y={-18} width={64} height={16} rx={4} fill={p.light} {...S(p)} />
+      <path d="M0,-18 L0,30" stroke={p.ink} strokeWidth={7} />
+      <path d="M0,-18 L0,30" stroke="#fffdf5" strokeWidth={3.6} />
+      <path d="M0,-18 Q-14,-36 -20,-24 Q-14,-16 0,-18 Q14,-36 20,-24 Q14,-16 0,-18Z" fill="#fffdf5" {...S(p, 2)} />
+    </g>
+  ),
+  heartcrack: (p) => (
+    <g>
+      <path d="M0,34 Q-42,6 -30,-18 Q-18,-34 0,-14 Q18,-34 30,-18 Q42,6 0,34Z" fill={p.main} {...S(p)} />
+      <path d="M-4,-12 L6,0 L-4,8 L6,22" fill="none" stroke="#fffdf5" strokeWidth={4.4} strokeLinecap="round" strokeLinejoin="round" />
+    </g>
+  ),
+  chain: (p) => (
+    <g>
+      <rect x={-34} y={-12} width={40} height={24} rx={12} fill="none" stroke={p.ink} strokeWidth={9} />
+      <rect x={-34} y={-12} width={40} height={24} rx={12} fill="none" stroke={p.light} strokeWidth={5} />
+      <rect x={-6} y={-12} width={40} height={24} rx={12} fill="none" stroke={p.ink} strokeWidth={9} />
+      <rect x={-6} y={-12} width={40} height={24} rx={12} fill="none" stroke={p.main} strokeWidth={5} />
+    </g>
+  ),
+  mirror: (p) => (
+    <g>
+      <ellipse cx={0} cy={-2} rx={26} ry={32} fill={p.light} {...S(p)} />
+      <path d="M-14,-18 Q-8,-28 4,-26" fill="none" stroke="#fffdf5" strokeWidth={5} strokeLinecap="round" />
+      <rect x={-5} y={30} width={10} height={12} fill={p.main} {...S(p, 2)} />
+      <path d="M-16,8 Q-8,-4 0,6 Q8,-4 16,8" fill="none" stroke={p.dark} strokeWidth={3} strokeLinecap="round" />
+    </g>
+  ),
+  ban: (p) => (
+    <g>
+      {[-18, 0, 18].map((r, i) => (
+        <g key={i} transform={`translate(${r * 0.9} ${Math.abs(r) * 0.2}) rotate(${r})`}>
+          <rect x={-13} y={-22} width={26} height={40} rx={4} fill="#fffdf5" {...S(p, 2)} />
+        </g>
+      ))}
+      <circle r={30} fill="none" stroke={p.ink} strokeWidth={10} />
+      <circle r={30} fill="none" stroke="#e83a2a" strokeWidth={6} />
+      <path d="M-21,-21 L21,21" stroke={p.ink} strokeWidth={10} strokeLinecap="round" />
+      <path d="M-21,-21 L21,21" stroke="#e83a2a" strokeWidth={6} strokeLinecap="round" />
+    </g>
+  ),
+  swapheart: (p) => (
+    <g>
+      <path d="M-18,6 Q-40,-8 -32,-20 Q-24,-28 -18,-18 Q-12,-28 -4,-20 Q4,-8 -18,6Z" fill={p.main} {...S(p, 2.2)} />
+      <path d="M18,28 Q-4,14 4,2 Q12,-6 18,4 Q24,-6 32,2 Q40,14 18,28Z" fill={p.light} {...S(p, 2.2)} />
+      <path d="M-22,22 Q-4,34 14,24" fill="none" stroke={p.ink} strokeWidth={3} strokeLinecap="round" />
+      <path d="M14,24 l-9,-1 l5,-8z" fill={p.ink} />
+      <path d="M22,-24 Q4,-34 -12,-26" fill="none" stroke={p.ink} strokeWidth={3} strokeLinecap="round" />
+      <path d="M-12,-26 l9,0 l-5,8z" fill={p.ink} />
+    </g>
+  ),
+  swap: (p) => (
+    <g>
+      <path d="M-30,-10 L22,-10" stroke={p.ink} strokeWidth={10} strokeLinecap="round" />
+      <path d="M-30,-10 L22,-10" stroke={p.main} strokeWidth={6} strokeLinecap="round" />
+      <path d="M18,-24 L38,-10 L18,4Z" fill={p.main} {...S(p, 2.2)} />
+      <path d="M30,16 L-22,16" stroke={p.ink} strokeWidth={10} strokeLinecap="round" />
+      <path d="M30,16 L-22,16" stroke={p.light} strokeWidth={6} strokeLinecap="round" />
+      <path d="M-18,2 L-38,16 L-18,30Z" fill={p.light} {...S(p, 2.2)} />
+    </g>
+  ),
+  dice: (p) => (
+    <g>
+      <path d="M-24,-10 L0,-24 L24,-10 L24,20 L0,34 L-24,20Z" fill="#fffdf5" {...S(p)} />
+      <path d="M-24,-10 L0,4 L24,-10 M0,4 L0,34" fill="none" {...S(p, 2)} />
+      {[[0, -10], [-9, -14], [9, -6]].map(([x, y], i) => (
+        <circle key={i} cx={x} cy={y + 2} r={2.6} fill={p.main} />
+      ))}
+      {[[-12, 14], [-12, 24], [12, 20]].map(([x, y], i) => (
+        <circle key={i} cx={x} cy={y} r={2.6} fill={p.dark} />
+      ))}
+    </g>
+  ),
+  coin: (p) => (
+    <g>
+      <ellipse rx={30} ry={30} fill={p.light} {...S(p)} />
+      <ellipse rx={22} ry={22} fill="none" stroke={p.dark} strokeWidth={3} />
+      <polygon points={star(13, 5.5, 5, -Math.PI / 2)} fill={p.main} {...S(p, 1.8)} />
+      <path d="M-18,-12 Q-12,-22 -2,-24" fill="none" stroke="#fffdf5" strokeWidth={4} strokeLinecap="round" />
+    </g>
+  ),
+  megaphone: (p) => (
+    <g>
+      <path d="M-30,-6 L8,-20 L8,26 L-30,12Z" fill={p.main} {...S(p)} />
+      <rect x={-38} y={-8} width={12} height={22} rx={3} fill={p.dark} {...S(p, 2)} />
+      <path d="M16,-8 Q26,2 16,12 M24,-18 Q40,2 24,22" fill="none" stroke={p.ink} strokeWidth={4} strokeLinecap="round" />
+      <path d="M-18,16 L-14,34 L-4,34 L-4,22" fill="none" stroke={p.ink} strokeWidth={4} strokeLinecap="round" strokeLinejoin="round" />
+    </g>
+  ),
+  readeye: (p) => (
+    <g>
+      <circle r={36} fill="none" stroke={p.ink} strokeWidth={8} strokeDasharray="8 7" />
+      <circle r={36} fill="none" stroke={p.main} strokeWidth={4} strokeDasharray="8 7" />
+      <path d="M-26,0 Q0,-24 26,0 Q0,24 -26,0Z" fill="#fffdf5" {...S(p, 2.4)} />
+      <circle r={9} fill={p.main} {...S(p, 2)} />
+      <circle r={4} fill={p.ink} />
+    </g>
+  ),
   fire_ring: (p) => (
     <g>
       <circle r={30} fill="none" stroke={p.ink} strokeWidth={14} />

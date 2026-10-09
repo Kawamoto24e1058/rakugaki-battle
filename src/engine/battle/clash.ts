@@ -10,7 +10,7 @@
 import type { Attribute, Character, StatusKind, Stats } from '../types';
 import { attributeStatusMult } from '../attributes';
 import { STATUS_META, type ActiveStatus } from '../status';
-import { MOVES, getMove, hasPriority, isRareMove, matchesPred, moveTags, type Cond, type HandEffect, type MoveDef, type MoveId } from '../moves';
+import { MOVES, getMove, hasPriority, isRareMove, matchesPred, moveTags, type Cond, type FieldKind, type HandEffect, type HandPred, type MoveDef, type MoveId } from '../moves';
 import { ATTRIBUTE_STATUS } from '../status';
 import { ATTRIBUTES } from '../types';
 import { koseiOrDefault, type Kosei } from '../personalities';
@@ -26,7 +26,7 @@ const PER_HIT_CAP_PCT = 0.42;
 /** ため技の1発の上限。 */
 const CHARGE_CAP_PCT = 0.62;
 /** 全体の火力。試合が「時間切れ（サドンデス）」でなく選択で決着するように調整。 */
-const DMG_SCALE = 0.85;
+const DMG_SCALE = 0.9;
 /** 回復の底上げ。 */
 const HEAL_SCALE = 1.5;
 /** こせいのアクティブ技の威力の底上げ（絵の個性の主役にする）。 */
@@ -60,7 +60,30 @@ export interface ClashCombatant {
   handMods: HandEffect[];
   /** このターンの行動で決まる、次のターンの手札への効果。 */
   nextMods: HandEffect[];
+  /** バリア（HPの前に ダメージを うける）。 */
+  barrier: { amount: number; turns: number } | null;
+  /** あとで発動する効果（時限爆弾・おくりもの）。 */
+  timers: { name: string; damage?: number; heal?: number; turnsLeft: number }[];
+  /** あいてに しかけられた わな（こうげきすると はつどう）。 */
+  traps: { name: string; damage: number; status?: { kind: StatusKind; chance: number }; turnsLeft: number }[];
+  /** みきり：このターン、こうげきされたら はんげき。 */
+  reading: { power: number } | null;
 }
+
+export interface FieldState {
+  kind: FieldKind;
+  turnsLeft: number;
+}
+
+/** 場の効果：属性ごとの強弱。 */
+export const FIELD_META: Record<FieldKind, { jp: string; up: Attribute; down: Attribute; desc: string }> = {
+  rain: { jp: 'あめ', up: 'water', down: 'fire', desc: 'みず技が 強く、ほのお技が 弱くなる' },
+  sun: { jp: 'はれ', up: 'fire', down: 'water', desc: 'ほのお技が 強く、みず技が 弱くなる' },
+  thunder: { jp: 'らいうん', up: 'bolt', down: 'wood', desc: 'かみなり技が 強く、き技が 弱くなる' },
+  night: { jp: 'よる', up: 'dark', down: 'bolt', desc: 'やみ技が 強く、かみなり技が 弱くなる' },
+};
+const FIELD_UP = 1.3;
+const FIELD_DOWN = 0.75;
 
 export type ActKind = 'attack' | 'support' | 'kosei' | 'blocked' | 'charge';
 
@@ -79,11 +102,23 @@ export type ClashEvent =
   | { t: 'status-tick'; side: Side; kind: StatusKind; amount: number; hpAfter: number }
   | { t: 'status-end'; side: Side; kind: StatusKind }
   | { t: 'sudden-death'; leader: Side; chipLeader: number; chipTrailer: number }
+  | { t: 'field'; side: Side; kind: FieldKind; turns: number }
+  | { t: 'field-end'; kind: FieldKind }
+  | { t: 'barrier'; side: Side; amount: number }
+  | { t: 'barrier-hit'; side: Side; absorbed: number; left: number }
+  | { t: 'barrier-end'; side: Side }
+  | { t: 'timer-set'; side: Side; name: string; turns: number; kind: 'damage' | 'heal' }
+  | { t: 'timer'; side: Side; name: string; kind: 'damage' | 'heal' }
+  | { t: 'trap-set'; side: Side; name: string }
+  | { t: 'trap'; side: Side; name: string }
+  | { t: 'swap'; kind: 'hp' | 'debuffs' | 'steal'; side: Side; hp: [number, number] }
   | { t: 'end'; winner: Side | 'draw' };
 
 export interface ClashState {
   turn: number;
   seed: number;
+  /** 場の効果（天気）。 */
+  field: FieldState | null;
   combatants: [ClashCombatant, ClashCombatant];
   log: ClashEvent[];
   done: boolean;
@@ -108,6 +143,10 @@ function toCombatant(c: Character): ClashCombatant {
     lastTags: [],
     handMods: [],
     nextMods: [],
+    barrier: null,
+    timers: [],
+    traps: [],
+    reading: null,
   };
 }
 
@@ -115,6 +154,7 @@ export function createClashState(left: Character, right: Character, seed: number
   return {
     turn: 1,
     seed: seed >>> 0,
+    field: null,
     combatants: [toCombatant(left), toCombatant(right)],
     log: [{ t: 'turn', turn: 1 }],
     done: false,
@@ -177,15 +217,24 @@ export function dealHand(state: ClashState, side: Side): ClashChoice[] {
   let size = HAND_SIZE;
   let lucky = false;
   const guarantees: Extract<HandEffect, { kind: 'guarantee' }>[] = [];
+  const bans: HandPred[] = [];
+  let only: HandPred | null = null;
   for (const m of c.handMods) {
     if (m.kind === 'extra') size += m.n;
     else if (m.kind === 'foeLess') size -= m.n;
     else if (m.kind === 'luck') lucky = true;
+    else if (m.kind === 'ban') bans.push(m.pred);
+    else if (m.kind === 'only') only = m.pred;
     else guarantees.push(m);
   }
   size = Math.max(2, Math.min(MAX_HAND, size));
 
-  const pool = DRAW_POOL.map((m) => ({ m, w: dealWeight(c, m) * (lucky && (isRareMove(m) || m.charge) ? 3 : 1) }));
+  let pool = DRAW_POOL.filter((m) => !bans.some((p) => matchesPred(m, p))).map((m) => ({ m, w: dealWeight(c, m) * (lucky && (isRareMove(m) || m.charge) ? 3 : 1) }));
+  if (only) {
+    const onlyPred: HandPred = only;
+    const filtered = pool.filter((p) => matchesPred(p.m, onlyPred));
+    if (filtered.length >= size) pool = filtered;
+  }
   const hand: ClashChoice[] = [];
   const take = (list: typeof pool) => {
     const total = list.reduce((s2, p2) => s2 + p2.w, 0);
@@ -291,6 +340,51 @@ export function resolveClashTurn(state: ClashState, choices: [ClashChoice, Clash
           c.hp = Math.min(c.maxHp, c.hp + amt);
           log.push({ t: 'heal', side, amount: amt, hpAfter: c.hp });
         }
+      }
+    }
+  }
+
+  // 時限・わな・バリア・場の効果
+  if (next.winner === null) {
+    for (const side of [0, 1] as Side[]) {
+      const c = next.combatants[side];
+      const foe = next.combatants[1 - side as Side];
+      const remain: typeof c.timers = [];
+      for (const t of c.timers) {
+        t.turnsLeft -= 1;
+        if (t.turnsLeft > 0) {
+          remain.push(t);
+          continue;
+        }
+        if (t.damage && foe.hp > 0) {
+          log.push({ t: 'timer', side, name: t.name, kind: 'damage' });
+          hurt(next, (1 - side) as Side, Math.max(1, Math.round(foe.maxHp * t.damage)), log, t.name, side);
+        }
+        if (t.heal && c.hp > 0) {
+          log.push({ t: 'timer', side, name: t.name, kind: 'heal' });
+          const amt = Math.round(c.maxHp * t.heal);
+          const before = c.hp;
+          c.hp = Math.min(c.maxHp, c.hp + amt);
+          if (c.hp > before) log.push({ t: 'heal', side, amount: c.hp - before, hpAfter: c.hp });
+        }
+      }
+      c.timers = remain;
+      c.traps = c.traps.map((t) => ({ ...t, turnsLeft: t.turnsLeft - 1 })).filter((t) => t.turnsLeft > 0);
+      c.reading = null;
+      if (c.barrier) {
+        c.barrier.turns -= 1;
+        if (c.barrier.turns <= 0) {
+          c.barrier = null;
+          log.push({ t: 'barrier-end', side });
+        }
+      }
+    }
+    checkFaint(next);
+    if (next.field) {
+      next.field.turnsLeft -= 1;
+      if (next.field.turnsLeft <= 0) {
+        log.push({ t: 'field-end', kind: next.field.kind });
+        next.field = null;
       }
     }
   }
@@ -444,6 +538,28 @@ function act(state: ClashState, side: Side, pick: Pick, foePick: Pick, isFirst: 
     return;
   }
   let move = pick.move;
+  const foeC = state.combatants[1 - side as Side];
+
+  // まねっこ：あいてが えらんだ技を そのまま つかう
+  if (move.copy) {
+    const fm = foePick.move;
+    if (!fm || fm.copy || fm.charge || foePick.release) {
+      blocked('（まねっこは しっぱい… まねできない）');
+      return;
+    }
+    move = { ...fm, name: `${fm.name}（まね）`, first: false };
+  }
+
+  // みきり：こうげきを みやぶって ふせぐ
+  if (move.category === 'attack' && foeC.reading) {
+    const rd = foeC.reading;
+    foeC.reading = null;
+    blocked(`（${move.name}は みきられた！）`);
+    const counter: MoveDef = { id: 'read_counter', name: 'みきりカウンター', category: 'attack', attribute: null, power: rd.power, target: 'enemy', desc: '' };
+    dealDamage(state, (1 - side) as Side, counter, { tag: 'カウンター' }, rng, log);
+    return;
+  }
+
   // ふいうち：相手が こうげきを選んでいないと しっぱい
   if (move.ambush && foePick.move?.category !== 'attack') {
     blocked(`（${move.name}は しっぱい… あいては こうげきしなかった）`);
@@ -462,6 +578,15 @@ function act(state: ClashState, side: Side, pick: Pick, foePick: Pick, isFirst: 
   const isSupport = move.category === 'support';
   log.push({ t: 'act', side, moveName: move.name, kind: isSupport ? 'support' : 'attack', moveId: move.id, release: pick.release });
 
+  // HPをはらって つかう
+  if (move.cost) {
+    const pay = Math.min(c.hp - 1, Math.round(c.maxHp * move.cost.hpPct));
+    if (pay > 0) {
+      c.hp -= pay;
+      log.push({ t: 'damage', side, amount: pay, hpAfter: c.hp, tag: 'いのちをけずった' });
+    }
+  }
+
   // 条件（コンボ・つけこみ…）
   let mult = 1;
   if (move.when && move.whenMult && evalCond(move.when, { state, side, foePick, isFirst })) {
@@ -469,9 +594,36 @@ function act(state: ClashState, side: Side, pick: Pick, foePick: Pick, isFirst: 
     log.push({ t: 'bonus', side, label: BONUS_LABEL[move.when.t] });
   }
 
+  applySpecial(state, side, move, foePick, rng, log);
+
   if (isSupport) {
     applySupport(state, side, move, mult, rng, log);
   } else {
+    // ギャンブル
+    if (move.dice) {
+      const k = 1 + Math.floor(rng() * 6);
+      move = { ...move, power: Math.round(move.dice[0] + ((move.dice[1] - move.dice[0]) * (k - 1)) / 5) };
+      log.push({ t: 'bonus', side, label: `さいころの目：${k}` });
+    }
+    if (move.coin) {
+      if (rng() < 0.5) {
+        log.push({ t: 'bonus', side, label: 'おもて！' });
+      } else {
+        log.push({ t: 'bonus', side, label: 'うら…' });
+        hurt(state, side, Math.max(1, Math.round(c.maxHp * move.coin.selfPct)), log, 'しっぱい', null);
+        c.lastTags = moveTags(move);
+        return;
+      }
+    }
+    if (move.allOrNothing != null) {
+      if (rng() < move.allOrNothing) {
+        log.push({ t: 'bonus', side, label: 'だいせいこう！' });
+      } else {
+        log.push({ t: 'bonus', side, label: 'はずれ…' });
+        c.lastTags = moveTags(move);
+        return;
+      }
+    }
     // にじいろだま：ランダムな属性とその状態異常
     if (move.randomAttr) {
       const attr = ATTRIBUTES[Math.floor(rng() * ATTRIBUTES.length)];
@@ -483,14 +635,119 @@ function act(state: ClashState, side: Side, pick: Pick, foePick: Pick, isFirst: 
       dealDamage(state, side, move, { mult, uncapped: !!pick.release }, rng, log);
       checkFaint(state);
     }
+    // わな：しかけられていたら、こうげきした ほうが ダメージ
+    if (c.traps.length > 0 && c.hp > 0) {
+      for (const tr of c.traps) {
+        log.push({ t: 'trap', side, name: tr.name });
+        const lost = hurt(state, side, Math.max(1, Math.round(c.maxHp * tr.damage)), log, tr.name, (1 - side) as Side);
+        if (tr.status && lost > 0 && rng() < tr.status.chance && applyStatus(c, tr.status.kind)) log.push({ t: 'status-apply', side, kind: tr.status.kind });
+      }
+      c.traps = [];
+      checkFaint(state);
+    }
   }
 
   // 手札いじり（次のターンの手札）
   if (move.hand && c.hp > 0) {
-    if (move.hand.kind === 'foeLess') state.combatants[1 - side as Side].nextMods.push(move.hand);
+    if (move.hand.kind === 'foeLess' || move.hand.kind === 'ban' || move.hand.kind === 'only') state.combatants[1 - side as Side].nextMods.push(move.hand);
     else c.nextMods.push(move.hand);
   }
   c.lastTags = moveTags(move);
+}
+
+/** 特殊わざの効果（場・バリア・時限・わな・みちづれ・入れ替え…）。 */
+function applySpecial(state: ClashState, side: Side, move: MoveDef, foePick: Pick, rng: Rng, log: ClashEvent[]): void {
+  void rng;
+  const c = state.combatants[side];
+  const foe = state.combatants[1 - side as Side];
+  if (move.field) {
+    state.field = { kind: move.field.kind, turnsLeft: move.field.turns };
+    log.push({ t: 'field', side, kind: move.field.kind, turns: move.field.turns });
+  }
+  if (move.barrier) {
+    const add = Math.round(c.maxHp * move.barrier);
+    const cap = Math.round(c.maxHp * 0.6);
+    c.barrier = { amount: Math.min(cap, (c.barrier?.amount ?? 0) + add), turns: 4 };
+    log.push({ t: 'barrier', side, amount: c.barrier.amount });
+  }
+  if (move.delay) {
+    c.timers.push({ name: move.name, damage: move.delay.damage, heal: move.delay.heal, turnsLeft: move.delay.turns });
+    log.push({ t: 'timer-set', side, name: move.name, turns: move.delay.turns, kind: move.delay.damage ? 'damage' : 'heal' });
+  }
+  if (move.trap) {
+    foe.traps.push({ name: move.name, damage: move.trap.damage, status: move.trap.status, turnsLeft: 3 });
+    log.push({ t: 'trap-set', side, name: move.name });
+  }
+  if (move.bond) {
+    applyStatus(c, 'bond', 1);
+    log.push({ t: 'status-apply', side, kind: 'bond' });
+  }
+  if (move.endure) {
+    applyStatus(c, 'endure', 1);
+    log.push({ t: 'status-apply', side, kind: 'endure' });
+  }
+  if (move.read) {
+    if (foePick.move?.category === 'attack') c.reading = { power: move.read.power };
+    else log.push({ t: 'bonus', side, label: 'みきりは からぶり…' });
+  }
+  if (move.swap === 'hp') {
+    const a = c.hp / c.maxHp;
+    const b = foe.hp / foe.maxHp;
+    c.hp = Math.max(1, Math.round(c.maxHp * b));
+    foe.hp = Math.max(1, Math.round(foe.maxHp * a));
+    log.push({ t: 'swap', kind: 'hp', side, hp: [state.combatants[0].hp, state.combatants[1].hp] });
+  } else if (move.swap === 'debuffs') {
+    const moved = c.statuses.filter((x) => STATUS_META[x.kind].kind === 'debuff' && x.kind !== 'charging');
+    c.statuses = c.statuses.filter((x) => !moved.includes(x));
+    for (const m of moved) {
+      log.push({ t: 'status-end', side, kind: m.kind });
+      applyStatus(foe, m.kind, m.turnsLeft);
+      log.push({ t: 'status-apply', side: (1 - side) as Side, kind: m.kind });
+    }
+    log.push({ t: 'swap', kind: 'debuffs', side, hp: [state.combatants[0].hp, state.combatants[1].hp] });
+  } else if (move.swap === 'steal') {
+    const stolen = foe.statuses.filter((x) => STATUS_META[x.kind].kind === 'buff');
+    foe.statuses = foe.statuses.filter((x) => !stolen.includes(x));
+    for (const m of stolen) {
+      log.push({ t: 'status-end', side: (1 - side) as Side, kind: m.kind });
+      applyStatus(c, m.kind, m.turnsLeft);
+      log.push({ t: 'status-apply', side, kind: m.kind });
+    }
+    log.push({ t: 'swap', kind: 'steal', side, hp: [state.combatants[0].hp, state.combatants[1].hp] });
+  }
+}
+
+/**
+ * ダメージを うける：バリア → ふんばり → HP。HPがつきたとき みちづれ があれば あいてにも。
+ * src は こうげきした側（みちづれの相手）。戻り値は 実際にへったHP。
+ */
+function hurt(state: ClashState, side: Side, amount: number, log: ClashEvent[], tag: string | null, src: Side | null): number {
+  const c = state.combatants[side];
+  let dmg = amount;
+  if (c.barrier && c.barrier.amount > 0 && dmg > 0) {
+    const absorbed = Math.min(c.barrier.amount, dmg);
+    c.barrier.amount -= absorbed;
+    dmg -= absorbed;
+    log.push({ t: 'barrier-hit', side, absorbed, left: c.barrier.amount });
+    if (c.barrier.amount <= 0) {
+      c.barrier = null;
+      log.push({ t: 'barrier-end', side });
+    }
+  }
+  if (dmg <= 0) return 0;
+  if (has(c, 'endure') && dmg >= c.hp) {
+    dmg = Math.max(0, c.hp - 1);
+    tag = 'ふんばった！';
+  }
+  c.hp = Math.max(0, c.hp - dmg);
+  log.push({ t: 'damage', side, amount: dmg, hpAfter: c.hp, tag });
+  if (c.hp <= 0 && has(c, 'bond') && src != null) {
+    const foe = state.combatants[src];
+    const bd = Math.max(1, Math.round(foe.maxHp * 0.4));
+    foe.hp = Math.max(0, foe.hp - bd);
+    log.push({ t: 'damage', side: src, amount: bd, hpAfter: foe.hp, tag: 'みちづれ' });
+  }
+  return dmg;
 }
 
 function applySupport(state: ClashState, side: Side, move: MoveDef, mult: number, rng: Rng, log: ClashEvent[]): void {
@@ -670,6 +927,12 @@ function dealDamage(
   // こおった相手に ほのお技 → 大ダメージ（このあと とかす）
   if (hasAttr && move.attribute === 'fire' && has(target, 'freeze')) dmg *= 1.5;
 
+  if (state.field && move.attribute) {
+    const fm = FIELD_META[state.field.kind];
+    if (move.attribute === fm.up) dmg *= FIELD_UP;
+    else if (move.attribute === fm.down) dmg *= FIELD_DOWN;
+  }
+
   if (move.execute && target.hp / target.maxHp < 0.4) dmg *= move.execute;
   if (!move.pierce) dmg *= 40 / (40 + effStat(target, 'def'));
   // 状態異常による被ダメ倍率（のろい＋・ガード−・ぼうぎょ↑↓ …）。ガードは貫通でも効くが、
@@ -694,8 +957,7 @@ function dealDamage(
   let final = Math.max(1, Math.round(dmg));
   final = Math.min(final, Math.round(target.maxHp * (opts.uncapped ? CHARGE_CAP_PCT : PER_HIT_CAP_PCT)));
 
-  target.hp = Math.max(0, target.hp - final);
-  log.push({ t: 'damage', side: (1 - side) as Side, amount: final, hpAfter: target.hp, tag });
+  final = hurt(state, (1 - side) as Side, final, log, tag, side);
 
   // トゲ：攻撃してきた actor に一部を返す
   if (final > 0) {
@@ -798,6 +1060,7 @@ function clone(s: ClashState): ClashState {
   return {
     turn: s.turn,
     seed: s.seed,
+    field: s.field ? { ...s.field } : null,
     done: s.done,
     winner: s.winner,
     log: s.log,
@@ -812,6 +1075,10 @@ function cloneC(c: ClashCombatant): ClashCombatant {
     lastTags: [...c.lastTags],
     handMods: [...c.handMods],
     nextMods: [...c.nextMods],
+    barrier: c.barrier ? { ...c.barrier } : null,
+    timers: c.timers.map((t) => ({ ...t })),
+    traps: c.traps.map((t) => ({ ...t })),
+    reading: c.reading ? { ...c.reading } : null,
   };
 }
 
@@ -844,7 +1111,16 @@ export function cpuChoose(state: ClashState, side: Side, rng: Rng): ClashChoice 
     if (!m) return 0;
     if (m.category === 'attack') {
       const atkTerm = 0.95 + effStat(me, 'atk') / 46;
-      let per = m.power * atkTerm * (m.pierce ? 1 : 40 / (40 + effStat(foe, 'def')));
+      let basePower = m.power;
+      if (m.dice) basePower = (m.dice[0] + m.dice[1]) / 2;
+      if (m.coin) basePower *= 0.5;
+      if (m.allOrNothing != null) basePower *= m.allOrNothing;
+      let per = basePower * atkTerm * (m.pierce ? 1 : 40 / (40 + effStat(foe, 'def')));
+      if (state.field && m.attribute) {
+        const fm = FIELD_META[state.field.kind];
+        if (m.attribute === fm.up) per *= FIELD_UP;
+        else if (m.attribute === fm.down) per *= FIELD_DOWN;
+      }
       if (condOk(m)) per *= m.whenMult as number;
       if (m.execute && foePct < 0.4) per *= m.execute;
       if (m.critBoost) per *= 1 + m.critBoost * 0.7;
@@ -862,6 +1138,8 @@ export function cpuChoose(state: ClashState, side: Side, rng: Rng): ClashChoice 
       if (m.drain && myPct < 0.7) s += 5;
       if (m.first) s += 2;
       if (m.hand) s += 3;
+      if (m.cost) s -= myPct < 0.45 ? 30 : 4;
+      if (m.coin) s -= 3;
       return s;
     }
     let s = 3;
@@ -869,6 +1147,17 @@ export function cpuChoose(state: ClashState, side: Side, rng: Rng): ClashChoice 
     if (m.heal) s += Math.min(missing, m.heal * HEAL_SCALE * (condOk(m) ? (m.whenMult as number) : 1)) * 0.9;
     if (m.charge) s -= 2;
     if (m.hand) s += 4;
+    if (m.field) s += state.field ? 1 : 7;
+    if (m.barrier) s += (has(me, 'guard') || me.barrier ? 1 : 8 + (foePct > 0.5 ? 5 : 0)) - (m.cost ? (myPct < 0.5 ? 12 : 2) : 0);
+    if (m.delay?.damage) s += state.turn <= 8 ? 14 : 5;
+    if (m.delay?.heal) s += Math.min(missing, me.maxHp * m.delay.heal) * 0.5;
+    if (m.trap) s += foe.traps.length > 0 ? 0 : 7;
+    if (m.bond || m.endure) s += myPct < 0.35 ? 22 : 1;
+    if (m.copy) s += 9;
+    if (m.read) s += 8;
+    if (m.swap === 'hp') s += foePct - myPct > 0.22 ? 32 : -12;
+    if (m.swap === 'debuffs') s += me.statuses.some((x) => STATUS_META[x.kind].kind === 'debuff') ? 16 : -6;
+    if (m.swap === 'steal') s += foe.statuses.some((x) => STATUS_META[x.kind].kind === 'buff') ? 16 : -6;
     if (m.status && m.target === 'enemy' && !m.status.toSelf && !has(foe, m.status.kind)) s += m.status.chance * 14;
     if (m.cures && me.statuses.some((x) => STATUS_META[x.kind].kind === 'debuff')) s += m.cures === 'all' ? 16 : 11;
     if ((m.guardPct || m.reflect || m.buff?.stat === 'def') && !has(me, 'guard') && !has(me, 'defUp')) s += 8 + (foePct > myPct ? 6 : 0);

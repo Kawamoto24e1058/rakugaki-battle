@@ -393,4 +393,177 @@ describe('手札バトル', () => {
     expect(sleep).toBeGreaterThan(10);
     expect(poison).toBeGreaterThan(15);
   });
+
+  // ---------- とくしゅわざ ----------
+  const mk = (seed: number, a = drawn([210, 40, 30]), b = drawn([30, 90, 210])) => createClashState(a, b, seed);
+  const dmgTo = (st: ClashState, side: 0 | 1) => st.log.reduce((x, e) => (e.t === 'damage' && e.side === side ? x + e.amount : x), 0);
+
+  it('場の効果：あまごいで みず技が強く ほのお技が弱くなり、4ターンで消える', () => {
+    const run = (rain: boolean, move: string) => {
+      let total = 0;
+      for (let seed = 1; seed <= 30; seed++) {
+        let st = mk(seed);
+        if (rain) st = resolveClashTurn(st, ['f_rain', 'c_scratch']);
+        const n = st.log.length;
+        st = resolveClashTurn(st, [move, 'c_guard']);
+        total += st.log.slice(n).reduce((x, e) => (e.t === 'damage' && e.side === 1 ? x + e.amount : x), 0);
+      }
+      return total;
+    };
+    expect(run(true, 'w_gun')).toBeGreaterThan(run(false, 'w_gun') * 1.2);
+    expect(run(true, 'f_spark')).toBeLessThan(run(false, 'f_spark') * 0.97);
+    let st = resolveClashTurn(mk(3), ['f_rain', 'c_scratch']);
+    expect(st.field?.kind).toBe('rain');
+    for (let i = 0; i < 4; i++) st = resolveClashTurn(st, ['c_scratch', 'c_scratch']);
+    expect(st.field).toBeNull();
+    expect(st.log.some((e) => e.t === 'field-end')).toBe(true);
+    // べつの天気で おきかわる
+    const sun = resolveClashTurn(resolveClashTurn(mk(4), ['f_rain', 'c_scratch']), ['f_sun', 'c_scratch']);
+    expect(sun.field?.kind).toBe('sun');
+  });
+
+  it('バリア：HPのかわりに ダメージを うけ、HPを はらうコストがある', () => {
+    let st = mk(11);
+    st = resolveClashTurn(st, ['c_scratch', 'br_sub']);
+    const c1 = st.combatants[1];
+    expect(c1.barrier?.amount).toBeGreaterThan(c1.maxHp * 0.3);
+    expect(c1.hp).toBeLessThan(c1.maxHp); // コスト
+    const hpBefore = c1.hp;
+    const n = st.log.length;
+    st = resolveClashTurn(st, ['c_bite', 'c_scratch']);
+    const evs = st.log.slice(n);
+    expect(evs.some((e) => e.t === 'barrier-hit' && e.side === 1)).toBe(true);
+    expect(st.combatants[1].hp).toBeGreaterThanOrEqual(hpBefore - 3);
+  });
+
+  it('時限：じげんばくだん は 2ターンあとに あいてへ大ダメージ／おくりものは かいふく', () => {
+    let st = resolveClashTurn(mk(12), ['tm_bomb', 'c_scratch']);
+    expect(st.log.some((e) => e.t === 'timer')).toBe(false);
+    st = resolveClashTurn(st, ['c_scratch', 'c_scratch']);
+    expect(st.log.some((e) => e.t === 'timer' && e.side === 0 && e.kind === 'damage')).toBe(true);
+    let g = mk(13);
+    g.combatants[0].hp = Math.round(g.combatants[0].maxHp * 0.4);
+    g = resolveClashTurn(g, ['tm_gift', 'c_scratch']);
+    g = resolveClashTurn(g, ['c_scratch', 'c_scratch']);
+    expect(g.log.some((e) => e.t === 'timer' && e.kind === 'heal')).toBe(true);
+  });
+
+  it('わな：まきびしを 仕掛けられた側が こうげきすると ダメージを受ける', () => {
+    let st = resolveClashTurn(mk(14), ['tm_trap', 'c_scratch']);
+    const n = st.log.length;
+    st = resolveClashTurn(st, ['c_guard', 'c_tackle']);
+    expect(st.log.slice(n).some((e) => e.t === 'trap' && e.side === 1)).toBe(true);
+    // こうげきしなければ ひっかからない
+    let st2 = resolveClashTurn(mk(14), ['tm_trap', 'c_scratch']);
+    const n2 = st2.log.length;
+    st2 = resolveClashTurn(st2, ['c_guard', 'ca_heal']);
+    expect(st2.log.slice(n2).some((e) => e.t === 'trap')).toBe(false);
+  });
+
+  it('みちづれ／ふんばり', () => {
+    // ふんばり：致命傷でも HP1で のこる
+    const a = mk(15);
+    a.combatants[0].hp = 3;
+    const r = resolveClashTurn(a, ['sc_endure', 'c_bite']);
+    expect(r.combatants[0].hp).toBeGreaterThanOrEqual(1);
+    expect(r.done).toBe(false);
+    expect(r.log.some((e) => e.t === 'damage' && e.side === 0 && e.tag === 'ふんばった！')).toBe(true);
+    // みちづれ：やられたら あいても ダメージ
+    let hit = 0;
+    for (let seed = 1; seed <= 20; seed++) {
+      const b = mk(seed);
+      b.combatants[0].hp = 2;
+      const rr = resolveClashTurn(b, ['sc_bond', 'c_bite']);
+      if (rr.log.some((e) => e.t === 'damage' && e.side === 1 && e.tag === 'みちづれ')) hit++;
+    }
+    expect(hit).toBeGreaterThan(5);
+  });
+
+  it('いのちがけ：HPをはらうが 1より下には ならない', () => {
+    const st0 = mk(16);
+    st0.combatants[0].hp = 5;
+    const st = resolveClashTurn(st0, ['sc_life', 'c_guard']);
+    expect(st.combatants[0].hp).toBeGreaterThanOrEqual(1);
+    const st1 = resolveClashTurn(mk(16), ['sc_life', 'c_guard']);
+    expect(st1.log.some((e) => e.t === 'damage' && e.side === 0 && e.tag === 'いのちをけずった')).toBe(true);
+  });
+
+  it('まねっこ：あいてが えらんだ技を そのまま つかう', () => {
+    const st = resolveClashTurn(mk(17), ['cp_copy', 'c_bite']);
+    const a = acts(st.log).find((e) => e.side === 0);
+    expect(a?.moveId).toBe('c_bite');
+    expect(a?.moveName).toContain('まね');
+    expect(dmgTo(st, 1)).toBeGreaterThan(0);
+    // こせいは まねできない
+    const f = resolveClashTurn(mk(17), ['cp_copy', 'kosei']);
+    expect(acts(f.log).some((e) => e.side === 0 && e.kind === 'blocked')).toBe(true);
+  });
+
+  it('いれかえ：HPのわりあい／じょうたいいじょう／強化', () => {
+    const st0 = mk(18);
+    st0.combatants[0].hp = Math.round(st0.combatants[0].maxHp * 0.2);
+    st0.combatants[1].hp = st0.combatants[1].maxHp;
+    const st = resolveClashTurn(st0, ['sw_heart', 'c_guard']);
+    expect(st.combatants[0].hp / st.combatants[0].maxHp).toBeGreaterThan(0.8);
+    expect(st.combatants[1].hp / st.combatants[1].maxHp).toBeLessThan(0.35);
+
+    const d = mk(19);
+    d.combatants[0].statuses.push({ kind: 'poison', turnsLeft: 4, age: 0 });
+    const dr = resolveClashTurn(d, ['sw_dump', 'c_guard']);
+    expect(dr.combatants[0].statuses.some((x) => x.kind === 'poison')).toBe(false);
+    expect(dr.combatants[1].statuses.some((x) => x.kind === 'poison')).toBe(true);
+
+    const t = mk(20);
+    t.combatants[1].statuses.push({ kind: 'atkUp', turnsLeft: 3, age: 0 });
+    const tr = resolveClashTurn(t, ['sw_steal', 'c_scratch']);
+    expect(tr.combatants[0].statuses.some((x) => x.kind === 'atkUp')).toBe(true);
+    expect(tr.combatants[1].statuses.some((x) => x.kind === 'atkUp')).toBe(false);
+  });
+
+  it('ギャンブル：さいころの目で威力が変わる／コインは おもて・うら／いちかばちかは当たり外れ', () => {
+    const dice = new Set<number>();
+    for (let seed = 1; seed <= 40; seed++) {
+      const st = resolveClashTurn(mk(seed), ['gm_dice', 'c_guard']);
+      for (const e of st.log) if (e.t === 'bonus' && e.label.startsWith('さいころの目')) dice.add(Number(e.label.split('：')[1]));
+    }
+    expect(dice.size).toBeGreaterThanOrEqual(4);
+    let heads = 0;
+    let tails = 0;
+    let wins = 0;
+    for (let seed = 1; seed <= 60; seed++) {
+      const c = resolveClashTurn(mk(seed), ['gm_coin', 'c_guard']);
+      if (c.log.some((e) => e.t === 'bonus' && e.label === 'おもて！')) heads++;
+      if (c.log.some((e) => e.t === 'bonus' && e.label === 'うら…')) tails++;
+      const a = resolveClashTurn(mk(seed), ['gm_all', 'c_guard']);
+      if (a.log.some((e) => e.t === 'bonus' && e.label === 'だいせいこう！')) wins++;
+    }
+    expect(heads).toBeGreaterThan(15);
+    expect(tails).toBeGreaterThan(15);
+    expect(wins).toBeGreaterThan(14);
+    expect(wins).toBeLessThan(42);
+  });
+
+  it('みきり：こうげきを みやぶって はんげき（こうげきでなければ からぶり）', () => {
+    const st = resolveClashTurn(mk(21), ['fc_read', 'c_bite']);
+    expect(acts(st.log).some((e) => e.side === 1 && e.kind === 'blocked')).toBe(true);
+    expect(dmgTo(st, 1)).toBeGreaterThan(0);
+    expect(dmgTo(st, 0)).toBe(0);
+    const miss = resolveClashTurn(mk(21), ['fc_read', 'c_guard']);
+    expect(miss.log.some((e) => e.t === 'bonus' && e.label.includes('からぶり'))).toBe(true);
+  });
+
+  it('手札を縛る：ふうじは そのカードが出なくなる／ちょうはつは こうげきだけ', () => {
+    for (let seed = 1; seed <= 25; seed++) {
+      let st = mk(seed);
+      st = resolveClashTurn(st, ['cp_nobig', 'c_scratch']);
+      for (const id of dealHand(st, 1)) {
+        if (id === 'kosei') continue;
+        const m = getMove(id);
+        expect(m.charge || (m.category === 'attack' && m.power >= 34)).toBeFalsy();
+      }
+      let t = mk(seed);
+      t = resolveClashTurn(t, ['fc_taunt', 'c_scratch']);
+      for (const id of dealHand(t, 1)) if (id !== 'kosei') expect(getMove(id).category).toBe('attack');
+    }
+  });
 });

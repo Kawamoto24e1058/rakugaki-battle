@@ -12,7 +12,7 @@ export function FxDemo() {
   const [i, setI] = useState(0);
   const mk = (kind: FxSpec['kind'], pal: keyof typeof PALETTES, motifs: string[], size = 1.2, crit = false): FxSpec => ({ id: Math.random(), kind, target: 1, pal: PALETTES[pal], motifs, size, crit, release: false });
   const base = (o: Partial<Beat>): Beat => ({
-    hp: [70, 40], chips: [[], []], banner: '', acting: null, hit: null, floats: [], fx: null, callout: null, order: null, first: null, table: EMPTY_TABLE, shake: 0, flash: null, impact: null, ms: 1000, ...o,
+    hp: [70, 40], field: null, chips: [[], []], banner: '', acting: null, hit: null, floats: [], fx: null, callout: null, order: null, first: null, table: EMPTY_TABLE, shake: 0, flash: null, impact: null, ms: 1000, ...o,
   });
   const chip = (kind: Chip['kind'], jp: string, good: boolean): Chip => ({ kind, jp, good });
   const scenes: [string, Beat][] = [
@@ -30,6 +30,11 @@ export function FxDemo() {
     ['すばやさくらべ', base({ order: { first: 0, reason: 'speed', spd: [42, 28] }, first: 0 })],
     ['せんせいわざ', base({ order: { first: 1, reason: 'priority', spd: [42, 28] }, first: 1 })],
     ['ためわざ はっしゃ', base({ acting: 0, impact: 'どかん！', callout: { id: 9, side: 0, name: 'メガトンパンチ', tag: 'ためた力を はなつ', gist: 'ためて つぎのターンに どかん！', color: '#e8503a', dark: '#9c2a16', quick: false, rare: true, blocked: false }, shake: 12 })],
+    ['あめ', base({ field: { kind: 'rain', turnsLeft: 3 } })],
+    ['はれ', base({ field: { kind: 'sun', turnsLeft: 3 } })],
+    ['らいうん', base({ field: { kind: 'thunder', turnsLeft: 3 } })],
+    ['よる', base({ field: { kind: 'night', turnsLeft: 3 } })],
+    ['バリア', base({ chips: [[chip('barrier', 'バリア 24', true)], [chip('timer', 'じげん', true), chip('trap', 'わな', false)]] })],
     ['KO', base({ hp: [70, 0], hit: 1 })],
   ];
   const [, b] = scenes[i];

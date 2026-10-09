@@ -3,6 +3,7 @@ import { ATTRIBUTE_META } from '../engine/attributes';
 import { hasPriority, isRareMove, type Cond, type HandEffect, type MoveDef } from '../engine/moves';
 import { artFor, koseiArt, type ArtSpec } from './art/artSpec';
 import type { Kosei } from '../engine/personalities';
+import { FIELD_META } from '../engine';
 import type { Stats } from '../engine/types';
 
 const STAT_JP: Record<keyof Stats, string> = {
@@ -58,6 +59,8 @@ export function handText(h: HandEffect): string {
     case 'extra': return `つぎの手札が ${h.n}まい ふえる`;
     case 'foeLess': return `あいての つぎの手札が ${h.n}まい へる`;
     case 'luck': return 'つぎの手札に 大技・ため技が 来やすい';
+    case 'ban': return `あいての つぎの手札に ${PRED_WORD[h.pred]}が 出なくなる`;
+    case 'only': return `あいての つぎの手札が ${PRED_WORD[h.pred]}だけになる`;
   }
 }
 
@@ -98,6 +101,22 @@ export function moveChips(m: MoveDef): EffectChip[] {
   else if (m.debuff) out.push({ text: `あいて ${STAT_JP[m.debuff.stat]} ↓`, tone: 'debuff' });
   if (m.cures) out.push({ text: m.cures === 'all' ? 'じょうたい ぜんぶ なおす' : 'じょうたい 1つ なおす', tone: 'heal' });
   if (m.hand) out.push({ text: handShort(m.hand), tone: 'hand' });
+  if (m.field) out.push({ text: `${FIELD_META[m.field.kind].jp} ${m.field.turns}ターン：${ATTRIBUTE_META[FIELD_META[m.field.kind].up].jp}技↑ ${ATTRIBUTE_META[FIELD_META[m.field.kind].down].jp}技↓`, tone: 'buff' });
+  if (m.barrier) out.push({ text: `バリア（HPの ${Math.round(m.barrier * 100)}%ぶん）`, tone: 'buff' });
+  if (m.cost) out.push({ text: `HP ${Math.round(m.cost.hpPct * 100)}% を はらう`, tone: 'info' });
+  if (m.delay?.damage) out.push({ text: `${m.delay.turns}ターンあと：HPの ${Math.round(m.delay.damage * 100)}%ダメージ`, tone: 'dmg' });
+  if (m.delay?.heal) out.push({ text: `${m.delay.turns}ターンあと：HP ${Math.round(m.delay.heal * 100)}% かいふく`, tone: 'heal' });
+  if (m.trap) out.push({ text: 'わな：あいてが こうげき→ダメージ', tone: 'cond' });
+  if (m.bond) out.push({ text: 'やられたら あいても 大ダメージ', tone: 'cond' });
+  if (m.endure) out.push({ text: 'やられても HP1で のこる', tone: 'buff' });
+  if (m.copy) out.push({ text: 'あいての技を そのまま まねる', tone: 'cond' });
+  if (m.swap === 'hp') out.push({ text: 'HPの わりあいを いれかえ', tone: 'cond' });
+  if (m.swap === 'debuffs') out.push({ text: 'じょうたいいじょうを あいてに うつす', tone: 'cond' });
+  if (m.swap === 'steal') out.push({ text: 'あいての 強化を うばう', tone: 'cond' });
+  if (m.dice) out.push({ text: `さいころ：いりょく ${m.dice[0]}〜${m.dice[1]}`, tone: 'cond' });
+  if (m.coin) out.push({ text: `うらなら じぶんが ${Math.round(m.coin.selfPct * 100)}% ダメージ`, tone: 'cond' });
+  if (m.allOrNothing != null) out.push({ text: `${Math.round(m.allOrNothing * 100)}% で成功（はずれは なにも なし）`, tone: 'cond' });
+  if (m.read) out.push({ text: `こうげきなら ふせいで ${m.read.power}の はんげき`, tone: 'cond' });
   if (m.critBoost) out.push({ text: 'きゅうしょ ねらい', tone: 'buff' });
   if (m.drain) out.push({ text: 'ダメージを すいとる', tone: 'heal' });
   if (m.recoil) out.push({ text: `はんどう ${m.recoil}%`, tone: 'info' });
@@ -112,6 +131,8 @@ function handShort(h: HandEffect): string {
     case 'extra': return `つぎ：てふだ +${h.n}`;
     case 'foeLess': return `あいての てふだ -${h.n}`;
     case 'luck': return 'つぎ：大技が来やすい';
+    case 'ban': return `あいて：${PRED_WORD[h.pred]}ふうじ`;
+    case 'only': return `あいて：${PRED_WORD[h.pred]}だけ`;
   }
 }
 
@@ -134,6 +155,22 @@ export function moveDetailLines(m: MoveDef): string[] {
   }
   if (m.when && m.whenMult) out.push(`${condText(m.when)} ${m.category === 'attack' ? 'ダメージ' : 'かいふく'} ${m.whenMult}ばい`);
   if (m.hand) out.push(handText(m.hand));
+  if (m.field) out.push(`${FIELD_META[m.field.kind].jp}（${m.field.turns}ターン）：${FIELD_META[m.field.kind].desc}`);
+  if (m.barrier) out.push(`バリア：さいだいHPの ${Math.round(m.barrier * 100)}% ぶん ダメージを かわりに うける（4ターンで きえる）`);
+  if (m.cost) out.push(`HPを さいだいHPの ${Math.round(m.cost.hpPct * 100)}% はらって つかう（HP1までしか へらない）`);
+  if (m.delay?.damage) out.push(`${m.delay.turns}ターンあと、あいてに さいだいHPの ${Math.round(m.delay.damage * 100)}% ダメージ`);
+  if (m.delay?.heal) out.push(`${m.delay.turns}ターンあと、HPが さいだいHPの ${Math.round(m.delay.heal * 100)}% かいふく`);
+  if (m.trap) out.push(`あいてが つぎに こうげきすると、あいての さいだいHPの ${Math.round(m.trap.damage * 100)}% ダメージ${m.trap.status ? `＋${STATUS_META[m.trap.status.kind].jp}` : ''}（3ターンのあいだ）`);
+  if (m.bond) out.push('このターンに やられたら、あいてにも さいだいHPの 4わり ダメージ');
+  if (m.endure) out.push('このターンは どんなダメージでも HP1で のこる');
+  if (m.copy) out.push('あいてが えらんだ技を そのまま つかう（こせい・ため技は まねできない）');
+  if (m.swap === 'hp') out.push('じぶんと あいての HPの「わりあい」を いれかえる');
+  if (m.swap === 'debuffs') out.push('じぶんの じょうたいいじょうを ぜんぶ あいてに うつす');
+  if (m.swap === 'steal') out.push('あいての 強化（バフ）を うばって じぶんのものにする');
+  if (m.dice) out.push(`さいころの目で いりょくが 変わる（${m.dice[0]}〜${m.dice[1]}）`);
+  if (m.coin) out.push(`コイン：おもてなら こうげき、うらなら じぶんが さいだいHPの ${Math.round(m.coin.selfPct * 100)}% ダメージ`);
+  if (m.allOrNothing != null) out.push(`${Math.round(m.allOrNothing * 100)}% で 成功。はずれは なにも おきない`);
+  if (m.read) out.push(`あいてが こうげきを えらんでいたら、ふせいで ${m.read.power}の はんげき`);
   if (m.randomAttr) out.push('ランダムな ぞくせい・じょうたいいじょう');
   if (m.cures) out.push(m.cures === 'all' ? 'じょうたいいじょうを ぜんぶ なおす' : 'じょうたいいじょうを 1つ なおす');
   if (m.heal) out.push(`HP ${m.heal} かいふく`);

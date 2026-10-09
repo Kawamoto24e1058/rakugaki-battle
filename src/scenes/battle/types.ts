@@ -1,11 +1,11 @@
 import type { StatusKind } from '../../engine/types';
-import type { OrderReason, Side } from '../../engine';
+import type { FieldState, OrderReason, Side } from '../../engine';
 import type { Pal } from '../../components/art/palette';
 import type { TableState } from '../../components/PlayArea';
 
 /** 状態異常・ため中のチップ（絵の上のオーラにも使う）。 */
 export interface Chip {
-  kind: StatusKind | 'charged';
+  kind: StatusKind | 'charged' | 'barrier' | 'timer' | 'trap';
   jp: string;
   good: boolean;
 }
@@ -56,6 +56,7 @@ export interface OrderInfo {
 
 export interface Snap {
   hp: [number, number];
+  field: FieldState | null;
   chips: [Chip[], Chip[]];
 }
 

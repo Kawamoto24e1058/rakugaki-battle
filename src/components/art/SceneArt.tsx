@@ -207,6 +207,19 @@ function stickersFor(move: MoveDef, pal: Pal): ReactElement[] {
     out.push(g(m, PALETTES.dark, 0.2));
     out.push(<Glyph key="dn" motif="down" pal={PALETTES.dark} x={0} y={0} s={0.2} />);
   }
+  if (move.field) out.push(g(({ rain: 'rain', sun: 'sun', thunder: 'thundercloud', night: 'night' } as Record<string, string>)[move.field.kind], pal, 0.2));
+  if (move.barrier) out.push(g('dome', PALETTES.water, 0.2));
+  if (move.cost) out.push(g('heartcrack', PALETTES.atk, 0.2));
+  if (move.delay) out.push(g(move.delay.damage ? 'bomb' : 'gift', pal, 0.2));
+  if (move.trap) out.push(g('spikes', pal, 0.2));
+  if (move.bond) out.push(g('chain', pal, 0.2));
+  if (move.endure) out.push(g('heart', PALETTES.sup, 0.2));
+  if (move.copy) out.push(g('mirror', pal, 0.2));
+  if (move.swap) out.push(g(move.swap === 'hp' ? 'swapheart' : 'swap', pal, 0.2));
+  if (move.dice) out.push(g('dice', pal, 0.2));
+  if (move.coin) out.push(g('coin', pal, 0.2));
+  if (move.allOrNothing != null) out.push(g('wishstar', pal, 0.2));
+  if (move.read) out.push(g('readeye', pal, 0.2));
   if (move.hand) {
     const h = move.hand;
     out.push(
@@ -287,7 +300,7 @@ export function SceneArt({ move }: { move: MoveDef }) {
   const explicit = art.motifs[0]?.includes(':');
   const toks = explicit ? art.motifs : art.motifs.slice(0, 1);
 
-  const num = atk ? `${move.power}` : move.heal ? `+${move.heal}` : null;
+  const num = atk ? (move.dice ? '?' : `${move.power}`) : move.heal ? `+${move.heal}` : null;
   const numColor = atk ? '#d8321c' : '#1b7a47';
   const stickers = stickersFor(move, pal).slice(0, 4);
   // 対象（左端）＋効果

@@ -14,6 +14,8 @@ export {
   dealHand,
   forcedChoice,
   evalCond,
+  FIELD_META,
+  type FieldState,
   effStat,
   koseiReady,
   HAND_SIZE,

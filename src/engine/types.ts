@@ -45,7 +45,9 @@ export type StatusKind =
   | 'flinch'
   | 'guard'
   | 'thorns'
-  | 'charging';
+  | 'charging'
+  | 'bond'
+  | 'endure';
 
 /** 持ち物（用紙のチェック欄／解析）。 */
 export type Weapon = 'sword' | 'wand' | 'shield' | 'wing';
