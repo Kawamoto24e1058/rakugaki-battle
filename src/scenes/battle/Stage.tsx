@@ -209,7 +209,7 @@ export function Stage({
       key={`stage-${beatKey}`}
       animate={shake ? { x: [0, -shake, shake, -shake * 0.6, shake * 0.4, 0], y: [0, shake * 0.5, -shake * 0.5, shake * 0.3, 0, 0] } : { x: 0, y: 0 }}
       transition={{ duration: 0.38 }}
-      style={{ ['--stage-h' as string]: 'clamp(8.5rem, 31vh, 23rem)', position: 'relative', width: '100%', height: 'var(--stage-h)', minHeight: '8.5rem', border: '4px solid var(--ink)', borderRadius: 18, overflow: 'hidden', boxShadow: '5px 6px 0 rgba(51,48,43,.18)', background: '#fffdf6' }}
+      style={{ ['--stage-h' as string]: 'clamp(8.5rem, 28vh, 23rem)', position: 'relative', width: '100%', height: 'var(--stage-h)', minHeight: '8.5rem', border: '4px solid var(--ink)', borderRadius: 18, overflow: 'hidden', boxShadow: '5px 6px 0 rgba(51,48,43,.18)', background: '#fffdf6' }}
     >
       <Backdrop attrs={[chars[0].attribute, chars[1].attribute]} />
 

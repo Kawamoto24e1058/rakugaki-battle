@@ -9,9 +9,7 @@ import type { ClashChoice } from '../engine';
 
 /** カードの大きさ：横幅と「画面の高さ」の両方で上限を決める（低い画面でも1画面に収める）。 */
 const sizeFor = (n: number, wide: boolean) =>
-  wide ? (n >= 4 ? 'min(14vw, 8rem, 20vh)' : n === 2 ? 'min(18vw, 9.6rem, 24vh)' : 'min(16vw, 9rem, 22vh)') : n >= 4 ? 'min(22vw, 8.6rem)' : n === 2 ? 'min(32vw, 10.4rem)' : 'min(28vw, 9.6rem)';
-const fanRot = (i: number, n: number) => (i - (n - 1) / 2) * (n >= 4 ? 5 : 7);
-const fanY = (i: number, n: number) => 8 - Math.max(0, 1 - Math.abs(i - (n - 1) / 2)) * 10;
+  wide ? (n >= 4 ? 'min(11.5vw, 7.6rem, 25vh)' : n === 2 ? 'min(18vw, 10.4rem, 30vh)' : 'min(15vw, 10rem, 28vh)') : n >= 4 ? 'min(22vw, 8.6rem)' : n === 2 ? 'min(32vw, 10.4rem)' : 'min(28vw, 9.6rem)';
 
 function cardOf(id: ClashChoice, koseiId: string): CardData | null {
   if (id === 'kosei') return koseiCard(getKosei(koseiId));
@@ -136,22 +134,23 @@ export function HandTable({
         </motion.div>
       )}
       <div style={{ width: '100%', display: 'flex', flexDirection: wide ? 'row' : 'column', gap: wide ? '1rem' : '0.4rem', alignItems: wide ? 'center' : 'center', justifyContent: 'center' }}>
-        {/* 山札＋手札 */}
-        <div style={{ position: 'relative', flex: wide ? 1 : undefined, width: wide ? undefined : '100%', display: 'flex', justifyContent: 'center', alignItems: 'flex-end', minHeight: `calc(${CARD_SIZE} * 1.4 + 1.8rem)`, perspective: 900 }}>
-          {/* 山札 */}
-          <div style={{ position: 'absolute', left: '0.2rem', bottom: '0.2rem', width: `calc(${CARD_SIZE} * 0.6)`, aspectRatio: '5 / 7', zIndex: 0 }}>
-            {[2, 1, 0].map((k) => (
-              <div
-                key={k}
-                style={{ position: 'absolute', inset: 0, transform: `translate(${k * 3}px, ${-k * 3}px)`, ['--r' as string]: `${(k - 1) * 3}deg`, animation: stage === 'dealing' ? 'deck-bob 0.5s ease-in-out infinite' : undefined }}
-              >
-                <CardBack size={`calc(${CARD_SIZE} * 0.6)`} />
-              </div>
-            ))}
-          </div>
+        {/* 山札 */}
+        <div
+          style={wide ? { flex: `0 0 calc(${CARD_SIZE} * 0.6)`, alignSelf: 'flex-end', position: 'relative', width: `calc(${CARD_SIZE} * 0.6)`, aspectRatio: '5 / 7', marginBottom: '0.2rem' } : { position: 'absolute', left: 0, bottom: '0.2rem', width: `calc(${CARD_SIZE} * 0.6)`, aspectRatio: '5 / 7', zIndex: 0 }}
+        >
+          {[2, 1, 0].map((k) => (
+            <div
+              key={k}
+              style={{ position: 'absolute', inset: 0, transform: `translate(${k * 3}px, ${-k * 3}px)`, ['--r' as string]: `${(k - 1) * 3}deg`, animation: stage === 'dealing' ? 'deck-bob 0.5s ease-in-out infinite' : undefined }}
+            >
+              <CardBack size={`calc(${CARD_SIZE} * 0.6)`} />
+            </div>
+          ))}
+        </div>
 
-          {/* 手札（扇） */}
-          <div style={{ display: 'flex', gap: 'min(1.4vw, 0.5rem)', justifyContent: 'center', alignItems: 'flex-end', zIndex: 1 }}>
+        {/* 手札（一直線） */}
+        <div style={{ position: 'relative', flex: wide ? 1 : undefined, minWidth: 0, width: wide ? undefined : '100%', display: 'flex', justifyContent: 'center', alignItems: 'flex-end', minHeight: `calc(${CARD_SIZE} * 1.4 + 1.8rem)`, perspective: 900 }}>
+          <div style={{ display: 'flex', gap: 'min(1.2vw, 0.5rem)', justifyContent: 'center', alignItems: 'flex-end', zIndex: 1 }}>
             {cards.map((c, i) => {
               if (!c.data) return null;
               const isSel = selected === i;
@@ -170,20 +169,13 @@ export function HandTable({
                     setSelected(i);
                     sfx.select();
                   }}
-                  initial={{ x: `${-(i * 112) - 70}%`, y: 70, rotate: -28, scale: 0.55, opacity: 0, rotateY: 180 }}
+                  initial={{ x: `${-(i * 112) - 70}%`, y: 70, rotate: -20, scale: 0.55, opacity: 0, rotateY: 180 }}
                   animate={
                     leave
-                      ? { x: 0, y: 120, rotate: fanRot(i, n) * 2, scale: 0.7, opacity: 0, rotateY: 0 }
+                      ? { x: 0, y: 120, rotate: 0, scale: 0.7, opacity: 0, rotateY: 0 }
                       : committing && isSel
                         ? { x: 0, y: -30, rotate: 0, scale: 1.12, opacity: 1, rotateY: 180 }
-                        : {
-                            x: 0,
-                            y: isSel ? -18 : dimmed ? fanY(i, n) + 8 : fanY(i, n),
-                            rotate: isSel ? 0 : fanRot(i, n),
-                            scale: isSel ? 1.1 : dimmed ? 0.93 : 1,
-                            opacity: dimmed ? 0.62 : 1,
-                            rotateY: 0,
-                          }
+                        : { x: 0, y: isSel ? -14 : 0, rotate: 0, scale: isSel ? 1.06 : dimmed ? 0.95 : 1, opacity: dimmed ? 0.62 : 1, rotateY: 0 }
                   }
                   transition={{
                     type: 'spring',
@@ -192,15 +184,13 @@ export function HandTable({
                     delay: stage === 'dealing' ? 0.25 + i * 0.22 : 0,
                     rotateY: { type: 'tween', duration: committing ? 0.45 : 0.5, delay: stage === 'dealing' ? 0.45 + i * 0.22 : 0, ease: 'easeOut' },
                   }}
-                  whileHover={stage === 'choosing' && !isSel ? { y: fanY(i, n) - 10, scale: 1.05 } : undefined}
+                  whileHover={stage === 'choosing' && !isSel ? { y: -8, scale: 1.04 } : undefined}
                   whileTap={stage === 'choosing' ? { scale: 0.97 } : undefined}
                   style={{ position: 'relative', cursor: stage === 'choosing' ? 'pointer' : 'default', transformStyle: 'preserve-3d', zIndex: isSel ? 5 : 1 }}
                 >
-                  {/* 表 */}
                   <div style={{ backfaceVisibility: 'hidden' }}>
                     <GameCard card={c.data} size={CARD_SIZE} selected={isSel && stage === 'choosing'} />
                   </div>
-                  {/* 裏（めくる前／えらんだあと） */}
                   <div style={{ position: 'absolute', inset: 0, backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}>
                     <CardBack size={CARD_SIZE} />
                   </div>

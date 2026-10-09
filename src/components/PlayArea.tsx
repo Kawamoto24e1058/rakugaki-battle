@@ -47,7 +47,7 @@ export function PlayArea({ table, names, colors }: { table: TableState; names: [
       <div style={{ position: 'relative', display: 'grid', justifyItems: 'center', gap: 4 }}>
         <motion.div
           initial={{ x: dir * 120, opacity: 0, rotate: dir * 18, scale: 0.7 }}
-          animate={{ x: 0, opacity: 1, rotate: dir * -2.5, scale: acting ? 1.08 : 1, y: acting ? -4 : 0 }}
+          animate={{ x: 0, opacity: 1, rotate: 0, scale: acting ? 1.08 : 1, y: acting ? -4 : 0 }}
           transition={{ type: 'spring', stiffness: 230, damping: 16 }}
           style={{ position: 'relative', perspective: 800 }}
         >

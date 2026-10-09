@@ -38,7 +38,7 @@ export function condText(c: Cond): string {
 /** カードの1行用の短い条件。 */
 function condShort(c: Cond): string {
   switch (c.t) {
-    case 'prev': return `まえが「${TAG_WORD[c.tag] ?? c.tag}」なら`;
+    case 'prev': return `前が「${TAG_WORD[c.tag] ?? c.tag}」なら`;
     case 'foeHas': return `あいてが ${c.kind === 'debuff' ? '状態異常' : STATUS_WORD[c.kind] ?? c.kind}なら`;
     case 'foePick': return c.cat === 'attack' ? 'あいてが こうげきなら' : 'あいてが ほじょなら';
     case 'foeHp': return `あいて HP ${Math.round(c.below * 10)}わり以下なら`;
@@ -58,6 +58,56 @@ export function handText(h: HandEffect): string {
     case 'extra': return `つぎの手札が ${h.n}まい ふえる`;
     case 'foeLess': return `あいての つぎの手札が ${h.n}まい へる`;
     case 'luck': return 'つぎの手札に 大技・ため技が 来やすい';
+  }
+}
+
+
+export type ChipTone = 'dmg' | 'heal' | 'status' | 'buff' | 'debuff' | 'cond' | 'quick' | 'hand' | 'info';
+export interface EffectChip {
+  text: string;
+  tone: ChipTone;
+}
+
+/** カードに はっきり見せる「効果」。色分けした短い札（多くて3つ）。 */
+export function moveChips(m: MoveDef): EffectChip[] {
+  const out: EffectChip[] = [];
+  const pct = (n: number) => `${Math.round(n * 100)}%`;
+  if (m.charge) out.push({ text: 'ため技：次のターン', tone: 'quick' });
+  if (m.category === 'attack') {
+    out.push({ text: `ダメージ ${m.power}${m.hits && m.hits > 1 ? ` ×${m.hits}かい` : ''}`, tone: 'dmg' });
+    if (m.pierce) out.push({ text: 'ぼうぎょ むし', tone: 'dmg' });
+    if (m.execute) out.push({ text: `HPすくないと ×${m.execute}`, tone: 'cond' });
+    if (m.critBoost) out.push({ text: 'きゅうしょ ねらい', tone: 'buff' });
+    if (m.drain) out.push({ text: 'ダメージを すいとる', tone: 'heal' });
+  }
+  if (m.heal) out.push({ text: `HP +${m.heal}`, tone: 'heal' });
+  if (m.cures) out.push({ text: m.cures === 'all' ? 'じょうたい ぜんぶ なおす' : 'じょうたい 1つ なおす', tone: 'heal' });
+  if (m.guardPct) out.push({ text: 'うけるダメージ 半分', tone: 'buff' });
+  if (m.reflect) out.push({ text: 'こうげきを はんぶん 返す', tone: 'buff' });
+  if (m.buff?.stat === 'def') out.push({ text: 'ダメージ -40%', tone: 'buff' });
+  else if (m.buff) out.push({ text: `${STAT_JP[m.buff.stat]} ↑ ${m.buff.turns}ターン`, tone: 'buff' });
+  if (m.debuff?.stat === 'def') out.push({ text: 'あいて ダメージ +30%', tone: 'debuff' });
+  else if (m.debuff) out.push({ text: `あいて ${STAT_JP[m.debuff.stat]} ↓`, tone: 'debuff' });
+  if (m.status && !m.status.toSelf) out.push({ text: `${STATUS_META[m.status.kind].jp} ${pct(m.status.chance)}`, tone: 'status' });
+  if (m.randomAttr) out.push({ text: 'ランダム じょうたい', tone: 'status' });
+  if (m.ambush) out.push({ text: 'あいてが こうげきなら', tone: 'cond' });
+  if (m.when && m.whenMult) out.push({ text: `${condShort(m.when)} ×${m.whenMult}`, tone: 'cond' });
+  if (m.hand) out.push({ text: handShort(m.hand), tone: 'hand' });
+  if (m.recoil) out.push({ text: `はんどう ${m.recoil}%`, tone: 'info' });
+  if (m.riskShift && m.riskShift >= 6) out.push({ text: 'かすりやすい', tone: 'info' });
+  if (hasPriority(m) && !m.charge) out.unshift({ text: '先に うごく', tone: 'quick' });
+  // 先頭（ダメージ/かいふく）→ 条件 → ほか の順に並べて3つまで
+  const rank: Record<ChipTone, number> = { quick: 0, dmg: 1, heal: 1, cond: 2, status: 3, buff: 3, debuff: 3, hand: 4, info: 5 };
+  const sorted = out.map((c, i) => ({ c, i })).sort((a, b) => rank[a.c.tone] - rank[b.c.tone] || a.i - b.i).map((x) => x.c);
+  return sorted.slice(0, 3);
+}
+
+function handShort(h: HandEffect): string {
+  switch (h.kind) {
+    case 'guarantee': return `つぎ：${PRED_WORD[h.pred]} ${h.n}まい来る`;
+    case 'extra': return `つぎ：てふだ +${h.n}`;
+    case 'foeLess': return `あいての てふだ -${h.n}`;
+    case 'luck': return 'つぎ：大技が来やすい';
   }
 }
 
@@ -135,6 +185,7 @@ export interface CardData {
   power: number | null;
   tag: string;
   gist: string;
+  chips: EffectChip[];
   lines: string[];
   quick: boolean;
   rare: boolean;
@@ -152,6 +203,7 @@ export function moveCard(m: MoveDef): CardData {
     power: m.category === 'attack' ? m.power : null,
     tag: `${m.category === 'attack' ? 'こうげき' : 'ほじょ'}${m.attribute ? `・${ATTRIBUTE_META[m.attribute].jp}` : ''}`,
     gist: moveGist(m),
+    chips: moveChips(m),
     lines: moveDetailLines(m),
     quick: hasPriority(m),
     rare: isRareMove(m),
@@ -169,6 +221,7 @@ export function koseiCard(k: Kosei): CardData {
     power: null,
     tag: 'こせいわざ',
     gist: k.activeJp,
+    chips: [],
     lines: [`パッシブ：${k.passiveJp}`, `こせい技：${k.activeJp}`, 'かならず 先に うごく'],
     quick: true,
     rare: true,

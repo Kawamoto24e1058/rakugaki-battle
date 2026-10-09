@@ -334,3 +334,33 @@ button {
   from { transform: translateX(-120%); }
   to { transform: translateX(260%); }
 }
+
+/* カードの効果ラベル（色分け） */
+.gcard-chips {
+  display: grid;
+  gap: 0.18em;
+  padding: 0.25em 0.35em 0.4em;
+  align-content: start;
+}
+.gcard-fx {
+  font-size: 0.74em;
+  font-weight: 800;
+  line-height: 1.15;
+  text-align: center;
+  padding: 0.14em 0.3em;
+  border-radius: 0.5em;
+  border: 0.13em solid var(--ink);
+  background: #fff;
+  color: var(--ink);
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+.gcard-fx-dmg { background: #ffd9d2; border-color: #c4432e; color: #8a2412; }
+.gcard-fx-heal { background: #d6f5e1; border-color: #2c9a5b; color: #17663a; }
+.gcard-fx-status { background: #e6dcff; border-color: #6a4bd6; color: #3d2796; }
+.gcard-fx-buff { background: #d9ebff; border-color: #2f7dd1; color: #164f93; }
+.gcard-fx-debuff { background: #e7e1d6; border-color: #6b6557; color: #3f3a30; }
+.gcard-fx-cond { background: #fff1c2; border-color: #c99600; color: #7a5a00; }
+.gcard-fx-quick { background: var(--crayon-yellow); border-color: #a87a00; color: #3a2a00; }
+.gcard-fx-hand { background: #d4f3f3; border-color: #2a9a9a; color: #145a5a; }
+.gcard-fx-info { background: #f1eee6; border-color: #8a8478; color: #55514a; font-weight: 700; }

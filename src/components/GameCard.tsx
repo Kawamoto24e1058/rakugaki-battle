@@ -47,8 +47,17 @@ export function GameCard({
       <div className="gcard-name" style={{ fontSize: long ? '1.02em' : '1.3em' }}>
         {card.name}
       </div>
-      <div className="gcard-gist">{card.gist}</div>
-      {card.quick && <div className="gcard-chip">先に うごく</div>}
+      {card.chips.length > 0 ? (
+        <div className="gcard-chips">
+          {card.chips.map((c, i) => (
+            <div key={i} className={`gcard-fx gcard-fx-${c.tone}`}>
+              {c.text}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="gcard-gist">{card.gist}</div>
+      )}
     </div>
   );
 }
