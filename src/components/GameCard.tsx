@@ -15,7 +15,7 @@ export function GameCard({
   selected?: boolean;
   style?: CSSProperties;
 }) {
-  const long = card.name.length > 6;
+  const long = card.name.length > 5;
   return (
     <div
       className={`gcard${selected ? ' gcard-selected' : ''}`}
@@ -32,13 +32,7 @@ export function GameCard({
         } as CSSProperties
       }
     >
-      {card.power != null && (
-        <div className="gcard-power">
-          {card.power}
-          {card.hits > 1 && <span style={{ fontSize: '0.5em' }}>×{card.hits}</span>}
-        </div>
-      )}
-      <div className="gcard-band" style={card.power == null ? { paddingLeft: '0.55em' } : undefined}>
+      <div className="gcard-band">
         <span>{card.tag}</span>
       </div>
       <div className="gcard-art">

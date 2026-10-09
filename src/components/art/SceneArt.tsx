@@ -297,7 +297,7 @@ export function SceneArt({ move }: { move: MoveDef }) {
   ];
 
   return (
-    <svg viewBox="0 6 160 84" width="100%" height="100%" preserveAspectRatio="xMidYMid slice" style={{ display: 'block' }}>
+    <svg viewBox="0 6 160 84" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" style={{ display: 'block' }}>
       <defs>
         <linearGradient id="mav" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0" stopColor={pal.bg1} />

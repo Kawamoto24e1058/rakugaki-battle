@@ -232,7 +232,7 @@ button {
   justify-content: space-between;
   align-items: center;
   gap: 0.3em;
-  padding: 0.3em 0.55em 0.3em 1.9em;
+  padding: 0.3em 0.55em;
   background: var(--card-color);
   color: var(--band-ink, #fff);
   font-size: 0.82em;
@@ -240,8 +240,8 @@ button {
   white-space: nowrap;
 }
 .gcard-art {
-  flex: 1 1 auto;
-  min-height: 44%;
+  flex: none;
+  aspect-ratio: 160 / 84;
   position: relative;
   overflow: hidden;
   border-top: 0.12em solid var(--ink);

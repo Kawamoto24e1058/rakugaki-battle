@@ -9,7 +9,7 @@ import type { ClashChoice } from '../engine';
 
 /** カードの大きさ：横幅と「画面の高さ」の両方で上限を決める（低い画面でも1画面に収める）。 */
 const sizeFor = (n: number, wide: boolean) =>
-  wide ? (n >= 4 ? 'min(11.5vw, 7.6rem, 25vh)' : n === 2 ? 'min(18vw, 10.4rem, 30vh)' : 'min(15vw, 10rem, 28vh)') : n >= 4 ? 'min(22vw, 8.6rem)' : n === 2 ? 'min(32vw, 10.4rem)' : 'min(28vw, 9.6rem)';
+  wide ? (n >= 4 ? 'min(12.5vw, 8.2rem, 27vh)' : n === 2 ? 'min(18vw, 10.4rem, 30vh)' : 'min(16vw, 10.4rem, 30vh)') : n >= 4 ? 'min(22vw, 8.6rem)' : n === 2 ? 'min(32vw, 10.4rem)' : 'min(28vw, 9.6rem)';
 
 function cardOf(id: ClashChoice, koseiId: string): CardData | null {
   if (id === 'kosei') return koseiCard(getKosei(koseiId));
@@ -82,9 +82,9 @@ export function HandTable({
   const panel = (
     <div
       style={{
-        width: wide ? '15.5rem' : '100%',
-        maxWidth: wide ? '15.5rem' : '26rem',
-        flex: wide ? '0 0 15.5rem' : undefined,
+        width: wide ? '14rem' : '100%',
+        maxWidth: wide ? '14rem' : '26rem',
+        flex: wide ? '0 0 14rem' : undefined,
         display: 'grid',
         gap: '0.45rem',
         alignContent: 'center',
