@@ -45,16 +45,16 @@ function meta(p: Partial<StatusMeta> & Pick<StatusMeta, 'id' | 'jp' | 'kind' | '
 
 export const STATUS_META: Record<StatusKind, StatusMeta> = {
   // ── ポケモン定番6つ ──
-  burn: meta({ id: 'burn', jp: 'やけど', kind: 'debuff', dotPercent: 1 / 16, atkMult: 0.7, duration: 4, description: '毎ターン ダメージ。こうげきが 3わり さがる。' }),
+  burn: meta({ id: 'burn', jp: 'やけど', kind: 'debuff', dotPercent: 1 / 10, atkMult: 0.7, duration: 4, description: '毎ターン 最大HPの 10分の1 ダメージ。こうげきが 3わり さがる。' }),
   paralysis: meta({ id: 'paralysis', jp: 'まひ', kind: 'debuff', skipChance: 0.3, spdMult: 0.5, duration: 4, description: '30% で 動けない。すばやさが 半分に なる。' }),
   freeze: meta({ id: 'freeze', jp: 'こおり', kind: 'debuff', fullSkip: true, wakeChance: 0.28, duration: 3, description: '動けない。毎ターン とけることがある。ほのお技で すぐ とける。' }),
   sleep: meta({ id: 'sleep', jp: 'ねむり', kind: 'debuff', fullSkip: true, wakeOnHit: 0.55, duration: 2, description: '2ターンくらい 動けない。攻撃されると 目をさますことがある。' }),
-  poison: meta({ id: 'poison', jp: 'どく', kind: 'debuff', dotPercent: 1 / 12, duration: 5, description: '毎ターン 最大HPの 8分の1くらい ダメージ。' }),
+  poison: meta({ id: 'poison', jp: 'どく', kind: 'debuff', dotPercent: 1 / 8, duration: 4, description: '毎ターン 最大HPの 8分の1 ダメージ。' }),
   confuse: meta({ id: 'confuse', jp: 'こんらん', kind: 'debuff', selfHitChance: 0.33, duration: 3, description: 'ときどき 自分を 攻撃してしまう。' }),
-  atkUp: meta({ id: 'atkUp', jp: 'こうげき↑', kind: 'buff', buffStat: 'atk', buffMult: 1.3, duration: 2, description: 'こうげきが 3わり上がる。' }),
+  atkUp: meta({ id: 'atkUp', jp: 'こうげき↑', kind: 'buff', buffStat: 'atk', buffMult: 1.5, duration: 3, description: 'こうげきが 5わり上がる（3ターン）。' }),
   // ぼうぎょ↑↓ は「受けるダメージの倍率」で分かりやすく（stat には触らない）。
-  defUp: meta({ id: 'defUp', jp: 'ぼうぎょ↑', kind: 'buff', incomingMult: 0.75, duration: 3, description: '受けるダメージが 25% へる（3ターン）。' }),
-  spdUp: meta({ id: 'spdUp', jp: 'すばやさ↑', kind: 'buff', buffStat: 'spd', buffMult: 1.4, duration: 2, description: 'すばやさが 4わり上がる。' }),
+  defUp: meta({ id: 'defUp', jp: 'ぼうぎょ↑', kind: 'buff', incomingMult: 0.6, duration: 3, description: '受けるダメージが 40% へる（3ターン）。' }),
+  spdUp: meta({ id: 'spdUp', jp: 'すばやさ↑', kind: 'buff', buffStat: 'spd', buffMult: 1.5, duration: 3, description: 'すばやさが 5わり上がる（かわしやすい）。' }),
   luckUp: meta({ id: 'luckUp', jp: 'きゅうしょ↑', kind: 'buff', buffStat: 'luck', buffMult: 1.5, duration: 3, description: 'きゅうしょに 当たりやすい。' }),
   atkDown: meta({ id: 'atkDown', jp: 'こうげき↓', kind: 'debuff', buffStat: 'atk', buffMult: 0.75, duration: 2, description: 'こうげきが 25% 下がる。' }),
   defDown: meta({ id: 'defDown', jp: 'ぼうぎょ↓', kind: 'debuff', incomingMult: 1.3, duration: 2, description: '受けるダメージが 30% ふえる（2ターン）。' }),

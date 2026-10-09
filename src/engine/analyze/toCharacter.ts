@@ -35,7 +35,7 @@ const SUB_MAX = 34;
 
 /** 平均(30)からの差を強調して、絵の個性をハッキリ出す。合計は total に正規化。 */
 function sharpenTriple(a: number, b: number, c: number, total: number): [number, number, number] {
-  const push = (v: number) => 30 + (v - 30) * 1.55;
+  const push = (v: number) => 30 + (v - 30) * 2.0;
   return normalizeMain(push(a), push(b), push(c), total);
 }
 /** 0..1 のサブステータス値を、真ん中(0.5)から遠ざけてメリハリを出す。 */

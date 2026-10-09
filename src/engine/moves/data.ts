@@ -95,7 +95,7 @@ export const MOVES: Record<MoveId, MoveDef> = Object.fromEntries(
       atk('c_tackle', 'たいあたり', 20, ['common'], '威力ふつう。クセのない体当たり。', {}),
       atk('c_bite', 'かみつき', 30, ['common'], '威力大。', { }),
       sup('c_guard', 'ガード', 0, ['common'], '2ターン、受けるダメージが 半分に なる。', { guardPct: 55 }),
-      sup('c_focus', 'きあいだめ', 0, ['common'], '3ターン、こうげきが 3わり上がる。', { buff: { stat: 'atk', turns: 3 } }),
+      sup('c_focus', 'きあいだめ', 0, ['common'], '3ターン、こうげきが 5わり上がる。', { buff: { stat: 'atk', turns: 3 } }),
       atk('c_gamble', 'ギャンブルアタック', 35, ['common'], '威力特大。外れ・かすりが多い。', { riskShift: 16 }),
 
       // ===== 属性ライン（3段階・進化で上がる） =====
@@ -111,7 +111,7 @@ export const MOVES: Record<MoveId, MoveDef> = Object.fromEntries(
       atk('water_sig', 'アクアカノン', 36, ['attr:water', 'weapon:wand'], '威力特大。ぼうぎょ無視。必ず こおり。', { attribute: 'water', pierce: true, status: { kind: 'freeze', chance: 1 } }),
       sup('water_wash', 'みずであらう', 0, ['attr:water', 'mood:calm'], 'やけど・どくを洗い流して中回復。', { cures: 'all', heal: 16 }),
       atk('wood_sig', 'ジャングルバインド', 34, ['attr:wood', 'shape:big'], '威力大。必ず どく。', { attribute: 'wood', status: { kind: 'poison', chance: 1 } }),
-      sup('wood_root', 'ねをはる', 0, ['attr:wood'], '3ターン、受けるダメージ 25%減＋少し回復。', { buff: { stat: 'def', turns: 3 }, heal: 10 }),
+      sup('wood_root', 'ねをはる', 0, ['attr:wood'], '3ターン、受けるダメージ 40%減＋少し回復。', { buff: { stat: 'def', turns: 3 }, heal: 10 }),
       atk('bolt_sig', 'サンダーレイド', 34, ['attr:bolt', 'part:wings'], '威力大。必ず先制。高い確率で まひ。', { attribute: 'bolt', first: true, status: { kind: 'paralysis', chance: 0.9 } }),
       atk('dark_sig', 'ドレインバイト', 32, ['attr:dark', 'mood:fierce'], '威力大。与ダメージの半分を回復。ときどき こんらん。', { attribute: 'dark', drain: 55, status: { kind: 'confuse', chance: 0.5 } }),
       sup('dark_veil', 'やみのベール', 0, ['attr:dark'], 'すばやさアップ（2ターン）＋回避が上がる。', { buff: { stat: 'spd', turns: 2 } }),
@@ -125,7 +125,7 @@ export const MOVES: Record<MoveId, MoveDef> = Object.fromEntries(
       // ===== 形：まる =====
       atk('ro_roll', 'ころがる', 26, ['shape:round'], '威力ふつう。まるまって転がり突撃。', { }),
       sup('ro_ball', 'まるまる', 0, ['shape:round'], '2ターン、受けるダメージが 半分に なる。', { guardPct: 65 }),
-      sup('ro_puff', 'ふくらむ', 0, ['shape:round'], '3ターン、受けるダメージが 25% へる。', { buff: { stat: 'def', turns: 2 } }),
+      sup('ro_puff', 'ふくらむ', 0, ['shape:round'], '3ターン、受けるダメージが 40% へる。', { buff: { stat: 'def', turns: 2 } }),
 
       // ===== 形：たて長 =====
       atk('ta_stretch', 'のびパンチ', 18, ['shape:tall'], '威力ひかえめ。必ず先制。', { first: true }),
@@ -140,7 +140,7 @@ export const MOVES: Record<MoveId, MoveDef> = Object.fromEntries(
       // ===== 形：大きい =====
       atk('bg_press', 'グランドプレス', 36, ['shape:big'], '威力特大。当てにくい。', { riskShift: 6 }),
       atk('bg_body', 'ボディブロー', 30, ['shape:big'], '威力大。ずしんと効く一発。', { }),
-      sup('bg_weight', 'おもみ', 0, ['shape:big'], '3ターン、受けるダメージが 25% へる。', { buff: { stat: 'def', turns: 2 } }),
+      sup('bg_weight', 'おもみ', 0, ['shape:big'], '3ターン、受けるダメージが 40% へる。', { buff: { stat: 'def', turns: 2 } }),
 
       // ===== 形：小さい =====
       atk('sm_jab', 'クイックジャブ', 16, ['shape:small'], '威力ひかえめ。小さく素早い一撃。', {}),
@@ -178,9 +178,9 @@ export const MOVES: Record<MoveId, MoveDef> = Object.fromEntries(
       // ===== 雰囲気：穏やか =====
       sup('ca_breath', 'ふかこきゅう', 0, ['mood:calm'], '状態異常を1つ治して少し回復。', { cures: 'one', heal: 15 }),
       sup('ca_heal', 'いやしのて', 0, ['mood:calm'], 'HPを大きく回復。', { heal: 34 }),
-      sup('ca_watch', 'みまもる', 0, ['mood:calm'], '3ターン、受けるダメージが 25% へる。', { buff: { stat: 'def', turns: 2 } }),
+      sup('ca_watch', 'みまもる', 0, ['mood:calm'], '3ターン、受けるダメージが 40% へる。', { buff: { stat: 'def', turns: 2 } }),
       sup('ca_song', 'いやしのうた', 0, ['mood:calm'], '状態異常をすべて治す。', { cures: 'all' }),
-      sup('ca_calm', 'こころをしずめる', 0, ['mood:calm'], '3ターン、受けるダメージが 25% へる。', { buff: { stat: 'def', turns: 2 } }),
+      sup('ca_calm', 'こころをしずめる', 0, ['mood:calm'], '3ターン、受けるダメージが 40% へる。', { buff: { stat: 'def', turns: 2 } }),
 
       // ===== 装飾：カラフル =====
       atk('co_rainbow', 'にじいろだま', 24, ['deco:colorful'], '威力ふつう。ランダムな属性の弾。', { randomAttr: true }),
@@ -199,7 +199,7 @@ export const MOVES: Record<MoveId, MoveDef> = Object.fromEntries(
 
       // ===== 持ち物：杖 =====
       atk('wd_bolt', 'まほうだん', 22, ['weapon:wand'], '威力ふつう。ぼうぎょ無視の魔法弾。', { pierce: true }),
-      sup('wd_charge', 'チャージ', 0, ['weapon:wand'], '3ターン、こうげきが 3わり上がる。', { buff: { stat: 'atk', turns: 3 } }),
+      sup('wd_charge', 'チャージ', 0, ['weapon:wand'], '3ターン、こうげきが 5わり上がる。', { buff: { stat: 'atk', turns: 3 } }),
       atk('wd_mega', 'メガチャージ', 35, ['weapon:wand'], '威力特大。ぼうぎょ無視。当てにくい。', { pierce: true, riskShift: 6 }),
 
       // ===== 持ち物：盾 =====
@@ -274,8 +274,18 @@ function hashId(id: string): number {
  * 「補助わざ＝技」のように固定観念で偏らせず、絵ごとの得意カテゴリが本当に
  * バラける（同じ技は何度判定しても必ず同じカテゴリ＝決定論は保つ）。
  */
+/** 補助わざは「何をする技か」で系統を決める（まもり・かいふく=技、きょうか=力、すばやさ系=速さ）。 */
+function supportCategory(m: MoveDef): MoveCategory3 {
+  if (m.heal || m.cures || m.guardPct || m.reflect || m.buff?.stat === 'def') return 'tech';
+  if (m.buff?.stat === 'atk' || m.debuff?.stat === 'def') return 'power';
+  if (m.buff?.stat === 'spd' || m.debuff?.stat === 'spd') return 'speed';
+  const cats: MoveCategory3[] = ['power', 'tech', 'speed'];
+  return cats[hashId(m.id) % 3];
+}
+
 export function moveCategory(m: MoveDef): MoveCategory3 {
   if (m.first) return 'speed';
+  if (m.power <= 0) return supportCategory(m);
   if (m.power >= 34) return 'power';
   if (m.power > 0 && m.power <= 12) return 'speed';
   const cats: MoveCategory3[] = ['power', 'tech', 'speed'];

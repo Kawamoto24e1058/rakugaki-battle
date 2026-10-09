@@ -55,6 +55,33 @@ const SUDDEN_DEATH_TURN = 14;
 // クラッシュ勝ち＝相手は行動できない（発動不可）。勝者側の上乗せは控えめに。
 const CLASH_WIN_MULT = 1.25;
 const PER_HIT_CAP_PCT = 0.42;
+/** 全体の火力。試合が「時間切れ（サドンデス）」でなく選択で決着するように底上げ。 */
+const DMG_SCALE = 1.0;
+/** 回復の底上げ（火力を上げたぶん回復が置いていかれないように）。 */
+const HEAL_SCALE = 1.5;
+/** カテゴリごとの個性：力＝一撃が重い／技＝ふつう（状態異常が本領）／速さ＝軽い（追撃で手数）。 */
+const CAT_DMG: Record<TriStance, number> = { power: 1.3, tech: 1.0, speed: 0.85 };
+/** 得意カテゴリの技・補助の底上げ。 */
+const FAVORITE_MULT = 1.25;
+/** 速さで読み勝ち → 追撃（もう一撃）の威力。 */
+const FOLLOWUP_MULT = 0.55;
+/** こせいのアクティブ技の威力の底上げ（絵の個性の主役にする）。 */
+const KOSEI_POWER_MULT = 1.25;
+
+/**
+ * 絵から決まったステータスで「得意なカテゴリ」を決める。
+ *  力 ＝ こうげき／速さ ＝ すばやさ／技 ＝ ぼうぎょ・こころ・きゅうしょ（がんじょう・器用・運）。
+ * 上位2つがほぼ同じ（バランス型）なら null＝得意なし。
+ */
+export function favoriteCategory(stats: Stats): TriStance | null {
+  const scores: [TriStance, number][] = [
+    ['power', stats.atk],
+    ['speed', stats.spd],
+    ['tech', 0.5 * stats.def + 0.5 * (stats.heart + stats.luck)],
+  ];
+  scores.sort((a, b) => b[1] - a[1]);
+  return scores[0][1] - scores[1][1] < 3 ? null : scores[0][0];
+}
 
 // ---------- わざのカテゴリ分け（力／技／速さ）----------
 // moveCategory 本体は moves/data.ts（上で re-export）。
@@ -73,6 +100,8 @@ export interface ClashCombatant {
   name: string;
   attribute: Attribute;
   base: Stats;
+  /** 得意カテゴリ（絵のステータスから決まる）。 */
+  favorite: TriStance | null;
   moveIds: MoveId[];
   koseiId: string;
   koseiCd: number;
@@ -114,6 +143,7 @@ function toCombatant(c: Character): ClashCombatant {
     name: c.name,
     attribute: c.attribute,
     base: { ...c.baseStats },
+    favorite: favoriteCategory(c.baseStats),
     moveIds: [...c.moveIds],
     koseiId: k.id,
     koseiCd: 0,
@@ -150,6 +180,10 @@ function has(c: ClashCombatant, k: StatusKind): boolean {
 /** 派生ステータス（バフ・デバフ・やけど・からまりのみ。プロトなのでこせいパッシブは省略）。 */
 export function effStat(c: ClashCombatant, stat: keyof Stats): number {
   let v = c.base[stat];
+  const pas = kosei(c).passive;
+  if (pas.kind === 'atkUp' && stat === 'atk') v *= pas.mult;
+  if (pas.kind === 'defUp' && stat === 'def') v *= pas.mult;
+  if (pas.kind === 'spdUp' && stat === 'spd') v *= pas.mult;
   for (const s of c.statuses) {
     const m = STATUS_META[s.kind];
     if (m.buffStat === stat && m.buffMult) v *= m.buffMult;
@@ -283,7 +317,7 @@ export function resolveClashTurn(
       log.push({ t: 'act', side, stance: eff[side], moveName: '（見切られて うごけない）' });
       continue;
     }
-    act(next, side, eff[side], chosenMoves[side], foe, res === 'lose' ? 'even' : res, rng, log);
+    act(next, side, eff[side], chosenMoves[side], res === 'lose' ? 'even' : res, rng, log);
     checkFaint(next);
   }
 
@@ -306,6 +340,18 @@ export function resolveClashTurn(
     tickStatuses(next, 0, log);
     tickStatuses(next, 1, log);
     checkFaint(next);
+    // パッシブ：毎ターン少し回復
+    if (next.winner === null) {
+      for (const side of [0, 1] as Side[]) {
+        const c = next.combatants[side];
+        const pas = kosei(c).passive;
+        if (pas.kind === 'regen' && c.hp > 0 && c.hp < c.maxHp) {
+          const amt = Math.max(1, Math.round(c.maxHp * pas.pct * 1.6));
+          c.hp = Math.min(c.maxHp, c.hp + amt);
+          log.push({ t: 'heal', side, amount: amt, hpAfter: c.hp });
+        }
+      }
+    }
   }
 
   // カウントダウン
@@ -359,8 +405,7 @@ function resolveChoice(c: ClashCombatant, choice: ClashChoice): { stance: ClashS
     choice = 'power'; // こせいが使えない → 力カテゴリの代表技に落とす
   }
   if (choice === 'power' || choice === 'tech' || choice === 'speed') {
-    const m = pickMove(c, choice);
-    return { stance: moveCategory(m), move: m };
+    return { stance: choice, move: pickMove(c, choice) };
   }
   // 技ID 指定
   const m = MOVES_SAFE(choice);
@@ -382,6 +427,9 @@ function decideOrder(
   const fast0 = eff[0] === 'speed';
   const fast1 = eff[1] === 'speed';
   if (fast0 !== fast1) return fast0 ? [0, 1] : [1, 0];
+  const f0 = kosei(state.combatants[0]).passive.kind === 'firstMove';
+  const f1 = kosei(state.combatants[1]).passive.kind === 'firstMove';
+  if (f0 !== f1) return f0 ? [0, 1] : [1, 0];
   const s0 = effStat(state.combatants[0], 'spd');
   const s1 = effStat(state.combatants[1], 'spd');
   if (s0 === s1) return rng() < 0.5 ? [0, 1] : [1, 0];
@@ -393,7 +441,6 @@ function act(
   side: Side,
   stance: ClashStance,
   chosenMove: MoveDef | null,
-  foeStance: ClashStance,
   result: ClashResult,
   rng: Rng,
   log: ClashEvent[],
@@ -440,22 +487,47 @@ function act(
   const isSupport = move.category === 'support';
   log.push({ t: 'act', side, stance, moveName: move.name, support: isSupport });
 
+  const favored = c.favorite === stance;
   if (isSupport) {
-    applySupport(state, side, move, log);
+    applySupport(state, side, move, log, favored, result === 'win');
     return;
   }
 
-  // 勝ち＝相手は行動できないので上乗せは控えめ。五分は等倍。
-  let clashMult = result === 'win' ? CLASH_WIN_MULT : 1;
-  // 力 vs 技 は「ぶち抜く」だけで殴り合いの大差はつけない
-  if (stance === 'power' && result === 'win' && foeStance === 'tech') clashMult = 1.05;
-  // 技が勝てば 状態異常が入りやすい
-  const statusMult = stance === 'tech' && result === 'win' ? 1.35 : 1;
-  dealDamage(state, side, move, { clashMult, statusMult }, rng, log);
+  const won = result === 'win';
+  // カテゴリの個性（力＝重い／技＝ふつう／速さ＝軽い）× 得意カテゴリ × 読み勝ち
+  const catMult = CAT_DMG[stance as TriStance] * (favored ? FAVORITE_MULT : 1);
+  const clashMult = (won ? CLASH_WIN_MULT : 1) * catMult;
+  const target = state.combatants[1 - side as Side];
+
+  // 勝ち方ごとのごほうび：
+  //  力  … ぶち抜き（ぼうぎょ・ガードを無視して通す）
+  //  技  … みきり（状態異常がほぼ必中＋次のターンの被ダメ軽減）
+  //  速さ… おいうち（もう一撃）
+  dealDamage(
+    state,
+    side,
+    move,
+    {
+      clashMult,
+      statusMult: stance === 'tech' && won ? 2.5 : 1,
+      ignoreDefense: stance === 'power' && won,
+      tag: stance === 'power' && won ? 'ぶち抜き' : null,
+    },
+    rng,
+    log,
+  );
+  if (stance === 'tech' && won && c.hp > 0) {
+    if (applyStatus(c, 'defUp', 2)) log.push({ t: 'status-apply', side, kind: 'defUp' });
+  }
+  if (stance === 'speed' && won && target.hp > 0 && c.hp > 0) {
+    dealDamage(state, side, move, { clashMult: catMult * FOLLOWUP_MULT, noStatus: true, tag: 'おいうち' }, rng, log);
+  }
 }
 
-function applySupport(state: ClashState, side: Side, move: MoveDef, log: ClashEvent[]): void {
+function applySupport(state: ClashState, side: Side, move: MoveDef, log: ClashEvent[], favored = false, won = false): void {
   const c = state.combatants[side];
+  // 得意カテゴリ・読み勝ちのとき、補助は効きがのびる（回復×、ターン+1）
+  const fv = (favored ? FAVORITE_MULT : 1) * (won ? CLASH_WIN_MULT : 1);
   if (move.cures) {
     const before = c.statuses.length;
     c.statuses = c.statuses.filter((s) => STATUS_META[s.kind].kind !== 'debuff');
@@ -464,7 +536,7 @@ function applySupport(state: ClashState, side: Side, move: MoveDef, log: ClashEv
   if (move.buff) {
     const map: Record<string, StatusKind> = { atk: 'atkUp', def: 'defUp', spd: 'spdUp', luck: 'luckUp' };
     const k = map[move.buff.stat] ?? 'atkUp';
-    applyStatus(c, k, move.buff.turns);
+    applyStatus(c, k, move.buff.turns + (favored ? 1 : 0) + (won ? 1 : 0));
     log.push({ t: 'status-apply', side, kind: k });
   }
   if (move.guardPct) {
@@ -476,7 +548,7 @@ function applySupport(state: ClashState, side: Side, move: MoveDef, log: ClashEv
     log.push({ t: 'status-apply', side, kind: 'thorns' });
   }
   if (move.heal) {
-    const amt = Math.round(move.heal * (1 + effStat(c, 'heart') / 55));
+    const amt = Math.round(move.heal * HEAL_SCALE * fv * (1 + effStat(c, 'heart') / 55));
     const b = c.hp;
     c.hp = Math.min(c.maxHp, c.hp + amt);
     if (c.hp > b) log.push({ t: 'heal', side, amount: c.hp - b, hpAfter: c.hp });
@@ -504,7 +576,7 @@ function applyKosei(state: ClashState, side: Side, rng: Rng, log: ClashEvent[]):
     dealDamage(
       state,
       side,
-      { id: `kosei_${k.id}`, name: k.activeName, category: 'attack', attribute: c.attribute, power, cooldown: 0, target: 'enemy', unlock: [], desc: '', ...extra },
+      { id: `kosei_${k.id}`, name: k.activeName, category: 'attack', attribute: c.attribute, power: Math.round(power * KOSEI_POWER_MULT), cooldown: 0, target: 'enemy', unlock: [], desc: '', ...extra },
       { clashMult: 1, tag },
       rng,
       log,
@@ -572,7 +644,12 @@ interface DamageOpts {
   /** 命中時に付与する状態異常の成功率にかかる倍率（クラッシュ結果で変わる）。 */
   statusMult?: number;
   ignoreCap?: boolean;
+  /** かすり・クリティカル等のタグが無いときに使う表示タグ。 */
   tag?: string | null;
+  /** ぼうぎょ・ガード・ぼうぎょ↑を無視して通す（力で読み勝ちした時）。 */
+  ignoreDefense?: boolean;
+  /** 状態異常を付けない（追撃用）。 */
+  noStatus?: boolean;
 }
 
 function dealDamage(
@@ -591,34 +668,52 @@ function dealDamage(
   // きめ（かすり/ふつう/クリティカル）。属性はダメージに影響しない。
   const luck = effStat(actor, 'luck');
   let kimeMult = 1;
-  let tag: string | null = opts.tag ?? null;
+  let kimeTag: string | null = null;
   const roll = rng();
-  const critChance = Math.max(0.04, Math.min(0.34, 0.06 + luck / 130));
+  const aPas = kosei(actor).passive;
+  const tPas = kosei(target).passive;
+  const critChance = Math.max(
+    0.04,
+    Math.min(0.4, 0.06 + luck / 130 + (aPas.kind === 'critUp' ? aPas.add : 0)),
+  );
   // 大振りな技（riskShift）は「かすり」になりやすい＝強い一撃のリスク。
   const grazeChance = 0.12 + (move.riskShift ?? 0) / 90;
+  // すばやさ：相手のほうが素早いほど かわされやすい（かわす＝かすり扱い）。
+  const aSpd = effStat(actor, 'spd');
+  const tSpd = effStat(target, 'spd');
+  const dodgeChance = 0.5 * (tSpd / (tSpd + aSpd + 15));
+  const dodgeRoll = rng();
   // ひるみ：次の攻撃が かすり になる（1回で消える）
   const flinched = has(actor, 'flinch');
   if (flinched) actor.statuses = actor.statuses.filter((s) => s.kind !== 'flinch');
   if (flinched || roll < grazeChance) {
     kimeMult = 0.55;
-    if (!tag) tag = 'かすった';
+    kimeTag = 'かすった';
+  } else if (dodgeRoll < dodgeChance * 0.5) {
+    kimeMult = 0.55;
+    kimeTag = 'かわされた';
   } else if (roll > 1 - critChance) {
     kimeMult = 1.7;
-    if (!tag) tag = 'クリティカル';
+    kimeTag = 'クリティカル';
   }
+  let tag: string | null = kimeTag ?? opts.tag ?? null;
 
   const atkTerm = 0.95 + effStat(actor, 'atk') / 46;
-  let dmg = move.power * opts.clashMult * kimeMult * atkTerm;
+  let dmg = move.power * opts.clashMult * kimeMult * atkTerm * DMG_SCALE;
 
   // こおった相手に ほのお技 → 大ダメージ（このあと とかす）
   if (hasAttr && move.attribute === 'fire' && has(target, 'freeze')) dmg *= 1.5;
 
-  if (!move.pierce) dmg *= 40 / (40 + effStat(target, 'def'));
-  // 状態異常による被ダメ倍率（のろい＋・ガード−・ぼうぎょ↑↓ …）。ガードは貫通でも効く。
+  if (!move.pierce && !opts.ignoreDefense) dmg *= 40 / (40 + effStat(target, 'def'));
+  // 状態異常による被ダメ倍率（のろい＋・ガード−・ぼうぎょ↑↓ …）。ガードは貫通でも効くが、
+  // 力で読み勝ちした「ぶち抜き」は軽減だけを無視する（増える側＝ぼうぎょ↓は効く）。
   for (const s of target.statuses) {
     const im = STATUS_META[s.kind].incomingMult;
-    if (im !== 1) dmg *= im;
+    if (im === 1) continue;
+    if (opts.ignoreDefense && im < 1) continue;
+    dmg *= im;
   }
+  if (tPas.kind === 'ironWill' && !opts.ignoreDefense) dmg *= 0.88;
 
   const hpPct = actor.hp / actor.maxHp;
   if (hpPct < 0.35) {
@@ -626,6 +721,7 @@ function dealDamage(
     dmg *= guts;
     if (guts >= 1.12 && !tag) tag = 'こんじょう';
   }
+  if (aPas.kind === 'lastStand' && hpPct < 0.4) dmg *= aPas.mult;
 
   dmg *= 0.92 + rng() * 0.16;
 
@@ -639,6 +735,7 @@ function dealDamage(
   if (final > 0) {
     let reflect = 0;
     for (const s of target.statuses) reflect = Math.max(reflect, STATUS_META[s.kind].reflectPct ?? 0);
+    if (tPas.kind === 'thorns') reflect = Math.max(reflect, tPas.pct);
     if (reflect > 0) {
       const back = Math.max(1, Math.round(final * reflect));
       actor.hp = Math.max(0, actor.hp - back);
@@ -646,6 +743,13 @@ function dealDamage(
     }
   }
 
+  // パッシブ：与ダメの一部を回復
+  if (aPas.kind === 'lifesteal' && final > 0) {
+    const heal = Math.max(1, Math.round(final * aPas.pct));
+    const b = actor.hp;
+    actor.hp = Math.min(actor.maxHp, actor.hp + heal);
+    if (actor.hp > b) log.push({ t: 'heal', side, amount: actor.hp - b, hpAfter: actor.hp });
+  }
   // ドレイン
   if (move.drain && final > 0) {
     const heal = Math.max(1, Math.round(final * (move.drain / 100)));
@@ -660,7 +764,7 @@ function dealDamage(
     log.push({ t: 'damage', side, amount: rec, hpAfter: actor.hp, tag: null });
   }
   // 状態異常
-  if (move.status && final > 0) {
+  if (move.status && final > 0 && !opts.noStatus) {
     const s = move.status;
     const victim = s.toSelf ? actor : target;
     const vside = (s.toSelf ? side : (1 - side)) as Side;
@@ -670,7 +774,8 @@ function dealDamage(
       0.03,
       Math.min(
         0.97,
-        s.chance * (opts.statusMult ?? 1) * attrMult * (0.85 + effStat(actor, 'heart') / 60) -
+        (s.chance * (opts.statusMult ?? 1) * attrMult + (aPas.kind === 'venom' ? aPas.add : 0)) *
+          (0.85 + effStat(actor, 'heart') / 60) -
           effStat(victim, 'luck') / 200,
       ),
     );

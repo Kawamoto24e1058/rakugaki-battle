@@ -42,7 +42,7 @@ function moveDetailLines(m: MoveDef): string[] {
   }
   if (m.cures) out.push(m.cures === 'all' ? '状態異常を ぜんぶ なおす' : '状態異常を 1つ なおす');
   if (m.heal) out.push(`HP ${m.heal} かいふく`);
-  if (m.buff?.stat === 'def') out.push('3ターン、うけるダメージ -25%');
+  if (m.buff?.stat === 'def') out.push('3ターン、うけるダメージ -40%');
   else if (m.buff) out.push(`${STAT_JP[m.buff.stat]} アップ（${m.buff.turns}ターン）`);
   if (m.debuff?.stat === 'def') out.push('あいての うけるダメージ +30%');
   else if (m.debuff) out.push(`あいての ${STAT_JP[m.debuff.stat]} ダウン`);
@@ -59,7 +59,7 @@ function moveGist(m: MoveDef): string | null {
   if (m.status && !m.status.toSelf) return `${STATUS_META[m.status.kind].jp}をねらう`;
   if (m.guardPct) return 'ダメージ 半分（2ターン）';
   if (m.reflect) return 'ダメージ 3わり返す（2ターン）';
-  if (m.buff?.stat === 'def') return 'ダメージ -25%（3ターン）';
+  if (m.buff?.stat === 'def') return 'ダメージ -40%（3ターン）';
   if (m.buff) return `${STAT_JP[m.buff.stat]}アップ`;
   if (m.debuff?.stat === 'def') return 'あいて ダメージ +30%';
   if (m.debuff) return `あいて ${STAT_JP[m.debuff.stat]}ダウン`;
@@ -78,7 +78,14 @@ const BTN_COLOR: Record<ClashStance, string> = {
   kosei: 'var(--crayon-purple)',
 };
 /** 大きく見せたい damage tag。 */
-const LOUD_TAGS = new Set(['クリティカル', 'カウンター', 'こんじょう', 'ばつぐん']);
+const LOUD_TAGS = new Set(['クリティカル', 'カウンター', 'こんじょう', 'ばつぐん', 'ぶち抜き', 'おいうち']);
+
+/** 読み勝ちしたカテゴリごとのごほうび（実況用）。 */
+const WIN_PERK: Record<'power' | 'tech' | 'speed', string> = {
+  power: 'ぼうぎょを ぶち抜く！',
+  tech: 'みきって ぼうぎょ↑！',
+  speed: 'おいうちが くる！',
+};
 
 function catCounts(c: Character): Record<TriStance, number> {
   const out: Record<TriStance, number> = { power: 0, tech: 0, speed: 0 };
@@ -185,7 +192,13 @@ function buildBeats(
         break;
       case 'clash':
         add(
-          ev.winner === null ? 'おなじ かまえ！ どうじに うごく' : `${names[ev.winner]} が よんだ！ あいては うごけない`,
+          ev.winner === null
+            ? 'おなじ かまえ！ どうじに うごく'
+            : `${names[ev.winner]} が よんだ！ あいては うごけない${
+                pending && (pending[ev.winner] === 'power' || pending[ev.winner] === 'tech' || pending[ev.winner] === 'speed')
+                  ? `（${WIN_PERK[pending[ev.winner] as 'power' | 'tech' | 'speed']}）`
+                  : ''
+              }`,
           { cut: pending ? { a: pending[0], b: pending[1], winner: ev.winner } : null, ms: 2400 },
         );
         break;

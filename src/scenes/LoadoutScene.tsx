@@ -27,7 +27,7 @@ function gistOf(m: MoveDef): string {
   if (m.status && !m.status.toSelf) return `${STATUS_META[m.status.kind].jp}をねらう`;
   if (m.guardPct) return 'ダメージ 半分（2ターン）';
   if (m.reflect) return 'ダメージ 3わり返す';
-  if (m.buff?.stat === 'def') return 'ダメージ -25%（3ターン）';
+  if (m.buff?.stat === 'def') return 'ダメージ -40%（3ターン）';
   if (m.buff) return `${STAT_JP[m.buff.stat]}アップ`;
   if (m.debuff?.stat === 'def') return 'あいて ダメージ +30%';
   if (m.debuff) return `あいて ${STAT_JP[m.debuff.stat]}ダウン`;

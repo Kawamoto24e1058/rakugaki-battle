@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useGame } from '../store/gameStore';
 import { AttributeBadge, AnimatedStatBar, STAT_MAX, STAT_LABEL_JP as STAT_JP, CharacterSprite } from '../components/bits';
-import { MOVES, moveStars, archetypeLabel, getKosei, limitJp } from '../engine';
+import { MOVES, moveStars, archetypeLabel, getKosei, limitJp, favoriteCategory, STANCE_JP } from '../engine';
 import type { Stats } from '../engine/types';
 
 const WEAPON_JP: Record<string, string> = { sword: 'ツメ・剣', wand: '杖', shield: '盾', wing: '翼' };
@@ -38,6 +38,7 @@ export function RevealScene() {
   const reasons = character.analysis;
   const reasonOf = (key: string) => reasons.find((r) => r.key === key);
   const kosei = getKosei(character.koseiId);
+  const fav = favoriteCategory(character.baseStats);
   const attrReason = reasonOf('color');
 
   return (
@@ -131,6 +132,17 @@ export function RevealScene() {
               >
                 {archetypeLabel(character.baseStats)}
               </span>
+              {fav && (
+                <span
+                  style={{
+                    fontFamily: 'var(--font-display)', fontSize: '0.85rem',
+                    border: '2px solid var(--border)', borderRadius: 999, padding: '0.05rem 0.6rem',
+                    background: 'var(--crayon-green)',
+                  }}
+                >
+                  とくい：{STANCE_JP[fav]}
+                </span>
+              )}
             </div>
             {attrReason && (
               <div style={{ fontSize: '0.76rem', color: 'var(--ink-soft)' }}>

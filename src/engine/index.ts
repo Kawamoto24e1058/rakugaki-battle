@@ -15,6 +15,7 @@ export {
   koseiReady,
   moveCategory,
   hasCategoryMove,
+  favoriteCategory,
   STANCE_JP,
   STANCE_COLOR,
   STANCE_BEATS,

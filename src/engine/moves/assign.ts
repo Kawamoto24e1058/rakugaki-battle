@@ -148,6 +148,13 @@ function safeCost(id: MoveId): number {
     return 2;
   }
 }
+function isAttackMove(id: MoveId): boolean {
+  try {
+    return getMove(id).category === 'attack';
+  } catch {
+    return false;
+  }
+}
 function safeCat(id: MoveId): MoveCategory3 | null {
   try {
     return moveCategory(getMove(id));
@@ -187,7 +194,8 @@ export function autoLoadout(
     if (picked.some((id) => safeCat(id) === cat)) continue;
     const cands = pool
       .filter((id) => !picked.includes(id) && safeCat(id) === cat)
-      .sort((a, b) => safeCost(a) - safeCost(b)); // 3枠しかないので安めから（治療を1枠残す）
+      // 3枠しかないので安めから。力・速さは「こうげき技」を先に（補助だけだと 殴れない）
+      .sort((a, b) => Number(isAttackMove(a) ? 0 : 1) - Number(isAttackMove(b) ? 0 : 1) || safeCost(a) - safeCost(b));
     // 治療技があればそのカテゴリでは治療を優先
     const cure = cands.find((id) => hasCureEffect(id));
     for (const id of cure ? [cure, ...cands] : cands) if (add(id)) break;

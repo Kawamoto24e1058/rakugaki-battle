@@ -294,8 +294,9 @@ describe('力・技・速さ 三すくみ（プロトタイプ）', () => {
     atkr.moveIds = ['c_tackle', 'c_scratch', 'sm_jab'];
     gd.moveIds = ['c_guard', 'c_tackle', 'sm_jab'];
 
-    const dmgOn = (guardFirst: boolean) => {
-      let st = createClashState(drawn([210, 40, 30]), drawn([30, 90, 210]), 4);
+    // 回避・会心のブレが出るので、シード30通りの平均で比べる
+    const dmgOn = (guardFirst: boolean, seed: number) => {
+      let st = createClashState(drawn([210, 40, 30]), drawn([30, 90, 210]), seed);
       st.combatants[0].moveIds = [...atkr.moveIds];
       st.combatants[1].moveIds = [...gd.moveIds];
       if (guardFirst) {
@@ -303,14 +304,18 @@ describe('力・技・速さ 三すくみ（プロトタイプ）', () => {
         st = resolveClashTurn(st, ['sm_jab', 'c_guard']);
       }
       const n = st.log.length;
-      const before = st.combatants[1].hp;
       // 力 vs 力 の五分 → 両者行動 → side0 の たいあたり が side1 に当たる
       st = resolveClashTurn(st, ['c_tackle', 'c_tackle']);
-      const dmg = st.log.slice(n).find((e) => e.t === 'damage' && e.side === 1);
-      return dmg && dmg.t === 'damage' ? dmg.amount : before - st.combatants[1].hp;
+      return st.log
+        .slice(n)
+        .reduce((sum, e) => (e.t === 'damage' && e.side === 1 ? sum + e.amount : sum), 0);
     };
-    const plain = dmgOn(false);
-    const guarded = dmgOn(true);
+    let plain = 0;
+    let guarded = 0;
+    for (let seed = 1; seed <= 30; seed++) {
+      plain += dmgOn(false, seed);
+      guarded += dmgOn(true, seed);
+    }
     expect(guarded).toBeLessThan(plain * 0.7);
   });
 
