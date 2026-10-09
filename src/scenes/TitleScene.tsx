@@ -5,6 +5,7 @@ export function TitleScene() {
   const startVersus = useGame((s) => s.startVersus);
   const openZukan = useGame((s) => s.openZukan);
   const openPrintTemplate = useGame((s) => s.openPrintTemplate);
+  const openCards = useGame((s) => s.openCards);
   const devQuickBattle = useGame((s) => s.devQuickBattle);
   const zukanCount = useGame((s) => s.zukan.length);
 
@@ -27,6 +28,9 @@ export function TitleScene() {
         </button>
         <button className="crayon-btn big" onClick={startVersus}>
           ふたりで たいせん
+        </button>
+        <button className="crayon-btn" onClick={openCards}>
+          🃏 カードずかん
         </button>
         <button className="crayon-btn" onClick={openZukan}>
           ずかんを みる（{zukanCount}）

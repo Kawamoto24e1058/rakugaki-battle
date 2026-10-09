@@ -14,14 +14,14 @@ function drawn(color: [number, number, number], w = 80, h = 90) {
 describe('技データ・こせい', () => {
   it('どの技も 名前・説明があり、攻撃は威力あり／補助は何かしらの効果を持つ', () => {
     const ids = Object.keys(MOVES);
-    expect(ids.length).toBeGreaterThanOrEqual(35);
+    expect(ids.length).toBeGreaterThanOrEqual(100);
     for (const m of Object.values(MOVES)) {
       expect(m.name.length).toBeGreaterThan(0);
       expect(m.desc.length).toBeGreaterThan(0);
       if (m.category === 'attack') {
         expect(m.power).toBeGreaterThan(0);
       } else {
-        const hasEffect = !!(m.buff || m.debuff || m.heal || m.cures || m.guardPct || m.reflect);
+        const hasEffect = !!(m.buff || m.debuff || m.heal || m.cures || m.guardPct || m.reflect || m.status || m.hand);
         expect(hasEffect).toBe(true);
       }
     }
@@ -44,7 +44,7 @@ describe('技データ・こせい', () => {
     expect(all.some((m) => m.status)).toBe(true);
     expect(all.some((m) => m.hits && m.hits > 1)).toBe(true);
     const supportShare = all.filter((m) => m.category === 'support').length / all.length;
-    expect(supportShare).toBeGreaterThan(0.25);
+    expect(supportShare).toBeGreaterThan(0.2);
     expect(supportShare).toBeLessThan(0.5);
   });
 

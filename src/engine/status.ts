@@ -61,6 +61,7 @@ export const STATUS_META: Record<StatusKind, StatusMeta> = {
   spdDown: meta({ id: 'spdDown', jp: 'すばやさ↓', kind: 'debuff', buffStat: 'spd', buffMult: 0.65, duration: 2, description: 'すばやさが 35% 下がる。' }),
   flinch: meta({ id: 'flinch', jp: 'ひるみ', kind: 'debuff', duration: 1, description: 'つぎの攻撃が「かすり」になる。' }),
   guard: meta({ id: 'guard', jp: 'ガード', kind: 'buff', incomingMult: 0.5, duration: 2, description: '受けるダメージが 半分に なる（2ターン）。' }),
+  charging: meta({ id: 'charging', jp: 'ため中', kind: 'debuff', incomingMult: 1.3, duration: 1, description: 'ちからを ためている あいだは むぼうび（うけるダメージ 3わり ふえる）。' }),
   thorns: meta({ id: 'thorns', jp: 'トゲ', kind: 'buff', reflectPct: 0.5, duration: 2, description: '攻撃してきた相手に ダメージの 半分 を返す（2ターン）。' }),
 };
 
@@ -82,7 +83,7 @@ export const ATTRIBUTE_STATUS: Record<Attribute, StatusKind> = {
 
 export const DEBUFFS: StatusKind[] = [
   'burn', 'paralysis', 'freeze', 'sleep', 'poison', 'confuse',
-  'atkDown', 'defDown', 'spdDown', 'flinch',
+  'atkDown', 'defDown', 'spdDown', 'flinch', 'charging',
 ];
 
 /** support の buff.stat → 付与するバフ状態。 */

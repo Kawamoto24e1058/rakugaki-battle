@@ -234,27 +234,25 @@ button {
   gap: 0.3em;
   padding: 0.3em 0.55em 0.3em 1.9em;
   background: var(--card-color);
-  color: #fff;
+  color: var(--band-ink, #fff);
   font-size: 0.82em;
   font-weight: 800;
   white-space: nowrap;
 }
 .gcard-art {
   flex: 1;
-  display: grid;
-  place-items: center;
-  font-size: 3.3em;
-  line-height: 1;
-  background:
-    radial-gradient(circle at 50% 55%, color-mix(in srgb, var(--card-color) 22%, transparent), transparent 70%),
-    repeating-linear-gradient(135deg, transparent 0 0.6em, color-mix(in srgb, var(--card-color) 7%, transparent) 0.6em 1.2em);
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+  border-top: 0.12em solid var(--ink);
+  border-bottom: 0.12em solid var(--ink);
 }
 .gcard-name {
   font-family: var(--font-display);
   text-align: center;
   line-height: 1.12;
   padding: 0.15em 0.3em 0;
-  color: var(--card-color);
+  color: var(--name-color, var(--card-color));
 }
 .gcard-gist {
   text-align: center;

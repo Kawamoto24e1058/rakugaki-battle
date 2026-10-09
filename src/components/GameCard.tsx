@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react';
 import type { CardData } from './moveText';
+import { CardArt } from './art/CardArt';
 
 /** カードの表。size は CSS の長さ（例 'min(29vw, 9.6rem)'）。文字サイズも size から決まる。 */
 export function GameCard({
@@ -23,6 +24,8 @@ export function GameCard({
           aspectRatio: '5 / 7',
           fontSize: `calc(${size} / 9)`,
           '--card-color': card.color,
+          '--name-color': card.art.pal.dark,
+          '--band-ink': card.art.pal.bandInk ?? '#fff',
           background: card.kind === 'kosei' ? '#f6f0ff' : undefined,
           ...style,
         } as CSSProperties
@@ -37,13 +40,15 @@ export function GameCard({
       <div className="gcard-band" style={card.power == null ? { paddingLeft: '0.55em' } : undefined}>
         <span>{card.kind === 'kosei' ? '★ ' : card.kind === 'support' ? '✚ ' : '⚔ '}{card.tag}</span>
       </div>
-      <div className="gcard-art">{card.icon}</div>
+      <div className="gcard-art">
+        <CardArt art={card.art} />
+        {card.rare && <div className="gcard-foil" />}
+      </div>
       <div className="gcard-name" style={{ fontSize: long ? '1.02em' : '1.3em' }}>
         {card.name}
       </div>
       <div className="gcard-gist">{card.gist}</div>
       {card.quick && <div className="gcard-chip">⚡ 先に うごく</div>}
-      {card.rare && <div className="gcard-foil" />}
     </div>
   );
 }

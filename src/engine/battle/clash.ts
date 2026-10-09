@@ -10,7 +10,7 @@
 import type { Attribute, Character, StatusKind, Stats } from '../types';
 import { attributeStatusMult } from '../attributes';
 import { STATUS_META, type ActiveStatus } from '../status';
-import { MOVES, getMove, hasPriority, isRareMove, type MoveDef, type MoveId } from '../moves';
+import { MOVES, getMove, hasPriority, isRareMove, matchesPred, moveTags, type Cond, type HandEffect, type MoveDef, type MoveId } from '../moves';
 import { ATTRIBUTE_STATUS } from '../status';
 import { ATTRIBUTES } from '../types';
 import { koseiOrDefault, type Kosei } from '../personalities';
@@ -23,15 +23,18 @@ export type ClashChoice = string;
 
 const SUDDEN_DEATH_TURN = 14;
 const PER_HIT_CAP_PCT = 0.42;
+/** ため技の1発の上限。 */
+const CHARGE_CAP_PCT = 0.62;
 /** 全体の火力。試合が「時間切れ（サドンデス）」でなく選択で決着するように調整。 */
-const DMG_SCALE = 0.8;
+const DMG_SCALE = 0.85;
 /** 回復の底上げ。 */
 const HEAL_SCALE = 1.5;
 /** こせいのアクティブ技の威力の底上げ（絵の個性の主役にする）。 */
 const KOSEI_POWER_MULT = 1.25;
 
-/** 手札の枚数。 */
+/** 手札の枚数（ふだん）。技で ふえたり へったりする。 */
 export const HAND_SIZE = 3;
+const MAX_HAND = 4;
 /** こせいが使えるとき、手札に混ざる確率。 */
 const KOSEI_DEAL_CHANCE = 0.3;
 
@@ -49,9 +52,17 @@ export interface ClashCombatant {
   maxHp: number;
   hp: number;
   statuses: ActiveStatus[];
+  /** ため中の技（次のターンに自動で はなつ）。 */
+  charging: MoveId | null;
+  /** 前のターンに つかった技のタグ（コンボ判定用）。 */
+  lastTags: string[];
+  /** このターンの手札にかかる効果（前のターンに決まったもの）。 */
+  handMods: HandEffect[];
+  /** このターンの行動で決まる、次のターンの手札への効果。 */
+  nextMods: HandEffect[];
 }
 
-export type ActKind = 'attack' | 'support' | 'kosei' | 'blocked';
+export type ActKind = 'attack' | 'support' | 'kosei' | 'blocked' | 'charge';
 
 /** どちらが先に動くか、の理由。 */
 export type OrderReason = 'kosei' | 'priority' | 'passive' | 'speed' | 'coin';
@@ -59,7 +70,8 @@ export type OrderReason = 'kosei' | 'priority' | 'passive' | 'speed' | 'coin';
 export type ClashEvent =
   | { t: 'turn'; turn: number }
   | { t: 'order'; first: Side; reason: OrderReason; spd: [number, number] }
-  | { t: 'act'; side: Side; moveName: string; kind: ActKind; moveId: string }
+  | { t: 'act'; side: Side; moveName: string; kind: ActKind; moveId: string; release?: boolean }
+  | { t: 'bonus'; side: Side; label: string }
   | { t: 'damage'; side: Side; amount: number; hpAfter: number; tag: string | null }
   | { t: 'heal'; side: Side; amount: number; hpAfter: number }
   | { t: 'status-apply'; side: Side; kind: StatusKind }
@@ -92,6 +104,10 @@ function toCombatant(c: Character): ClashCombatant {
     maxHp: c.baseStats.hp,
     hp: c.baseStats.hp,
     statuses: [],
+    charging: null,
+    lastTags: [],
+    handMods: [],
+    nextMods: [],
   };
 }
 
@@ -157,23 +173,52 @@ export function dealHand(state: ClashState, side: Side): ClashChoice[] {
   const rng = mulberry32((state.seed ^ Math.imul(state.turn + 1, 0x9e3779b1) ^ Math.imul(side + 7, 0x85ebca6b)) >>> 0);
   rng();
   rng();
-  const pool = DRAW_POOL.map((m) => ({ id: m.id, w: dealWeight(c, m) }));
+  // 前のターンの技による手札いじり
+  let size = HAND_SIZE;
+  let lucky = false;
+  const guarantees: Extract<HandEffect, { kind: 'guarantee' }>[] = [];
+  for (const m of c.handMods) {
+    if (m.kind === 'extra') size += m.n;
+    else if (m.kind === 'foeLess') size -= m.n;
+    else if (m.kind === 'luck') lucky = true;
+    else guarantees.push(m);
+  }
+  size = Math.max(2, Math.min(MAX_HAND, size));
+
+  const pool = DRAW_POOL.map((m) => ({ m, w: dealWeight(c, m) * (lucky && (isRareMove(m) || m.charge) ? 3 : 1) }));
   const hand: ClashChoice[] = [];
-  for (let i = 0; i < HAND_SIZE && pool.length > 0; i++) {
-    const total = pool.reduce((s, p) => s + p.w, 0);
+  const take = (list: typeof pool) => {
+    const total = list.reduce((s2, p2) => s2 + p2.w, 0);
     let r = rng() * total;
     let idx = 0;
-    for (; idx < pool.length - 1; idx++) {
-      r -= pool[idx].w;
+    for (; idx < list.length - 1; idx++) {
+      r -= list[idx].w;
       if (r < 0) break;
     }
-    hand.push(pool[idx].id);
-    pool.splice(idx, 1);
+    const picked = list[idx];
+    hand.push(picked.m.id);
+    pool.splice(pool.indexOf(picked), 1);
+  };
+  // 保証されたカードを先に
+  for (const g of guarantees) {
+    for (let i = 0; i < g.n && hand.length < size; i++) {
+      const cand = pool.filter((p2) => matchesPred(p2.m, g.pred));
+      if (cand.length > 0) take(cand);
+    }
   }
-  if (koseiReady(c) && rng() < KOSEI_DEAL_CHANCE) {
-    hand[Math.floor(rng() * hand.length)] = 'kosei';
+  const locked = hand.length;
+  while (hand.length < size && pool.length > 0) take(pool);
+  // こせいが ときどき 混ざる（保証カードは そのまま残す）
+  if (koseiReady(c) && rng() < KOSEI_DEAL_CHANCE && hand.length > locked) {
+    hand[locked + Math.floor(rng() * (hand.length - locked))] = 'kosei';
   }
-  return hand;
+  // 並び：見やすいように こうげき → ほじょ
+  return hand.sort((x, y) => Number(x === 'kosei') - Number(y === 'kosei'));
+}
+
+/** ため技を はなつターンの強制行動。そうでなければ null。 */
+export function forcedChoice(state: ClashState, side: Side): ClashChoice | null {
+  return state.combatants[side].charging ? 'release' : null;
 }
 
 function MOVES_SAFE(id: MoveId): MoveDef | null {
@@ -188,12 +233,18 @@ function MOVES_SAFE(id: MoveId): MoveDef | null {
 
 interface Pick {
   move: MoveDef | null; // null = こせい
+  /** ためていた技を はなつ。 */
+  release?: boolean;
 }
 
 function resolveChoice(state: ClashState, side: Side, choice: ClashChoice): Pick {
   const c = state.combatants[side];
+  if (c.charging) {
+    const m = MOVES_SAFE(c.charging);
+    if (m) return { move: m, release: true };
+  }
   if (choice === 'kosei' && koseiReady(c)) return { move: null };
-  const m = choice === 'kosei' ? null : MOVES_SAFE(choice);
+  const m = choice === 'kosei' || choice === 'release' ? null : MOVES_SAFE(choice);
   if (m) return { move: m };
   // 使えない/知らない技 → 手札の先頭
   const fb = dealHand(state, side).find((h) => h !== 'kosei' && MOVES_SAFE(h));
@@ -207,6 +258,11 @@ export function resolveClashTurn(state: ClashState, choices: [ClashChoice, Clash
   const log: ClashEvent[] = [];
 
   const picks: [Pick, Pick] = [resolveChoice(next, 0, choices[0]), resolveChoice(next, 1, choices[1])];
+  // ため技を選んだ側は、このターン むぼうび
+  for (const side of [0, 1] as Side[]) {
+    const m = picks[side].move;
+    if (m?.charge && !picks[side].release) applyStatus(next.combatants[side], 'charging', 1);
+  }
   const { order, reason } = decideOrder(next, picks, rng);
   log.push({
     t: 'order',
@@ -216,7 +272,7 @@ export function resolveClashTurn(state: ClashState, choices: [ClashChoice, Clash
   });
   for (const side of order) {
     if (next.winner !== null) break;
-    act(next, side, picks[side], picks[(1 - side) as Side], rng, log);
+    act(next, side, picks[side], picks[(1 - side) as Side], order[0] === side, rng, log);
     checkFaint(next);
   }
 
@@ -242,6 +298,8 @@ export function resolveClashTurn(state: ClashState, choices: [ClashChoice, Clash
   // カウントダウン
   for (const side of [0, 1] as Side[]) {
     const c = next.combatants[side];
+    c.handMods = c.nextMods;
+    c.nextMods = [];
     if (c.koseiCd > 0) c.koseiCd -= 1;
     c.statuses = c.statuses
       .map((s) => ({ ...s, turnsLeft: s.turnsLeft - 1, age: s.age + 1 }))
@@ -297,9 +355,58 @@ function decideOrder(state: ClashState, picks: [Pick, Pick], rng: Rng): { order:
   return { order: s0 > s1 ? [0, 1] : [1, 0], reason: 'speed' };
 }
 
-function act(state: ClashState, side: Side, pick: Pick, foePick: Pick, rng: Rng, log: ClashEvent[]): void {
+interface CondCtx {
+  state: ClashState;
+  side: Side;
+  foePick: Pick;
+  isFirst: boolean;
+}
+
+function matchStatus(c: ClashCombatant, kind: StatusKind | 'debuff' | 'buff'): boolean {
+  if (kind === 'debuff') return c.statuses.some((s) => STATUS_META[s.kind].kind === 'debuff' && s.kind !== 'charging');
+  if (kind === 'buff') return c.statuses.some((s) => STATUS_META[s.kind].kind === 'buff');
+  return has(c, kind);
+}
+
+/** 技の「条件」が いま満たされているか。 */
+export function evalCond(cond: Cond, ctx: CondCtx): boolean {
+  const me = ctx.state.combatants[ctx.side];
+  const foe = ctx.state.combatants[1 - ctx.side as Side];
+  switch (cond.t) {
+    case 'foeHas': return matchStatus(foe, cond.kind);
+    case 'selfHas': return matchStatus(me, cond.kind);
+    case 'foeHp': return foe.hp / foe.maxHp < cond.below;
+    case 'selfHp': return me.hp / me.maxHp < cond.below;
+    case 'first': return ctx.isFirst;
+    case 'second': return !ctx.isFirst;
+    case 'foePick': return (ctx.foePick.move?.category ?? 'attack') === cond.cat && !!ctx.foePick.move;
+    case 'prev': return me.lastTags.includes(cond.tag);
+    case 'foeCharging': return !!foe.charging || foe.statuses.some((s) => s.kind === 'charging');
+  }
+}
+
+const BONUS_LABEL: Record<Cond['t'], string> = {
+  foeHas: 'つけこんだ！',
+  selfHas: 'いかした！',
+  foeHp: 'とどめのチャンス！',
+  selfHp: 'ふんばり！',
+  first: 'タイミングばっちり！',
+  second: 'タイミングばっちり！',
+  foePick: 'よみあたり！',
+  prev: 'コンボ！',
+  foeCharging: 'ためを つぶした！',
+};
+
+function act(state: ClashState, side: Side, pick: Pick, foePick: Pick, isFirst: boolean, rng: Rng, log: ClashEvent[]): void {
   const c = state.combatants[side];
-  const blocked = (moveName: string) => log.push({ t: 'act', side, moveName, kind: 'blocked', moveId: pick.move?.id ?? 'kosei' });
+  const blocked = (moveName: string) => {
+    log.push({ t: 'act', side, moveName, kind: 'blocked', moveId: pick.move?.id ?? 'kosei' });
+    if (c.charging) {
+      c.charging = null;
+      log.push({ t: 'status-end', side, kind: 'charging' });
+    }
+    c.lastTags = [];
+  };
 
   // こおり：とけるか？（とけなければ行動不能）
   const frozen = c.statuses.find((s) => s.kind === 'freeze');
@@ -333,6 +440,7 @@ function act(state: ClashState, side: Side, pick: Pick, foePick: Pick, rng: Rng,
 
   if (!pick.move) {
     applyKosei(state, side, rng, log);
+    c.lastTags = ['kosei'];
     return;
   }
   let move = pick.move;
@@ -341,27 +449,53 @@ function act(state: ClashState, side: Side, pick: Pick, foePick: Pick, rng: Rng,
     blocked(`（${move.name}は しっぱい… あいては こうげきしなかった）`);
     return;
   }
-  const isSupport = move.category === 'support';
-  log.push({ t: 'act', side, moveName: move.name, kind: isSupport ? 'support' : 'attack', moveId: move.id });
-  if (isSupport) {
-    applySupport(state, side, move, log);
+
+  // ため技を えらんだターン：ちからを ためる（つぎのターンに はなつ）
+  if (move.charge && !pick.release) {
+    log.push({ t: 'act', side, moveName: move.name, kind: 'charge', moveId: move.id });
+    c.charging = move.id;
+    c.lastTags = moveTags(move);
     return;
   }
-  // にじいろだま：ランダムな属性とその状態異常
-  if (move.randomAttr) {
-    const attr = ATTRIBUTES[Math.floor(rng() * ATTRIBUTES.length)];
-    move = { ...move, attribute: attr, status: { kind: ATTRIBUTE_STATUS[attr], chance: 0.5 } };
+  if (pick.release) c.charging = null;
+
+  const isSupport = move.category === 'support';
+  log.push({ t: 'act', side, moveName: move.name, kind: isSupport ? 'support' : 'attack', moveId: move.id, release: pick.release });
+
+  // 条件（コンボ・つけこみ…）
+  let mult = 1;
+  if (move.when && move.whenMult && evalCond(move.when, { state, side, foePick, isFirst })) {
+    mult = move.whenMult;
+    log.push({ t: 'bonus', side, label: BONUS_LABEL[move.when.t] });
   }
-  const target = state.combatants[1 - side as Side];
-  for (let i = 0; i < (move.hits ?? 1); i++) {
-    if (state.winner !== null || target.hp <= 0 || c.hp <= 0) break;
-    dealDamage(state, side, move, {}, rng, log);
-    checkFaint(state);
+
+  if (isSupport) {
+    applySupport(state, side, move, mult, rng, log);
+  } else {
+    // にじいろだま：ランダムな属性とその状態異常
+    if (move.randomAttr) {
+      const attr = ATTRIBUTES[Math.floor(rng() * ATTRIBUTES.length)];
+      move = { ...move, attribute: attr, status: { kind: ATTRIBUTE_STATUS[attr], chance: 0.5 } };
+    }
+    const target = state.combatants[1 - side as Side];
+    for (let i = 0; i < (move.hits ?? 1); i++) {
+      if (state.winner !== null || target.hp <= 0 || c.hp <= 0) break;
+      dealDamage(state, side, move, { mult, uncapped: !!pick.release }, rng, log);
+      checkFaint(state);
+    }
   }
+
+  // 手札いじり（次のターンの手札）
+  if (move.hand && c.hp > 0) {
+    if (move.hand.kind === 'foeLess') state.combatants[1 - side as Side].nextMods.push(move.hand);
+    else c.nextMods.push(move.hand);
+  }
+  c.lastTags = moveTags(move);
 }
 
-function applySupport(state: ClashState, side: Side, move: MoveDef, log: ClashEvent[]): void {
+function applySupport(state: ClashState, side: Side, move: MoveDef, mult: number, rng: Rng, log: ClashEvent[]): void {
   const c = state.combatants[side];
+  const foe = state.combatants[1 - side as Side];
   if (move.cures) c.statuses = c.statuses.filter((s) => STATUS_META[s.kind].kind !== 'debuff');
   if (move.buff) {
     const map: Record<string, StatusKind> = { atk: 'atkUp', def: 'defUp', spd: 'spdUp', luck: 'luckUp' };
@@ -378,16 +512,23 @@ function applySupport(state: ClashState, side: Side, move: MoveDef, log: ClashEv
     log.push({ t: 'status-apply', side, kind: 'thorns' });
   }
   if (move.heal) {
-    const amt = Math.round(move.heal * HEAL_SCALE * (1 + effStat(c, 'heart') / 55));
+    const amt = Math.round(move.heal * mult * HEAL_SCALE * (1 + effStat(c, 'heart') / 55));
     const b = c.hp;
     c.hp = Math.min(c.maxHp, c.hp + amt);
     if (c.hp > b) log.push({ t: 'heal', side, amount: c.hp - b, hpAfter: c.hp });
   }
   if (move.debuff && move.target === 'enemy') {
-    const tgt = state.combatants[1 - side as Side];
     const map: Record<string, StatusKind> = { atk: 'atkDown', def: 'defDown', spd: 'spdDown' };
     const k = map[move.debuff.stat] ?? 'atkDown';
-    if (applyStatus(tgt, k, move.debuff.turns)) log.push({ t: 'status-apply', side: (1 - side) as Side, kind: k });
+    if (applyStatus(foe, k, move.debuff.turns)) log.push({ t: 'status-apply', side: (1 - side) as Side, kind: k });
+  }
+  // 状態異常をねらう補助わざ（ねむりのうた・どくのこな…）
+  if (move.status && move.target === 'enemy' && !move.status.toSelf) {
+    const s = move.status;
+    const attrMult = move.attribute ? attributeStatusMult(move.attribute, foe.attribute) : 1;
+    const chance = Math.max(0.03, Math.min(0.97, s.chance * attrMult * (0.85 + effStat(c, 'heart') / 60) - effStat(foe, 'luck') / 200));
+    if (rng() < chance && applyStatus(foe, s.kind)) log.push({ t: 'status-apply', side: (1 - side) as Side, kind: s.kind });
+    else log.push({ t: 'status-resist', side: (1 - side) as Side, kind: s.kind });
   }
 }
 
@@ -471,6 +612,10 @@ function applyKosei(state: ClashState, side: Side, rng: Rng, log: ClashEvent[]):
 
 interface DamageOpts {
   tag?: string | null;
+  /** 条件（コンボなど）で かかる倍率。 */
+  mult?: number;
+  /** ため技を はなつとき：1発の上限を ゆるめる。 */
+  uncapped?: boolean;
 }
 
 function dealDamage(
@@ -520,7 +665,7 @@ function dealDamage(
   let tag: string | null = kimeTag ?? opts.tag ?? null;
 
   const atkTerm = 0.95 + effStat(actor, 'atk') / 46;
-  let dmg = move.power * kimeMult * atkTerm * DMG_SCALE;
+  let dmg = move.power * (opts.mult ?? 1) * kimeMult * atkTerm * DMG_SCALE;
 
   // こおった相手に ほのお技 → 大ダメージ（このあと とかす）
   if (hasAttr && move.attribute === 'fire' && has(target, 'freeze')) dmg *= 1.5;
@@ -547,7 +692,7 @@ function dealDamage(
   dmg *= 0.92 + rng() * 0.16;
 
   let final = Math.max(1, Math.round(dmg));
-  final = Math.min(final, Math.round(target.maxHp * PER_HIT_CAP_PCT));
+  final = Math.min(final, Math.round(target.maxHp * (opts.uncapped ? CHARGE_CAP_PCT : PER_HIT_CAP_PCT)));
 
   target.hp = Math.max(0, target.hp - final);
   log.push({ t: 'damage', side: (1 - side) as Side, amount: final, hpAfter: target.hp, tag });
@@ -660,7 +805,14 @@ function clone(s: ClashState): ClashState {
   };
 }
 function cloneC(c: ClashCombatant): ClashCombatant {
-  return { ...c, base: { ...c.base }, statuses: c.statuses.map((s) => ({ ...s })) };
+  return {
+    ...c,
+    base: { ...c.base },
+    statuses: c.statuses.map((s) => ({ ...s })),
+    lastTags: [...c.lastTags],
+    handMods: [...c.handMods],
+    nextMods: [...c.nextMods],
+  };
 }
 
 
@@ -672,7 +824,15 @@ export function cpuChoose(state: ClashState, side: Side, rng: Rng): ClashChoice 
   const foe = state.combatants[1 - side as Side];
   const myPct = me.hp / me.maxHp;
   const foePct = foe.hp / foe.maxHp;
+  const forced = forcedChoice(state, side);
+  if (forced) return forced;
   const hand = dealHand(state, side);
+  // 条件の判定用（相手の手は わからないので「こうげきしてくる」と見ておく）
+  const guessFirst = effStat(me, 'spd') >= effStat(foe, 'spd');
+  const condOk = (m: MoveDef): boolean =>
+    !!m.when &&
+    !!m.whenMult &&
+    evalCond(m.when, { state, side, isFirst: guessFirst, foePick: { move: MOVES.c_tackle } });
 
   const score = (choice: ClashChoice): number => {
     if (choice === 'kosei') {
@@ -685,10 +845,13 @@ export function cpuChoose(state: ClashState, side: Side, rng: Rng): ClashChoice 
     if (m.category === 'attack') {
       const atkTerm = 0.95 + effStat(me, 'atk') / 46;
       let per = m.power * atkTerm * (m.pierce ? 1 : 40 / (40 + effStat(foe, 'def')));
+      if (condOk(m)) per *= m.whenMult as number;
       if (m.execute && foePct < 0.4) per *= m.execute;
       if (m.critBoost) per *= 1 + m.critBoost * 0.7;
-      per = Math.min(per, foe.maxHp * PER_HIT_CAP_PCT);
+      per = Math.min(per, foe.maxHp * (m.charge ? CHARGE_CAP_PCT : PER_HIT_CAP_PCT));
       let est = per * (m.hits ?? 1);
+      // ため技は 1ターン むぼうび。HPに余裕があるときだけ ねらう
+      if (m.charge) est *= myPct > 0.5 ? 0.85 : 0.4;
       // ふいうちは、相手が こうげきしてきそうなときだけ
       if (m.ambush) est *= 0.6;
       let s = est;
@@ -698,11 +861,15 @@ export function cpuChoose(state: ClashState, side: Side, rng: Rng): ClashChoice 
       if (m.recoil) s -= 3;
       if (m.drain && myPct < 0.7) s += 5;
       if (m.first) s += 2;
+      if (m.hand) s += 3;
       return s;
     }
     let s = 3;
     const missing = me.maxHp - me.hp;
-    if (m.heal) s += Math.min(missing, m.heal * HEAL_SCALE) * 0.9;
+    if (m.heal) s += Math.min(missing, m.heal * HEAL_SCALE * (condOk(m) ? (m.whenMult as number) : 1)) * 0.9;
+    if (m.charge) s -= 2;
+    if (m.hand) s += 4;
+    if (m.status && m.target === 'enemy' && !m.status.toSelf && !has(foe, m.status.kind)) s += m.status.chance * 14;
     if (m.cures && me.statuses.some((x) => STATUS_META[x.kind].kind === 'debuff')) s += m.cures === 'all' ? 16 : 11;
     if ((m.guardPct || m.reflect || m.buff?.stat === 'def') && !has(me, 'guard') && !has(me, 'defUp')) s += 8 + (foePct > myPct ? 6 : 0);
     if (m.buff?.stat === 'atk' && !has(me, 'atkUp')) s += state.turn <= 6 ? 14 : 6;

@@ -1,12 +1,65 @@
 import { STATUS_META } from '../engine/status';
 import { ATTRIBUTE_META } from '../engine/attributes';
-import { hasPriority, isRareMove, type MoveDef } from '../engine/moves';
+import { hasPriority, isRareMove, type Cond, type HandEffect, type MoveDef } from '../engine/moves';
+import { artFor, koseiArt, type ArtSpec } from './art/artSpec';
 import type { Kosei } from '../engine/personalities';
 import type { Stats } from '../engine/types';
 
 const STAT_JP: Record<keyof Stats, string> = {
   hp: 'HP', atk: 'こうげき', def: 'ぼうぎょ', spd: 'すばやさ', luck: 'きゅうしょ', heart: 'こんじょう',
 };
+
+
+const STATUS_WORD: Record<string, string> = {
+  burn: 'やけど', paralysis: 'まひ', freeze: 'こおり', sleep: 'ねむり', poison: 'どく', confuse: 'こんらん',
+  atkDown: 'こうげきダウン', defDown: 'ぼうぎょダウン', spdDown: 'すばやさダウン', flinch: 'ひるみ',
+  debuff: 'じょうたいいじょう', buff: 'バフ中',
+};
+const TAG_WORD: Record<string, string> = {
+  fire: 'ほのお', water: 'みず', wood: 'き', bolt: 'かみなり', dark: 'やみ',
+  blow: 'たたく', slash: 'きる', guard: 'まもり', heal: 'かいふく', charge: 'ため', claw: 'ひっかく', bite: 'かむ',
+};
+
+/** 条件を ひとことで（「〜なら」の形）。 */
+export function condText(c: Cond): string {
+  switch (c.t) {
+    case 'foeHas': return `あいてが ${STATUS_WORD[c.kind] ?? c.kind}${c.kind === 'buff' ? '' : c.kind === 'debuff' ? '' : ''}なら`;
+    case 'selfHas': return `自分が ${STATUS_WORD[c.kind] ?? c.kind}なら`;
+    case 'foeHp': return `あいての HPが ${Math.round(c.below * 10)}わり いかなら`;
+    case 'selfHp': return `自分の HPが ${Math.round(c.below * 10)}わり いかなら`;
+    case 'first': return '先に うごけたなら';
+    case 'second': return '先に うごけなかったなら';
+    case 'foePick': return c.cat === 'attack' ? 'あいてが こうげきなら' : 'あいてが ほじょわざなら';
+    case 'prev': return `まえのターンに「${TAG_WORD[c.tag] ?? c.tag}」わざを つかっていたなら`;
+    case 'foeCharging': return 'あいてが ためている ときなら';
+  }
+}
+
+/** カードの1行用の短い条件。 */
+function condShort(c: Cond): string {
+  switch (c.t) {
+    case 'prev': return `まえが「${TAG_WORD[c.tag] ?? c.tag}」なら`;
+    case 'foeHas': return `あいてが ${c.kind === 'debuff' ? '状態異常' : STATUS_WORD[c.kind] ?? c.kind}なら`;
+    case 'foePick': return c.cat === 'attack' ? 'あいてが こうげきなら' : 'あいてが ほじょなら';
+    case 'foeHp': return `あいて HP ${Math.round(c.below * 10)}わり以下なら`;
+    case 'selfHp': return `自分 HP ${Math.round(c.below * 10)}わり以下なら`;
+    case 'first': return '先に うごけたら';
+    case 'second': return 'あとに うごいたら';
+    default: return condText(c);
+  }
+}
+
+const PRED_WORD: Record<string, string> = {
+  attack: 'こうげき', support: 'ほじょ', guard: 'まもり', heal: 'かいふく', first: '先に うごく技', rare: '大技', status: 'じょうたいいじょう技',
+};
+export function handText(h: HandEffect): string {
+  switch (h.kind) {
+    case 'guarantee': return `つぎの手札に ${PRED_WORD[h.pred]}が ${h.n}まい かならず 来る`;
+    case 'extra': return `つぎの手札が ${h.n}まい ふえる`;
+    case 'foeLess': return `あいての つぎの手札が ${h.n}まい へる`;
+    case 'luck': return 'つぎの手札に 大技・ため技が 来やすい';
+  }
+}
 
 /** タップ・長押しで見せる、技の詳しい説明（1行ずつ）。 */
 export function moveDetailLines(m: MoveDef): string[] {
@@ -17,6 +70,7 @@ export function moveDetailLines(m: MoveDef): string[] {
   }
   if (m.attribute) out.push(`ぞくせい：${ATTRIBUTE_META[m.attribute].jp}`);
   if (hasPriority(m)) out.push('先に うごく');
+  if (m.charge) out.push('ため技：選んだターンは むぼうび（ダメージ 3わり ふえる）。つぎのターンに かならず はなつ');
   if (m.ambush) out.push('あいてが こうげきしないと しっぱい');
   if (m.execute) out.push(`あいての HPが すくないと ${m.execute}ばい`);
   if (m.critBoost) out.push('きゅうしょに あたりやすい');
@@ -24,6 +78,8 @@ export function moveDetailLines(m: MoveDef): string[] {
     const s = m.status;
     out.push(`${Math.round(s.chance * 100)}% で ${STATUS_META[s.kind].jp}${s.toSelf ? '（自分）' : ''}`);
   }
+  if (m.when && m.whenMult) out.push(`${condText(m.when)} ${m.category === 'attack' ? 'ダメージ' : 'かいふく'} ${m.whenMult}ばい`);
+  if (m.hand) out.push(handText(m.hand));
   if (m.randomAttr) out.push('ランダムな ぞくせい・じょうたいいじょう');
   if (m.cures) out.push(m.cures === 'all' ? 'じょうたいいじょうを ぜんぶ なおす' : 'じょうたいいじょうを 1つ なおす');
   if (m.heal) out.push(`HP ${m.heal} かいふく`);
@@ -40,6 +96,9 @@ export function moveDetailLines(m: MoveDef): string[] {
 
 /** カードに1行だけ出す「何が起きる技か」。 */
 export function moveGist(m: MoveDef): string {
+  if (m.charge) return m.category === 'attack' ? 'ためて つぎのターンに どかん！' : 'ためて つぎのターンに かいふく';
+  if (m.when && m.whenMult) return `${condShort(m.when)} ${m.whenMult}ばい`;
+  if (m.hand && !m.heal && !m.buff && !m.debuff) return handText(m.hand).replace('つぎの手札', 'つぎの手札');
   if (m.ambush) return 'あいてが こうげきなら 先に きまる';
   if (m.hits && m.hits > 1) return `${m.hits}かい れんぞく`;
   if (m.execute) return 'よわった あいてに つよい';
@@ -50,6 +109,7 @@ export function moveGist(m: MoveDef): string {
   if (m.heal) return 'HPを かいふく';
   if (m.cures) return 'じょうたいいじょうを なおす';
   if (m.status && !m.status.toSelf) return `${Math.round(m.status.chance * 100)}% ${STATUS_META[m.status.kind].jp}`;
+  if (m.hand) return handText(m.hand);
   if (m.guardPct) return 'ダメージ 半分（2ターン）';
   if (m.reflect) return 'ダメージを はんぶん 返す';
   if (m.buff?.stat === 'def') return 'ダメージ -40%（3ターン）';
@@ -63,39 +123,6 @@ export function moveGist(m: MoveDef): string {
   return 'ふつうの こうげき';
 }
 
-/** カードの絵がわり（大きな絵文字）。 */
-export function moveIcon(m: MoveDef): string {
-  if (m.ambush) return '🥷';
-  if (m.hits && m.hits > 1) return '🌀';
-  if (m.execute) return '🦷';
-  if (m.critBoost) return '🎯';
-  if (m.randomAttr) return '🌈';
-  if (m.status) {
-    const k = m.status.kind;
-    if (k === 'burn') return '🔥';
-    if (k === 'freeze') return '❄️';
-    if (k === 'poison') return '☠️';
-    if (k === 'paralysis') return '⚡';
-    if (k === 'confuse') return '💫';
-    if (k === 'sleep') return '💤';
-    if (k === 'flinch') return '💢';
-  }
-  if (m.heal) return '💚';
-  if (m.cures) return '🫧';
-  if (m.guardPct) return '🛡️';
-  if (m.reflect) return '🔄';
-  if (m.buff?.stat === 'atk') return '💪';
-  if (m.buff?.stat === 'spd') return '🪽';
-  if (m.buff?.stat === 'luck') return '🍀';
-  if (m.buff?.stat === 'def') return '🌳';
-  if (m.debuff) return '😠';
-  if (m.drain) return '🦇';
-  if (m.pierce) return '🪄';
-  if (m.first) return '💨';
-  if (m.recoil) return '🐗';
-  return m.category === 'attack' ? '👊' : '✨';
-}
-
 export type CardKind = 'attack' | 'support' | 'kosei';
 
 /** 手札・場に出すカードの表示用データ。 */
@@ -103,7 +130,7 @@ export interface CardData {
   id: string;
   kind: CardKind;
   name: string;
-  icon: string;
+  art: ArtSpec;
   color: string;
   power: number | null;
   tag: string;
@@ -120,7 +147,7 @@ export function moveCard(m: MoveDef): CardData {
     id: m.id,
     kind: m.category,
     name: m.name,
-    icon: moveIcon(m),
+    art: artFor(m),
     color,
     power: m.category === 'attack' ? m.power : null,
     tag: `${m.category === 'attack' ? 'こうげき' : 'ほじょ'}${m.attribute ? `・${ATTRIBUTE_META[m.attribute].jp}` : ''}`,
@@ -137,7 +164,7 @@ export function koseiCard(k: Kosei): CardData {
     id: 'kosei',
     kind: 'kosei',
     name: k.activeName,
-    icon: '★',
+    art: koseiArt(),
     color: '#7b5cf0',
     power: null,
     tag: 'こせいわざ',

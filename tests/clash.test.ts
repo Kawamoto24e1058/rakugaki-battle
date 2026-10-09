@@ -9,6 +9,7 @@ import {
   cpuChoose,
   playClashToEnd,
   koseiReady,
+  forcedChoice,
   HAND_SIZE,
   type ClashState,
   type ClashEvent,
@@ -256,5 +257,140 @@ describe('手札バトル', () => {
       any = st.log.some((e) => e.t === 'status-apply' && e.side === 1);
     }
     expect(any).toBe(true);
+  });
+
+  // ---------- 新しい仕組み ----------
+
+  it('ため技：選んだターンは ダメージが出ず、つぎのターンに かならず はなつ（えらべない）', () => {
+    const mk = () => createClashState(drawn([210, 40, 30]), drawn([30, 90, 210]), 31);
+    let st = resolveClashTurn(mk(), ['ch_megapunch', 'c_scratch']);
+    // 1ターン目：ダメージなし、ため中
+    expect(st.log.some((e) => e.t === 'damage' && e.side === 1)).toBe(false);
+    expect(st.combatants[0].charging).toBe('ch_megapunch');
+    expect(forcedChoice(st, 0)).toBe('release');
+    expect(forcedChoice(st, 1)).toBeNull();
+    expect(acts(st.log).some((e) => e.side === 0 && e.kind === 'charge')).toBe(true);
+    // 2ターン目：何を渡しても ためていた技が出る
+    const before = st.log.length;
+    st = resolveClashTurn(st, ['c_scratch', 'c_scratch']);
+    const evs = st.log.slice(before);
+    const rel = acts(evs).find((e) => e.side === 0);
+    expect(rel?.release).toBe(true);
+    expect(rel?.moveId).toBe('ch_megapunch');
+    expect(st.combatants[0].charging).toBeNull();
+    const dmg = evs.filter((e) => e.t === 'damage' && e.side === 1).reduce((sum, e) => sum + (e.t === 'damage' ? e.amount : 0), 0);
+    expect(dmg).toBeGreaterThan(20);
+  });
+
+  it('ため技：ためている間は むぼうび（受けるダメージが ふえる）', () => {
+    const total = (charge: boolean) => {
+      let sum = 0;
+      for (let seed = 1; seed <= 30; seed++) {
+        const a = drawn([210, 40, 30]);
+        const b = drawn([30, 90, 210]);
+        a.baseStats = { ...a.baseStats, spd: 14 };
+        b.baseStats = { ...b.baseStats, spd: 50 };
+        const st = resolveClashTurn(createClashState(a, b, seed), [charge ? 'ch_megapunch' : 'c_scratch', 'c_tackle']);
+        sum += st.log.reduce((x, e) => (e.t === 'damage' && e.side === 0 ? x + e.amount : x), 0);
+      }
+      return sum;
+    };
+    expect(total(true)).toBeGreaterThan(total(false) * 1.15);
+  });
+
+  it('ため技：ねむりなどで うごけないと ためが きえる', () => {
+    let st = resolveClashTurn(createClashState(drawn([210, 40, 30]), drawn([30, 90, 210]), 41), ['ch_megapunch', 'c_guard']);
+    st.combatants[0].statuses.push({ kind: 'sleep', turnsLeft: 2, age: 0 });
+    st = resolveClashTurn(st, ['c_scratch', 'c_scratch']);
+    expect(st.combatants[0].charging).toBeNull();
+    expect(st.log.some((e) => e.t === 'damage' && e.side === 1)).toBe(false);
+  });
+
+  it('コンボ：まえのターンの技で ダメージが のびる（bonus が出る）', () => {
+    const dmgOf = (first: string) => {
+      let sum = 0;
+      let bonus = 0;
+      for (let seed = 1; seed <= 30; seed++) {
+        let st = createClashState(drawn([210, 40, 30]), drawn([30, 90, 210]), seed);
+        st = resolveClashTurn(st, [first, 'c_guard']);
+        const n = st.log.length;
+        st = resolveClashTurn(st, ['c_onetwo', 'c_guard']);
+        const evs = st.log.slice(n);
+        bonus += evs.filter((e) => e.t === 'bonus' && e.side === 0).length;
+        sum += evs.reduce((x, e) => (e.t === 'damage' && e.side === 1 ? x + e.amount : x), 0);
+      }
+      return { sum, bonus };
+    };
+    const hit = dmgOf('c_tackle'); // たたく → ワンツー
+    const none = dmgOf('c_scratch');
+    expect(hit.bonus).toBeGreaterThan(20);
+    expect(none.bonus).toBe(0);
+    expect(hit.sum).toBeGreaterThan(none.sum * 1.3);
+  });
+
+  it('条件：あいてが やけどなら もえひろがる が強い／ねらいのHP条件も効く', () => {
+    const run = (burned: boolean) => {
+      let sum = 0;
+      for (let seed = 1; seed <= 30; seed++) {
+        const st0 = createClashState(drawn([210, 40, 30]), drawn([30, 90, 210]), seed);
+        if (burned) st0.combatants[1].statuses.push({ kind: 'burn', turnsLeft: 4, age: 0 });
+        const st = resolveClashTurn(st0, ['f_spread', 'c_guard']);
+        sum += st.log.reduce((x, e) => (e.t === 'damage' && e.side === 1 ? x + e.amount : x), 0);
+      }
+      return sum;
+    };
+    expect(run(true)).toBeGreaterThan(run(false) * 1.4);
+  });
+
+  it('条件：あとに うごいたときだけ 強い（おくれてスパーク）', () => {
+    const fast = drawn([210, 40, 30]);
+    const slow = drawn([30, 90, 210]);
+    fast.baseStats = { ...fast.baseStats, spd: 50 };
+    slow.baseStats = { ...slow.baseStats, spd: 14 };
+    // slow が side0 で使う → 後攻になる
+    const st = resolveClashTurn(createClashState(slow, fast, 9), ['b_spark2', 'c_scratch']);
+    expect(st.log.some((e) => e.t === 'bonus' && e.side === 0)).toBe(true);
+    // fast が side0 で使う → 先攻なので ボーナスなし
+    const st2 = resolveClashTurn(createClashState(fast, slow, 9), ['b_spark2', 'c_scratch']);
+    expect(st2.log.some((e) => e.t === 'bonus')).toBe(false);
+  });
+
+  it('手札いじり：おにぎり→つぎの手札が4まい／てふだくずし→あいての手札が2まい', () => {
+    let st = createClashState(drawn([210, 40, 30]), drawn([30, 90, 210]), 51);
+    expect(dealHand(st, 0).length).toBe(3);
+    st = resolveClashTurn(st, ['c_scratch', 'd_scramble']);
+    expect(dealHand(st, 0).length).toBe(2); // あいてに へらされた
+    expect(dealHand(st, 1).length).toBe(3);
+    st = resolveClashTurn(st, ['c_scratch', 'c_scratch']);
+    // 効果は1ターンだけ
+    expect(dealHand(st, 0).length).toBe(3);
+    // おにぎり単体
+    let st2 = createClashState(drawn([210, 40, 30]), drawn([30, 90, 210]), 52);
+    st2 = resolveClashTurn(st2, ['c_onigiri', 'c_scratch']);
+    expect(dealHand(st2, 0).length).toBe(4);
+  });
+
+  it('手札いじり：みちびき→つぎの手札に こうげきが2まい以上／おまもり→かいふくが入る', () => {
+    for (let seed = 1; seed <= 25; seed++) {
+      let st = createClashState(drawn([210, 40, 30]), drawn([30, 90, 210]), seed);
+      st = resolveClashTurn(st, ['c_gather', 'c_scratch']);
+      const attacks = dealHand(st, 0).filter((id) => id !== 'kosei' && getMove(id).category === 'attack');
+      expect(attacks.length).toBeGreaterThanOrEqual(2);
+      let st2 = createClashState(drawn([210, 40, 30]), drawn([30, 90, 210]), seed);
+      st2 = resolveClashTurn(st2, ['c_ward', 'c_scratch']);
+      expect(dealHand(st2, 0).some((id) => id !== 'kosei' && (getMove(id).heal || getMove(id).cures))).toBe(true);
+    }
+  });
+
+  it('補助の状態異常：ねむりのうた／どくのこな が あいてに かかることがある', () => {
+    let sleep = 0;
+    let poison = 0;
+    for (let seed = 1; seed <= 40; seed++) {
+      const a = createClashState(drawn([210, 40, 30]), drawn([30, 90, 210]), seed);
+      if (resolveClashTurn(a, ['d_lullaby', 'c_guard']).combatants[1].statuses.some((x) => x.kind === 'sleep')) sleep++;
+      if (resolveClashTurn(a, ['k_powder', 'c_guard']).combatants[1].statuses.some((x) => x.kind === 'poison')) poison++;
+    }
+    expect(sleep).toBeGreaterThan(10);
+    expect(poison).toBeGreaterThan(15);
   });
 });

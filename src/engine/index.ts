@@ -12,6 +12,8 @@ export {
   cpuChoose,
   playClashToEnd,
   dealHand,
+  forcedChoice,
+  evalCond,
   effStat,
   koseiReady,
   HAND_SIZE,

@@ -12,7 +12,8 @@ export type Screen =
   | 'opponent'
   | 'battle'
   | 'result'
-  | 'zukan';
+  | 'zukan'
+  | 'cards';
 
 export type Mode = 'solo' | 'versus';
 
@@ -49,6 +50,7 @@ interface GameState {
   startVersus: () => void;
   openZukan: () => void;
   openPrintTemplate: () => void;
+  openCards: () => void;
   devQuickBattle: (mode: Mode) => void;
   setCaptured: (slot: CapturedSlot) => void;
   /** リビール画面で名前を手直しする。 */
@@ -90,6 +92,7 @@ export const useGame = create<GameState>((set, get) => ({
 
   openZukan: () => set({ screen: 'zukan', zukan: loadZukan() }),
   openPrintTemplate: () => set({ screen: 'print' }),
+  openCards: () => set({ screen: 'cards' }),
 
   devQuickBattle: (mode) => {
     const roster = get().cpuRoster;

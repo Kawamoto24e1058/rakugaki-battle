@@ -6,12 +6,14 @@ import {
   resolveClashTurn,
   cpuChoose,
   dealHand,
+  forcedChoice,
   archetypeLabel,
   getKosei,
   mulberry32,
   type ClashState,
   type ClashEvent,
   type ClashChoice,
+  type ClashCombatant,
   type Side,
 } from '../engine';
 import { STATUS_META } from '../engine/status';
@@ -66,6 +68,25 @@ let floatSeq = 0;
 
 const withHp = (hp: [number, number], side: Side, val: number): [number, number] =>
   side === 0 ? [val, hp[1]] : [hp[0], val];
+
+/** 状態異常・ため中などのチップ。 */
+function chipsOf(c: ClashCombatant): StatusChip[] {
+  const chips = c.statuses.map((x) => ({ jp: STATUS_META[x.kind].jp, good: STATUS_META[x.kind].kind === 'buff' }));
+  if (c.charging && !c.statuses.some((x) => x.kind === 'charging')) chips.push({ jp: 'ためた！', good: true });
+  return chips;
+}
+
+/** 前のターンの技で手札が変わったときの お知らせ。 */
+function handNote(c: ClashCombatant): string | null {
+  const parts: string[] = [];
+  for (const m of c.handMods) {
+    if (m.kind === 'extra') parts.push('てふだが ふえた！');
+    else if (m.kind === 'foeLess') parts.push('てふだが へらされた…');
+    else if (m.kind === 'luck') parts.push('大技が 来やすい！');
+    else parts.push('ねらいの カードが 来る！');
+  }
+  return parts.length > 0 ? [...new Set(parts)].join(' ') : null;
+}
 
 /** エンジンの ClashEvent 列を「1タップ = 1場面」の Beat 列に変換する。 */
 function buildBeats(
@@ -137,7 +158,17 @@ function buildBeats(
         const blocked: TableState['blocked'] = [...table.blocked];
         blocked[ev.side] = ev.kind === 'blocked';
         table = { ...table, cards, revealed, blocked, actor: ev.side, race: null };
-        if (ev.kind === 'kosei') {
+        if (ev.kind === 'charge') {
+          sv = [
+            ev.side === 0 ? [...sv[0], { jp: 'ためている…', good: true }] : sv[0],
+            ev.side === 1 ? [...sv[1], { jp: 'ためている…', good: true }] : sv[1],
+          ];
+          floats = [{ id: ++floatSeq, side: ev.side, text: 'ため…！', kind: 'info', big: false }];
+          add(`${names[ev.side]} は ちからを ためている…！「${ev.moveName}」`, { ms: 2200 });
+        } else if (ev.release) {
+          acting = ev.side;
+          add(`${names[ev.side]} は ためた ちからを はなった！「${ev.moveName}」`, { impact: 'どかん！', ms: 2200 });
+        } else if (ev.kind === 'kosei') {
           acting = ev.side;
           add(`${names[ev.side]} こせい はつどう！`, {
             koseiAct: { side: ev.side, moveName: ev.moveName },
@@ -153,6 +184,9 @@ function buildBeats(
         }
         break;
       }
+      case 'bonus':
+        add(`${names[ev.side]} ${ev.label}`, { impact: ev.label, ms: 1500 });
+        break;
       case 'damage': {
         const loud = !!ev.tag && LOUD_TAGS.has(ev.tag);
         const big = loud || ev.amount >= 26;
@@ -204,10 +238,7 @@ function buildBeats(
   floats = [];
   shake = null;
   acting = null;
-  sv = [
-    next.combatants[0].statuses.map((s) => ({ jp: STATUS_META[s.kind].jp, good: STATUS_META[s.kind].kind === 'buff' })),
-    next.combatants[1].statuses.map((s) => ({ jp: STATUS_META[s.kind].jp, good: STATUS_META[s.kind].kind === 'buff' })),
-  ];
+  sv = [chipsOf(next.combatants[0]), chipsOf(next.combatants[1])];
   hp = [next.combatants[0].hp, next.combatants[1].hp];
   if (next.done) {
     if (next.winner === 'draw') {
@@ -308,10 +339,7 @@ export function BattleScene() {
     setFlash(false);
     setView({
       hp: [next.combatants[0].hp, next.combatants[1].hp],
-      statuses: [
-        next.combatants[0].statuses.map((s) => ({ jp: STATUS_META[s.kind].jp, good: STATUS_META[s.kind].kind === 'buff' })),
-        next.combatants[1].statuses.map((s) => ({ jp: STATUS_META[s.kind].jp, good: STATUS_META[s.kind].kind === 'buff' })),
-      ],
+      statuses: [chipsOf(next.combatants[0]), chipsOf(next.combatants[1])],
       banner: next.done
         ? next.winner === 'draw'
           ? 'ひきわけ'
@@ -342,9 +370,45 @@ export function BattleScene() {
     setP1Pick(null);
   }
 
+  // ため技を はなつターンは 自動（えらべない）
+  const forced: [ClashChoice | null, ClashChoice | null] = [forcedChoice(state, 0), forcedChoice(state, 1)];
+  useEffect(() => {
+    if (state.done) return;
+    if (phase === 'choose-p1' && forced[0]) {
+      const t = window.setTimeout(() => {
+        if (mode === 'versus') {
+          if (forced[1]) submit('release', 'release');
+          else {
+            setP1Pick('release');
+            setPhase('choose-p2');
+          }
+        } else {
+          const rng = mulberry32((state.seed + state.turn * 2654435761) >>> 0);
+          submit('release', cpuChoose(state, 1, rng));
+        }
+      }, 1400);
+      return () => window.clearTimeout(t);
+    }
+    if (phase === 'choose-p2' && forced[1] && p1Pick) {
+      const t = window.setTimeout(() => {
+        submit(p1Pick, 'release');
+        setP1Pick(null);
+      }, 1400);
+      return () => window.clearTimeout(t);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, state]);
+
   const pinch = cur.hp.some((h, i) => h > 0 && h / maxHp[i] <= 0.3);
   const chooserSide: Side = phase === 'choose-p2' ? 1 : 0;
-  const hand = useMemo(() => dealHand(state, chooserSide), [state, chooserSide]);
+  const hand = useMemo(() => {
+    // 開発用：?deal=ID,ID,ID で手札を固定（本番ビルドでは無効）
+    if (import.meta.env.DEV && chooserSide === 0) {
+      const dev = new URLSearchParams(window.location.search).get('deal');
+      if (dev && !state.combatants[0].charging) return dev.split(',').filter(Boolean);
+    }
+    return dealHand(state, chooserSide);
+  }, [state, chooserSide]);
   const impact = curBeat?.impact ?? null;
 
   return (
@@ -463,13 +527,33 @@ export function BattleScene() {
               {phase === 'choose-p2' ? `P2（${names[1]}）` : `P1（${names[0]}）`} の てふだ
             </div>
           )}
-          <HandTable
-            hand={hand}
-            koseiId={state.combatants[chooserSide].koseiId}
-            turn={state.turn * 2 + chooserSide}
-            accent={SIDE_COLOR[chooserSide]}
-            onPick={phase === 'choose-p2' ? pickP2 : mode === 'versus' ? pickP1 : pickSolo}
-          />
+          {forced[chooserSide] ? (
+            <motion.div
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              style={{ textAlign: 'center', display: 'grid', gap: '0.4rem', padding: '1.5rem 0' }}
+            >
+              <motion.div
+                animate={{ scale: [1, 1.12, 1] }}
+                transition={{ repeat: Infinity, duration: 0.7 }}
+                style={{ fontFamily: 'var(--font-display)', fontSize: '1.6rem', color: SIDE_COLOR[chooserSide] }}
+              >
+                ⚡ ためた ちからを はなつ！
+              </motion.div>
+              <div style={{ fontSize: '0.85rem', color: 'var(--ink-soft)' }}>
+                {mode === 'versus' ? `${names[chooserSide]} は えらべない（じどうで はなつ）` : 'このターンは じどうで はなつよ'}
+              </div>
+            </motion.div>
+          ) : (
+            <HandTable
+              hand={hand}
+              koseiId={state.combatants[chooserSide].koseiId}
+              turn={state.turn * 2 + chooserSide}
+              accent={SIDE_COLOR[chooserSide]}
+              note={handNote(state.combatants[chooserSide])}
+              onPick={phase === 'choose-p2' ? pickP2 : mode === 'versus' ? pickP1 : pickSolo}
+            />
+          )}
         </>
       )}
     </div>

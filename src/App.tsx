@@ -7,8 +7,19 @@ import { OpponentScene } from './scenes/OpponentScene';
 import { BattleScene } from './scenes/BattleScene';
 import { ResultScene } from './scenes/ResultScene';
 import { ZukanScene } from './scenes/ZukanScene';
+import { CardGalleryScene } from './scenes/CardGalleryScene';
+import { CrayonDefs } from './components/art/CardArt';
 
 export default function App() {
+  return (
+    <>
+      <CrayonDefs />
+      <Screens />
+    </>
+  );
+}
+
+function Screens() {
   const screen = useGame((s) => s.screen);
 
   switch (screen) {
@@ -28,6 +39,8 @@ export default function App() {
       return <ResultScene />;
     case 'zukan':
       return <ZukanScene />;
+    case 'cards':
+      return <CardGalleryScene />;
     default:
       return <TitleScene />;
   }
