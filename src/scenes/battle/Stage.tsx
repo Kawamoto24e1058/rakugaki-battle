@@ -19,6 +19,22 @@ const REASON_TEXT: Record<OrderReason, string> = {
 };
 
 // ---------------------------------------------------------------- HP
+/** 状態異常チップの色（直感に合わせる）。 */
+const CHIP_COLOR: Record<string, string> = {
+  burn: '#ffd9cc',
+  freeze: '#d6eeff',
+  poison: '#e6d6ff',
+  paralysis: '#fff0a8',
+  confuse: '#ffd6ea',
+  sleep: '#dde3f0',
+  flinch: '#e6e3dc',
+  atkDown: '#e1ddd2',
+  defDown: '#e1ddd2',
+  spdDown: '#e1ddd2',
+  charged: '#e9defc',
+  charging: '#e9defc',
+};
+
 export function HpBar({
   side,
   char,
@@ -84,7 +100,7 @@ export function HpBar({
             key={`${c.kind}-${i}`}
             initial={{ scale: 0.4, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            style={{ fontSize: '0.72rem', fontWeight: 800, padding: '1px 7px', borderRadius: 99, border: '2px solid var(--ink)', background: c.good ? '#c9f0d7' : '#ffd6e4' }}
+            style={{ fontSize: '0.72rem', fontWeight: 800, padding: '1px 7px', borderRadius: 99, border: '2px solid var(--ink)', background: c.good ? '#cdeedb' : (CHIP_COLOR[c.kind] ?? '#e6e3dc') }}
           >
             {c.jp}
           </motion.span>
@@ -249,12 +265,6 @@ function Backdrop({ attrs }: { attrs: [Character['attribute'], Character['attrib
       {/* 地面 */}
       <path d="M0,318 Q200,306 400,316 T800,314 L800,400 L0,400Z" fill="#f2dfb8" opacity="0.9" />
       <path d="M0,318 Q200,306 400,316 T800,314" fill="none" stroke="#33302b" strokeWidth="3.5" strokeLinecap="round" opacity="0.75" />
-      <path d="M40,350 L90,346 M300,360 L360,356 M520,352 L580,356 M690,346 L750,350" stroke="#33302b" strokeWidth="2.4" strokeLinecap="round" opacity="0.28" />
-      {/* 背景のらくがき */}
-      <g stroke="#33302b" strokeWidth="2.4" fill="#fffdf5" opacity="0.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M110,70 Q100,70 100,60 Q102,48 116,50 Q122,38 138,44 Q154,42 156,58 Q166,62 160,70Z" />
-        <path d="M640,52 Q630,52 632,42 Q636,32 648,36 Q656,26 668,34 Q682,34 680,46 Q690,52 682,58Z" />
-      </g>
     </svg>
   );
 }
@@ -291,8 +301,8 @@ function Fighter({ side, char, image, beat }: { side: Side; char: Character; ima
         style={{ position: 'relative', width: '100%', height: '100%', zIndex: 2, transformOrigin: '50% 90%' }}
       >
         <motion.div
-          animate={sleeping || down ? { y: 0 } : { y: [0, -5, 0], scaleY: [1, 1.02, 1] }}
-          transition={{ repeat: Infinity, duration: 2 + side * 0.4, ease: 'easeInOut' }}
+          animate={sleeping || down ? { y: 0 } : { y: [0, -3, 0] }}
+          transition={{ repeat: Infinity, duration: 2.6 + side * 0.4, ease: 'easeInOut' }}
           style={{ width: '100%', height: '100%', transformOrigin: '50% 100%' }}
         >
           <CharacterSprite imageUrl={image} attribute={char.attribute} name={char.name} flip={side === 1} />

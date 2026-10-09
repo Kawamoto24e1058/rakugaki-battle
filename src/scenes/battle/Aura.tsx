@@ -24,8 +24,8 @@ export function Aura({ chips, side }: { chips: Chip[]; side: 0 | 1 }) {
       {/* ため中・ためた：光るリング */}
       {(has('charged') || has('charging')) && (
         <motion.div
-          animate={{ opacity: [0.5, 1, 0.5], scale: [1, 1.08, 1] }}
-          transition={{ repeat: Infinity, duration: 0.9 }}
+          animate={{ opacity: [0.6, 0.9, 0.6] }}
+          transition={{ repeat: Infinity, duration: 1.8, ease: 'easeInOut' }}
           style={{ position: 'absolute', inset: '-10%', borderRadius: '50%', boxShadow: `0 0 0 0.35rem ${PALETTES.kosei.main}, 0 0 2.2rem 0.6rem ${PALETTES.kosei.light}`, pointerEvents: 'none', zIndex: 3 }}
         />
       )}
@@ -46,8 +46,8 @@ export function Aura({ chips, side }: { chips: Chip[]; side: 0 | 1 }) {
             <motion.div
               key={`${c.kind}-${i}`}
               initial={{ opacity: 0, scale: 0.4 }}
-              animate={{ opacity: 1, scale: 1, y: rise ? [0, -7, 0] : [0, 3, 0], rotate: c.kind === 'confuse' ? [0, 360] : 0 }}
-              transition={{ opacity: { duration: 0.3 }, scale: { type: 'spring' }, y: { repeat: Infinity, duration: 1.4 + col * 0.2 }, rotate: { repeat: Infinity, duration: 2.2, ease: 'linear' } }}
+              animate={{ opacity: 1, scale: 1, y: rise ? [0, -4, 0] : [0, 2, 0], rotate: 0 }}
+              transition={{ opacity: { duration: 0.3 }, scale: { type: 'spring' }, y: { repeat: Infinity, duration: 2.4 + col * 0.3, ease: 'easeInOut' } }}
               style={{ position: 'absolute', left: `${left}%`, top: `${top}%`, width: '28%', aspectRatio: '1' }}
               title={c.jp}
             >

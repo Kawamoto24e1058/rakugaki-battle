@@ -3,6 +3,8 @@
  * 展示用に音を消せるよう、ON/OFF を localStorage に覚える。
  */
 const KEY = 'rakugaki.sound';
+/** 全体の音量（展示で うるさくならないよう控えめ）。 */
+const MASTER = 0.5;
 let ctx: AudioContext | null = null;
 let muted = false;
 try {
@@ -35,7 +37,7 @@ function tone(freq: number, dur: number, type: OscillatorType, vol: number, slid
   o.frequency.setValueAtTime(freq, t0);
   if (slideTo) o.frequency.exponentialRampToValueAtTime(Math.max(20, slideTo), t0 + dur);
   g.gain.setValueAtTime(0.0001, t0);
-  g.gain.exponentialRampToValueAtTime(vol, t0 + 0.012);
+  g.gain.exponentialRampToValueAtTime(vol * MASTER, t0 + 0.012);
   g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
   o.connect(g).connect(c.destination);
   o.start(t0);
@@ -57,7 +59,7 @@ function noise(dur: number, vol: number, from: number, to: number, delay = 0): v
   f.frequency.setValueAtTime(from, t0);
   f.frequency.exponentialRampToValueAtTime(Math.max(40, to), t0 + dur);
   const g = c.createGain();
-  g.gain.setValueAtTime(vol, t0);
+  g.gain.setValueAtTime(vol * MASTER, t0);
   g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
   src.connect(f).connect(g).connect(c.destination);
   src.start(t0);

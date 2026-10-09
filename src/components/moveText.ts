@@ -62,7 +62,15 @@ export function handText(h: HandEffect): string {
 }
 
 
-export type ChipTone = 'dmg' | 'heal' | 'status' | 'buff' | 'debuff' | 'cond' | 'quick' | 'hand' | 'info';
+export type ChipTone =
+  | 'dmg' | 'heal' | 'status' | 'buff' | 'debuff' | 'cond' | 'quick' | 'hand' | 'info'
+  | 'st-burn' | 'st-freeze' | 'st-poison' | 'st-paralysis' | 'st-confuse' | 'st-sleep' | 'st-flinch';
+
+/** 状態異常の色（やけど=赤、こおり=水色、どく=紫、まひ=黄、こんらん=ピンク、ねむり=青灰）。 */
+function statusTone(kind: string): ChipTone {
+  const k = `st-${kind}`;
+  return (['st-burn', 'st-freeze', 'st-poison', 'st-paralysis', 'st-confuse', 'st-sleep', 'st-flinch'].includes(k) ? k : 'status') as ChipTone;
+}
 export interface EffectChip {
   text: string;
   tone: ChipTone;
@@ -88,7 +96,7 @@ export function moveChips(m: MoveDef): EffectChip[] {
   else if (m.buff) out.push({ text: `${STAT_JP[m.buff.stat]} ↑ ${m.buff.turns}ターン`, tone: 'buff' });
   if (m.debuff?.stat === 'def') out.push({ text: 'あいて ダメージ +30%', tone: 'debuff' });
   else if (m.debuff) out.push({ text: `あいて ${STAT_JP[m.debuff.stat]} ↓`, tone: 'debuff' });
-  if (m.status && !m.status.toSelf) out.push({ text: `${STATUS_META[m.status.kind].jp} ${pct(m.status.chance)}`, tone: 'status' });
+  if (m.status && !m.status.toSelf) out.push({ text: `${STATUS_META[m.status.kind].jp} ${pct(m.status.chance)}`, tone: statusTone(m.status.kind) });
   if (m.randomAttr) out.push({ text: 'ランダム じょうたい', tone: 'status' });
   if (m.ambush) out.push({ text: 'あいてが こうげきなら', tone: 'cond' });
   if (m.when && m.whenMult) out.push({ text: `${condShort(m.when)} ×${m.whenMult}`, tone: 'cond' });
@@ -97,8 +105,8 @@ export function moveChips(m: MoveDef): EffectChip[] {
   if (m.riskShift && m.riskShift >= 6) out.push({ text: 'かすりやすい', tone: 'info' });
   if (hasPriority(m) && !m.charge) out.unshift({ text: '先に うごく', tone: 'quick' });
   // 先頭（ダメージ/かいふく）→ 条件 → ほか の順に並べて3つまで
-  const rank: Record<ChipTone, number> = { quick: 0, dmg: 1, heal: 1, cond: 2, status: 3, buff: 3, debuff: 3, hand: 4, info: 5 };
-  const sorted = out.map((c, i) => ({ c, i })).sort((a, b) => rank[a.c.tone] - rank[b.c.tone] || a.i - b.i).map((x) => x.c);
+  const rank = (t: ChipTone) => ({ quick: 0, dmg: 1, heal: 1, cond: 2, hand: 4, info: 5 } as Record<string, number>)[t] ?? 3;
+  const sorted = out.map((c, i) => ({ c, i })).sort((a, b) => rank(a.c.tone) - rank(b.c.tone) || a.i - b.i).map((x) => x.c);
   return sorted.slice(0, 3);
 }
 

@@ -298,7 +298,8 @@ button {
   pointer-events: none;
   background: linear-gradient(115deg, transparent 30%, rgba(255, 255, 255, 0.75) 47%, rgba(255, 236, 160, 0.5) 53%, transparent 68%);
   background-size: 260% 100%;
-  animation: foil-sweep 2.6s linear infinite;
+  opacity: 0.35;
+  background-position: 40% 0;
   mix-blend-mode: overlay;
 }
 .gcard-back {
@@ -316,7 +317,7 @@ button {
   font-size: 1.5em;
 }
 .gcard-selected {
-  animation: sel-pulse 1.1s ease-in-out infinite;
+  box-shadow: 0 0 0 0.28em color-mix(in srgb, var(--card-color) 45%, transparent), 0.3em 0.5em 0 rgba(51, 48, 43, 0.22);
 }
 @keyframes foil-sweep {
   from { background-position: 160% 0; }
@@ -349,18 +350,25 @@ button {
   text-align: center;
   padding: 0.14em 0.3em;
   border-radius: 0.5em;
-  border: 0.13em solid var(--ink);
-  background: #fff;
+  border: 0.1em solid rgba(51, 48, 43, 0.55);
+  background: #fffdf8;
   color: var(--ink);
   word-break: keep-all;
   overflow-wrap: anywhere;
 }
-.gcard-fx-dmg { background: #ffd9d2; border-color: #c4432e; color: #8a2412; }
-.gcard-fx-heal { background: #d6f5e1; border-color: #2c9a5b; color: #17663a; }
-.gcard-fx-status { background: #e6dcff; border-color: #6a4bd6; color: #3d2796; }
-.gcard-fx-buff { background: #d9ebff; border-color: #2f7dd1; color: #164f93; }
-.gcard-fx-debuff { background: #e7e1d6; border-color: #6b6557; color: #3f3a30; }
-.gcard-fx-cond { background: #fff1c2; border-color: #c99600; color: #7a5a00; }
-.gcard-fx-quick { background: var(--crayon-yellow); border-color: #a87a00; color: #3a2a00; }
-.gcard-fx-hand { background: #d4f3f3; border-color: #2a9a9a; color: #145a5a; }
-.gcard-fx-info { background: #f1eee6; border-color: #8a8478; color: #55514a; font-weight: 700; }
+.gcard-fx-dmg { color: #b5321d; }
+.gcard-fx-heal { color: #1b7a47; }
+.gcard-fx-status { color: #4a45a0; }
+.gcard-fx-st-burn { color: #b5321d; background: #ffe6dc; border-color: #d9654a; }
+.gcard-fx-st-freeze { color: #1c6aa8; background: #e1f3ff; border-color: #6fb4e6; }
+.gcard-fx-st-poison { color: #6a3aa8; background: #efe3ff; border-color: #a77ae0; }
+.gcard-fx-st-paralysis { color: #7a5800; background: #fff3bd; border-color: #e0b400; }
+.gcard-fx-st-confuse { color: #a02a74; background: #ffe3f1; border-color: #e07ab4; }
+.gcard-fx-st-sleep { color: #455577; background: #e5eaf4; border-color: #8a9bbd; }
+.gcard-fx-st-flinch { color: #55514a; background: #eceae4; border-color: #a39e92; }
+.gcard-fx-buff { color: #1c5aa8; }
+.gcard-fx-debuff { color: #4a453c; }
+.gcard-fx-cond { color: #7a5a00; border-style: dashed; }
+.gcard-fx-quick { background: #fff4c9; color: #6a4a00; }
+.gcard-fx-hand { color: #1a6a6a; }
+.gcard-fx-info { color: #6a655a; font-weight: 700; }

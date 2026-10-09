@@ -17,7 +17,7 @@ import {
 import type { Character } from '../engine/types';
 import { CharacterSprite } from '../components/bits';
 import { HandTable } from '../components/HandTable';
-import { PlayArea, EMPTY_TABLE } from '../components/PlayArea';
+import { EMPTY_TABLE } from '../components/PlayArea';
 import { buildBeats, snapOf } from './battle/beats';
 import { HpBar, Stage } from './battle/Stage';
 import { buildRecap, TurnRecap, type RecapSide } from './battle/Recap';
@@ -294,13 +294,11 @@ export function BattleScene() {
 
       {phase === 'animating' ? (
         <div style={{ display: 'grid', placeItems: 'center', gap: '0.35rem', width: '100%', position: 'relative', zIndex: 40 }}>
-          <PlayArea table={curBeat.table} names={names} colors={SIDE_COLOR} />
           <div style={{ display: 'flex', gap: 5 }}>
             {beats.map((_, i) => (
               <span key={i} style={{ width: 8, height: 8, borderRadius: 99, background: i <= beatIdx ? 'var(--crayon-blue)' : 'var(--border)' }} />
             ))}
           </div>
-          <div style={{ fontSize: '0.7rem', color: 'var(--ink-soft)' }}>じどうで すすむ（タップで はやく）</div>
         </div>
       ) : phase === 'over' ? (
         <div style={{ fontSize: '0.9rem', opacity: 0.7 }}>けっかへ…</div>

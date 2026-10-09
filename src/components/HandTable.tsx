@@ -112,8 +112,6 @@ export function HandTable({
         className="crayon-btn primary"
         disabled={!(stage === 'choosing' && sel)}
         whileTap={{ scale: 0.95 }}
-        animate={stage === 'choosing' && sel ? { scale: [1, 1.04, 1] } : { scale: 1 }}
-        transition={{ repeat: Infinity, duration: 1.2 }}
         onClick={commit}
         style={{ fontSize: '1.25rem', padding: '0.55em 1em', opacity: stage === 'choosing' && sel ? 1 : 0.45 }}
       >
