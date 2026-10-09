@@ -4,6 +4,7 @@ import { CardBack, GameCard } from './GameCard';
 import { koseiCard, moveCard, type CardData } from './moveText';
 import { getMove } from '../engine/moves';
 import { getKosei } from '../engine';
+import { sfx } from '../audio/sfx';
 import type { ClashChoice } from '../engine';
 
 const sizeFor = (n: number) => (n >= 4 ? 'min(22vw, 8.6rem)' : n === 2 ? 'min(32vw, 10.4rem)' : 'min(28vw, 9.6rem)');
@@ -50,6 +51,7 @@ export function HandTable({
     setSelected(null);
     setStage('dealing');
     const t = window.setTimeout(() => setStage('choosing'), 250 + hand.length * 220 + 450);
+    hand.forEach((_, i) => sfx.deal(i));
     return () => window.clearTimeout(t);
   }, [hand, turn]);
 
@@ -60,6 +62,7 @@ export function HandTable({
   function commit() {
     if (selected == null || stage !== 'choosing') return;
     setStage('committing');
+    sfx.confirm();
     const id = cards[selected].id;
     window.setTimeout(() => onPick(id), 650);
   }
@@ -100,7 +103,11 @@ export function HandTable({
             return (
               <motion.div
                 key={`${turn}-${c.id}`}
-                onClick={() => stage === 'choosing' && setSelected(i)}
+                onClick={() => {
+                  if (stage !== 'choosing') return;
+                  setSelected(i);
+                  sfx.select();
+                }}
                 initial={{ x: `${-(i * 112) - 70}%`, y: 70, rotate: -28, scale: 0.55, opacity: 0, rotateY: 180 }}
                 animate={
                   leave

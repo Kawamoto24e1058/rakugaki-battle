@@ -26,7 +26,7 @@ export const EMPTY_TABLE: TableState = {
   race: null,
 };
 
-const SLOT = 'min(24vw, 7.6rem)';
+const SLOT = 'min(17vw, 5.4rem)';
 
 const REASON_TEXT: Record<OrderReason, string> = {
   kosei: 'こせいわざは かならず 先に うごく！',

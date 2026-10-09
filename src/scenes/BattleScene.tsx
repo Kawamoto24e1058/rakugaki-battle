@@ -7,74 +7,25 @@ import {
   cpuChoose,
   dealHand,
   forcedChoice,
-  archetypeLabel,
   getKosei,
   mulberry32,
   type ClashState,
-  type ClashEvent,
   type ClashChoice,
   type ClashCombatant,
   type Side,
 } from '../engine';
-import { STATUS_META } from '../engine/status';
-import { getMove } from '../engine/moves';
 import type { Character } from '../engine/types';
-import { CharacterSprite, AttributeBadge } from '../components/bits';
+import { CharacterSprite } from '../components/bits';
 import { HandTable } from '../components/HandTable';
-import { PlayArea, EMPTY_TABLE, type TableState } from '../components/PlayArea';
-import { koseiCard, moveCard, type CardData } from '../components/moveText';
-
-/** 大きく見せたい damage tag。 */
-const LOUD_TAGS = new Set(['クリティカル', 'カウンター', 'こんじょう', 'ばつぐん']);
+import { PlayArea, EMPTY_TABLE } from '../components/PlayArea';
+import { buildBeats, snapOf } from './battle/beats';
+import { HpBar, Stage } from './battle/Stage';
+import { sfx } from '../audio/sfx';
+import type { Beat, Snap } from './battle/types';
 
 const SIDE_COLOR: [string, string] = ['var(--crayon-red)', 'var(--crayon-blue)'];
 
-interface Floating {
-  id: number;
-  side: Side;
-  text: string;
-  kind: 'dmg' | 'heal' | 'info';
-  big: boolean;
-}
-interface StatusChip {
-  jp: string;
-  good: boolean;
-}
-interface View {
-  hp: [number, number];
-  statuses: [StatusChip[], StatusChip[]];
-  banner: string;
-  acting: Side | null;
-  shake: Side | null;
-  floats: Floating[];
-}
-interface Beat {
-  view: View;
-  /** 場のカード（伏せ・めくり・先攻・すばやさ比べ）。 */
-  table: TableState;
-  flash: boolean;
-  impact: string | null;
-  /** この場面を見せる時間（ms）。過ぎたら自動で次へ。 */
-  ms: number;
-  /** 勝利演出（決着の場面のみ）。 */
-  win?: Side;
-  /** こせい発動のカットイン。 */
-  koseiAct?: { side: Side; moveName: string };
-}
-
 type Phase = 'choose-p1' | 'handoff' | 'choose-p2' | 'animating' | 'over';
-
-let floatSeq = 0;
-
-const withHp = (hp: [number, number], side: Side, val: number): [number, number] =>
-  side === 0 ? [val, hp[1]] : [hp[0], val];
-
-/** 状態異常・ため中などのチップ。 */
-function chipsOf(c: ClashCombatant): StatusChip[] {
-  const chips = c.statuses.map((x) => ({ jp: STATUS_META[x.kind].jp, good: STATUS_META[x.kind].kind === 'buff' }));
-  if (c.charging && !c.statuses.some((x) => x.kind === 'charging')) chips.push({ jp: 'ためた！', good: true });
-  return chips;
-}
 
 /** 前のターンの技で手札が変わったときの お知らせ。 */
 function handNote(c: ClashCombatant): string | null {
@@ -88,168 +39,24 @@ function handNote(c: ClashCombatant): string | null {
   return parts.length > 0 ? [...new Set(parts)].join(' ') : null;
 }
 
-/** エンジンの ClashEvent 列を「1タップ = 1場面」の Beat 列に変換する。 */
-function buildBeats(
-  events: ClashEvent[],
-  start: View,
-  next: ClashState,
-  names: [string, string],
-  chars: [Character, Character],
-  startTable: TableState,
-): Beat[] {
-  const beats: Beat[] = [];
-  let hp: [number, number] = [...start.hp];
-  let sv: [StatusChip[], StatusChip[]] = [[...start.statuses[0]], [...start.statuses[1]]];
-  let acting: Side | null = null;
-  let shake: Side | null = null;
-  let floats: Floating[] = [];
-  let table: TableState = startTable;
-
-  const add = (
-    banner: string,
-    opts: {
-      flash?: boolean;
-      impact?: string | null;
-      ms?: number;
-      win?: Side;
-      koseiAct?: Beat['koseiAct'];
-    } = {},
-  ) => {
-    beats.push({
-      view: {
-        hp: [...hp],
-        statuses: [[...sv[0]], [...sv[1]]],
-        banner,
-        acting,
-        shake,
-        floats: [...floats],
-      },
-      table,
-      flash: !!opts.flash,
-      impact: opts.impact ?? null,
-      ms: opts.ms ?? 2000,
-      win: opts.win,
-      koseiAct: opts.koseiAct,
-    });
+/** 選ぶ待ちのあいだの ステージの状態。 */
+function restBeat(snap: Snap, banner: string): Beat {
+  return {
+    ...snap,
+    banner,
+    acting: null,
+    hit: null,
+    floats: [],
+    fx: null,
+    callout: null,
+    order: null,
+    first: null,
+    table: EMPTY_TABLE,
+    shake: 0,
+    flash: null,
+    impact: null,
+    ms: 0,
   };
-
-  for (const ev of events) {
-    floats = [];
-    shake = null;
-    acting = null;
-    switch (ev.t) {
-      case 'order':
-        table = { ...EMPTY_TABLE, race: { reason: ev.reason, spd: ev.spd, first: ev.first }, first: ev.first };
-        add('すばやさくらべ！', { ms: 2800 });
-        break;
-      case 'act': {
-        const card: CardData | null =
-          ev.moveId === 'kosei' ? koseiCard(getKosei(chars[ev.side].koseiId)) : (() => {
-            try {
-              return moveCard(getMove(ev.moveId));
-            } catch {
-              return null;
-            }
-          })();
-        const cards: TableState['cards'] = [...table.cards];
-        cards[ev.side] = card;
-        const revealed: TableState['revealed'] = [...table.revealed];
-        revealed[ev.side] = true;
-        const blocked: TableState['blocked'] = [...table.blocked];
-        blocked[ev.side] = ev.kind === 'blocked';
-        table = { ...table, cards, revealed, blocked, actor: ev.side, race: null };
-        if (ev.kind === 'charge') {
-          sv = [
-            ev.side === 0 ? [...sv[0], { jp: 'ためている…', good: true }] : sv[0],
-            ev.side === 1 ? [...sv[1], { jp: 'ためている…', good: true }] : sv[1],
-          ];
-          floats = [{ id: ++floatSeq, side: ev.side, text: 'ため…！', kind: 'info', big: false }];
-          add(`${names[ev.side]} は ちからを ためている…！「${ev.moveName}」`, { ms: 2200 });
-        } else if (ev.release) {
-          acting = ev.side;
-          add(`${names[ev.side]} は ためた ちからを はなった！「${ev.moveName}」`, { impact: 'どかん！', ms: 2200 });
-        } else if (ev.kind === 'kosei') {
-          acting = ev.side;
-          add(`${names[ev.side]} こせい はつどう！`, {
-            koseiAct: { side: ev.side, moveName: ev.moveName },
-            ms: 2600,
-          });
-        } else if (ev.kind === 'blocked') {
-          add(`${names[ev.side]} は ${ev.moveName.replace(/[（）]/g, '')}`);
-        } else if (ev.kind === 'support') {
-          add(`${names[ev.side]} は ほじょわざ ―「${ev.moveName}」`);
-        } else {
-          acting = ev.side;
-          add(`${names[ev.side]} の こうげき ―「${ev.moveName}」！`);
-        }
-        break;
-      }
-      case 'bonus':
-        add(`${names[ev.side]} ${ev.label}`, { impact: ev.label, ms: 1500 });
-        break;
-      case 'damage': {
-        const loud = !!ev.tag && LOUD_TAGS.has(ev.tag);
-        const big = loud || ev.amount >= 26;
-        hp = withHp(hp, ev.side, ev.hpAfter);
-        acting = (1 - ev.side) as Side;
-        shake = ev.side;
-        floats = [{ id: ++floatSeq, side: ev.side, text: `${ev.amount}`, kind: 'dmg', big }];
-        add(
-          ev.tag ? `${ev.tag}！ ${names[ev.side]} に ${ev.amount} ダメージ` : `${names[ev.side]} に ${ev.amount} ダメージ！`,
-          { flash: true, impact: loud ? `${ev.tag}！` : null },
-        );
-        break;
-      }
-      case 'heal':
-        hp = withHp(hp, ev.side, ev.hpAfter);
-        floats = [{ id: ++floatSeq, side: ev.side, text: `+${ev.amount}`, kind: 'heal', big: false }];
-        add(`${names[ev.side]} は HP を ${ev.amount} かいふく！`);
-        break;
-      case 'status-apply': {
-        const jp = STATUS_META[ev.kind].jp;
-        const debuff = STATUS_META[ev.kind].kind === 'debuff';
-        sv = [
-          ev.side === 0 ? [...sv[0], { jp, good: !debuff }] : sv[0],
-          ev.side === 1 ? [...sv[1], { jp, good: !debuff }] : sv[1],
-        ];
-        floats = [{ id: ++floatSeq, side: ev.side, text: jp, kind: 'info', big: false }];
-        add(`${names[ev.side]} は ${jp} に なった！`, { impact: debuff ? `${jp}！` : null });
-        break;
-      }
-      case 'status-resist':
-        add(`${names[ev.side]} には きかなかった`);
-        break;
-      case 'status-tick': {
-        const jp = STATUS_META[ev.kind].jp;
-        hp = withHp(hp, ev.side, ev.hpAfter);
-        floats = [{ id: ++floatSeq, side: ev.side, text: `${jp} ${ev.amount}`, kind: 'dmg', big: false }];
-        add(`${names[ev.side]} は ${jp} で ${ev.amount} ダメージ`);
-        break;
-      }
-      case 'sudden-death':
-        add(`サドンデス！ リードしている ${names[ev.leader]} が おおきく けずられる`, { impact: 'サドンデス！' });
-        break;
-      default:
-        break;
-    }
-  }
-
-  // しめの1枚（決着 or 次ターン案内）。状態異常は確定値で表示。
-  floats = [];
-  shake = null;
-  acting = null;
-  sv = [chipsOf(next.combatants[0]), chipsOf(next.combatants[1])];
-  hp = [next.combatants[0].hp, next.combatants[1].hp];
-  if (next.done) {
-    if (next.winner === 'draw') {
-      add('ひきわけ！', { ms: 1800 });
-    } else {
-      add(`${names[next.winner as Side]} の かち！`, { ms: 3000, win: next.winner as Side });
-    }
-  } else {
-    add(`ターン ${next.turn} へ`, { ms: 1200 });
-  }
-  return beats;
 }
 
 export function BattleScene() {
@@ -274,30 +81,33 @@ export function BattleScene() {
 
   const [phase, setPhase] = useState<Phase>('choose-p1');
   const [p1Pick, setP1Pick] = useState<ClashChoice | null>(null);
-  const [flash, setFlash] = useState(false);
   const [beats, setBeats] = useState<Beat[]>([]);
   const [beatIdx, setBeatIdx] = useState(0);
   const pendingNext = useRef<ClashState | null>(null);
-  const [view, setView] = useState<View>({
-    hp: [maxHp[0], maxHp[1]],
-    statuses: [[], []],
-    banner: 'ターン 1：カードを 1まい えらぶ',
-    acting: null,
-    shake: null,
-    floats: [],
-  });
+  const [snap, setSnap] = useState<Snap>(() => snapOf(createClashState(player.character, opponent.character, seed)));
+  const [banner, setBanner] = useState('ターン 1：カードを 1まい えらぶ');
+  const [turnKey, setTurnKey] = useState(0);
 
-  const cur = phase === 'animating' && beats[beatIdx] ? beats[beatIdx].view : view;
-  const curBeat = phase === 'animating' ? beats[beatIdx] : undefined;
+  const curBeat: Beat = phase === 'animating' && beats[beatIdx] ? beats[beatIdx] : restBeat(snap, banner);
   const lastBeat = beatIdx >= beats.length - 1;
 
-  // ダメージ演出のフラッシュ（beat に入った瞬間だけ）
+  // 場面が変わるたびに効果音
   useEffect(() => {
     if (phase !== 'animating') return;
-    if (!beats[beatIdx]?.flash) return;
-    setFlash(true);
-    const t = window.setTimeout(() => setFlash(false), 150);
-    return () => window.clearTimeout(t);
+    const b = beats[beatIdx];
+    if (!b) return;
+    if (b.order) sfx.order();
+    else if (b.fx?.kind === 'hit') sfx.hit(Math.min(1, (b.fx.size - 0.8) / 0.7), b.fx.crit || b.fx.release);
+    else if (b.fx?.kind === 'heal') sfx.heal();
+    else if (b.fx?.kind === 'buff') sfx.buff();
+    else if (b.fx?.kind === 'debuff') sfx.debuff();
+    else if (b.fx?.kind === 'guard') sfx.guard();
+    else if (b.fx?.kind === 'charge') sfx.charge();
+    else if (b.fx?.kind === 'status') sfx.status();
+    else if (b.impact === 'どかん！') sfx.release();
+    else if (b.callout && b.acting != null) sfx.callout();
+    if (b.win != null) sfx.win();
+    else if (b.hp.some((h) => h <= 0) && b.fx?.kind === 'hit') window.setTimeout(() => sfx.ko(), 250);
   }, [phase, beatIdx, beats]);
 
   // 演出は各場面を beat.ms だけ見せて、自動で次へ切り替わる。
@@ -312,7 +122,6 @@ export function BattleScene() {
 
   useEffect(() => {
     if (phase !== 'over') return;
-    // 勝利演出は最後の beat で見せ切っているので、ここは短く。
     const t = window.setTimeout(() => finishBattle(state.winner === 0), 400);
     return () => window.clearTimeout(t);
   }, [phase, state.winner, finishBattle]);
@@ -321,7 +130,7 @@ export function BattleScene() {
     if (phase === 'animating' || state.done) return;
     const next = resolveClashTurn(state, [myChoice, foeChoice]);
     pendingNext.current = next;
-    setBeats(buildBeats(next.log.slice(state.log.length), view, next, names, chars, EMPTY_TABLE));
+    setBeats(buildBeats(next.log.slice(state.log.length), snap, next, names, chars));
     setBeatIdx(0);
     setPhase('animating');
   }
@@ -336,21 +145,17 @@ export function BattleScene() {
     setState(next);
     setBeats([]);
     setBeatIdx(0);
-    setFlash(false);
-    setView({
-      hp: [next.combatants[0].hp, next.combatants[1].hp],
-      statuses: [chipsOf(next.combatants[0]), chipsOf(next.combatants[1])],
-      banner: next.done
+    setSnap(snapOf(next));
+    setTurnKey((k) => k + 1);
+    setBanner(
+      next.done
         ? next.winner === 'draw'
           ? 'ひきわけ'
           : `${names[next.winner as Side]} の かち！`
         : mode === 'versus'
           ? `ターン ${next.turn}：P1（${names[0]}）が えらぶ`
           : `ターン ${next.turn}：カードを 1まい えらぶ`,
-      acting: null,
-      shake: null,
-      floats: [],
-    });
+    );
     setPhase(next.done ? 'over' : 'choose-p1');
   }
 
@@ -399,7 +204,7 @@ export function BattleScene() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, state]);
 
-  const pinch = cur.hp.some((h, i) => h > 0 && h / maxHp[i] <= 0.3);
+  const pinch = curBeat.hp.some((h, i) => h > 0 && h / maxHp[i] <= 0.3);
   const chooserSide: Side = phase === 'choose-p2' ? 1 : 0;
   const hand = useMemo(() => {
     // 開発用：?deal=ID,ID,ID で手札を固定（本番ビルドでは無効）
@@ -409,41 +214,40 @@ export function BattleScene() {
     }
     return dealHand(state, chooserSide);
   }, [state, chooserSide]);
-  const impact = curBeat?.impact ?? null;
+  const impact = curBeat.impact;
+  const [soundOff, setSoundOff] = useState(sfx.isMuted());
 
   return (
-    <div className="scene" style={{ justifyContent: 'flex-start', paddingTop: 'clamp(.4rem,2vh,1rem)', gap: '0.7rem' }}>
+    <div className="scene" style={{ justifyContent: 'flex-start', paddingTop: 'clamp(.4rem,1.5vh,.8rem)', gap: '0.5rem' }}>
       {pinch && <div className="pinch-vignette" />}
-      {flash && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(255,255,255,.55)', zIndex: 25, pointerEvents: 'none' }} />
-      )}
       {impact && (
         <motion.div
           key={impact + beatIdx}
           initial={{ scale: 0.3, opacity: 0, rotate: -6 }}
-          animate={{ scale: [0.3, 1.2, 1], opacity: 1, rotate: [-6, 3, 0] }}
+          animate={{ scale: [0.3, 1.25, 1], opacity: [0, 1, 1, 0.9], rotate: [-6, 3, 0] }}
           style={{
             position: 'fixed',
-            top: '32%',
+            top: '20%',
             left: '50%',
-            transform: 'translateX(-50%)',
+            translate: '-50% 0',
             zIndex: 28,
             pointerEvents: 'none',
             fontFamily: 'var(--font-display)',
             fontWeight: 900,
-            fontSize: 'clamp(1.8rem, 8vw, 3rem)',
+            fontSize: 'clamp(2rem, 9vw, 3.6rem)',
             color: '#fff',
-            WebkitTextStroke: '3px var(--ink)',
+            WebkitTextStroke: '4px var(--ink)',
             paintOrder: 'stroke',
+            whiteSpace: 'nowrap',
           }}
         >
           {impact}
         </motion.div>
       )}
-      {curBeat?.win != null && (
+      {curBeat.win != null && (
         <VictoryOverlay name={names[curBeat.win]} char={chars[curBeat.win]} image={images[curBeat.win]} />
       )}
-      {curBeat?.koseiAct && (
+      {curBeat.koseiAct && (
         <KoseiCutIn
           key={beatIdx}
           name={names[curBeat.koseiAct.side]}
@@ -454,58 +258,41 @@ export function BattleScene() {
         />
       )}
 
-      <div style={{ display: 'flex', gap: 'clamp(.6rem,3vw,1.5rem)', width: '100%', maxWidth: '48rem' }}>
-        {[0, 1].map((s) => (
-          <FighterPanel
-            key={s}
-            side={s as Side}
-            char={chars[s]}
-            image={images[s]}
-            hp={cur.hp[s]}
-            maxHp={maxHp[s]}
-            statuses={cur.statuses[s]}
-            acting={cur.acting === s}
-            shake={cur.shake === s}
-            floats={cur.floats.filter((f) => f.side === s)}
-          />
-        ))}
-      </div>
+      <div style={{ width: '100%', maxWidth: '52rem', display: 'grid', gap: '0.5rem' }}>
+        <div style={{ display: 'flex', gap: 'clamp(.8rem,4vw,2rem)' }}>
+          {([0, 1] as Side[]).map((s) => (
+            <HpBar key={s} side={s} char={chars[s]} hp={curBeat.hp[s]} maxHp={maxHp[s]} chips={curBeat.chips[s]} hitNow={curBeat.hit === s} />
+          ))}
+        </div>
 
-      <div
-        className="sketch-card"
-        onClick={phase === 'animating' ? advance : undefined}
-        style={{
-          width: '100%',
-          maxWidth: '48rem',
-          minHeight: '3.2rem',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          textAlign: 'center',
-          fontWeight: 700,
-          fontSize: phase === 'animating' ? '1.05rem' : '1rem',
-          padding: '0.5rem 1rem',
-          cursor: phase === 'animating' ? 'pointer' : 'default',
-        }}
-      >
-        {cur.banner}
+        <Stage chars={chars} images={images} names={names} beat={curBeat} beatKey={phase === 'animating' ? beatIdx : -1 - turnKey} />
+
+        <div
+          className="sketch-card"
+          onClick={phase === 'animating' ? advance : undefined}
+          style={{
+            width: '100%',
+            minHeight: '2.8rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            textAlign: 'center',
+            fontWeight: 800,
+            fontSize: 'clamp(.9rem, 2.6vw, 1.1rem)',
+            padding: '0.35rem 0.9rem',
+            cursor: phase === 'animating' ? 'pointer' : 'default',
+          }}
+        >
+          {phase === 'animating' ? curBeat.banner : banner}
+        </div>
       </div>
 
       {phase === 'animating' ? (
-        <div style={{ display: 'grid', placeItems: 'center', gap: '0.5rem', width: '100%', position: 'relative', zIndex: 40 }}>
-          <PlayArea table={curBeat?.table ?? EMPTY_TABLE} names={names} colors={SIDE_COLOR} />
-          {/* 自動再生の進み具合 */}
+        <div style={{ display: 'grid', placeItems: 'center', gap: '0.35rem', width: '100%', position: 'relative', zIndex: 40 }}>
+          <PlayArea table={curBeat.table} names={names} colors={SIDE_COLOR} />
           <div style={{ display: 'flex', gap: 5 }}>
             {beats.map((_, i) => (
-              <span
-                key={i}
-                style={{
-                  width: 8,
-                  height: 8,
-                  borderRadius: 99,
-                  background: i <= beatIdx ? 'var(--crayon-blue)' : 'var(--border)',
-                }}
-              />
+              <span key={i} style={{ width: 8, height: 8, borderRadius: 99, background: i <= beatIdx ? 'var(--crayon-blue)' : 'var(--border)' }} />
             ))}
           </div>
           <div style={{ fontSize: '0.7rem', color: 'var(--ink-soft)' }}>じどうで すすむ（タップで はやく）</div>
@@ -521,23 +308,15 @@ export function BattleScene() {
         </div>
       ) : (
         <>
-          <div style={{ fontSize: '0.76rem', color: 'var(--ink-soft)' }}>{matchup}</div>
+          <div style={{ fontSize: '0.74rem', color: 'var(--ink-soft)' }}>{matchup}</div>
           {mode === 'versus' && (
             <div style={{ fontWeight: 700, color: phase === 'choose-p2' ? 'var(--crayon-blue)' : 'var(--crayon-red)' }}>
               {phase === 'choose-p2' ? `P2（${names[1]}）` : `P1（${names[0]}）`} の てふだ
             </div>
           )}
           {forced[chooserSide] ? (
-            <motion.div
-              initial={{ scale: 0.8, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              style={{ textAlign: 'center', display: 'grid', gap: '0.4rem', padding: '1.5rem 0' }}
-            >
-              <motion.div
-                animate={{ scale: [1, 1.12, 1] }}
-                transition={{ repeat: Infinity, duration: 0.7 }}
-                style={{ fontFamily: 'var(--font-display)', fontSize: '1.6rem', color: SIDE_COLOR[chooserSide] }}
-              >
+            <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} style={{ textAlign: 'center', display: 'grid', gap: '0.4rem', padding: '1rem 0' }}>
+              <motion.div animate={{ scale: [1, 1.12, 1] }} transition={{ repeat: Infinity, duration: 0.7 }} style={{ fontFamily: 'var(--font-display)', fontSize: '1.6rem', color: SIDE_COLOR[chooserSide] }}>
                 ためた ちからを はなつ！
               </motion.div>
               <div style={{ fontSize: '0.85rem', color: 'var(--ink-soft)' }}>
@@ -556,6 +335,17 @@ export function BattleScene() {
           )}
         </>
       )}
+      <button
+        className="crayon-btn"
+        onClick={() => {
+          sfx.setMuted(!soundOff);
+          setSoundOff(!soundOff);
+          if (soundOff) sfx.select();
+        }}
+        style={{ fontSize: '0.75rem', padding: '0.2em 0.8em', opacity: 0.8, marginTop: '0.4rem' }}
+      >
+        おと：{soundOff ? 'OFF' : 'ON'}
+      </button>
     </div>
   );
 }
@@ -763,133 +553,6 @@ function VictoryOverlay({ name, char, image }: { name: string; char: Character; 
           おめでとう！
         </div>
       </motion.div>
-    </div>
-  );
-}
-
-function FighterPanel({
-  side,
-  char,
-  image,
-  hp,
-  maxHp,
-  statuses,
-  acting,
-  shake,
-  floats,
-}: {
-  side: Side;
-  char: Character;
-  image: string | null;
-  hp: number;
-  maxHp: number;
-  statuses: StatusChip[];
-  acting: boolean;
-  shake: boolean;
-  floats: Floating[];
-}) {
-  const pct = Math.max(0, (hp / maxHp) * 100);
-  const low = pct <= 30;
-  const dir = side === 0 ? 1 : -1;
-
-  return (
-    <div className="sketch-card" style={{ flex: 1, minWidth: 0, padding: '0.55rem', position: 'relative' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-        <strong style={{ fontSize: 'clamp(.9rem,2.5vw,1.1rem)' }}>{char.name}</strong>
-        <AttributeBadge attribute={char.attribute} size={0.8} />
-        {low && <span style={{ color: 'var(--crayon-red)', fontWeight: 700, fontSize: '0.8rem' }}>ピンチ！</span>}
-      </div>
-      <div style={{ fontSize: '0.7rem', opacity: 0.7 }}>{archetypeLabel(char.baseStats)}</div>
-      {(() => {
-        const k = getKosei(char.koseiId);
-        return (
-          <div style={{ fontSize: '0.66rem', color: 'var(--crayon-purple)', lineHeight: 1.25, marginTop: 1 }}>
-            こせい：{char.koseiTitle ?? ''}{k.name}
-            <br />
-            <span style={{ color: 'var(--ink-soft)' }}>パッシブ：{k.passiveJp}</span>
-          </div>
-        );
-      })()}
-
-      <motion.div
-        animate={
-          shake
-            ? { x: [0, -13, 13, -9, 7, 0], rotate: [0, -3, 3, 0] }
-            : acting
-              ? { x: dir * 30, scale: 1.06 }
-              : { x: 0, scale: 1 }
-        }
-        transition={{ duration: shake ? 0.34 : 0.16 }}
-        style={{ position: 'relative', margin: '0.4rem 0' }}
-      >
-        <div
-          style={{
-            width: 'min(28vw, 122px)',
-            aspectRatio: '1',
-            margin: '0 auto',
-            background: '#fff',
-            border: '2px solid var(--border)',
-            borderRadius: 8,
-            padding: 6,
-            transform: `rotate(${dir * -1.5}deg)`,
-            boxShadow: shake ? '0 0 0 5px rgba(214,69,69,.6)' : acting ? '0 0 0 4px rgba(242,183,5,.7)' : '2px 3px 0 rgba(51,48,43,.15)',
-          }}
-        >
-          <CharacterSprite imageUrl={image} attribute={char.attribute} name={char.name} flip={side === 1} />
-        </div>
-        {floats.map((f, i) => (
-          <motion.div
-            key={f.id}
-            initial={{ opacity: 0, y: 10, scale: 0.6 }}
-            animate={{ opacity: 1, y: -30 - (floats.length - 1 - i) * 22, scale: 1 }}
-            style={{
-              position: 'absolute',
-              left: '50%',
-              top: 0,
-              transform: 'translateX(-50%)',
-              fontFamily: 'var(--font-display)',
-              fontWeight: 900,
-              fontSize: f.kind === 'dmg' ? (f.big ? '2.2rem' : '1.4rem') : '1.05rem',
-              color: f.kind === 'heal' ? 'var(--crayon-green)' : f.kind === 'dmg' ? 'var(--crayon-red)' : 'var(--crayon-purple)',
-              WebkitTextStroke: f.kind === 'dmg' ? '2px #fff' : undefined,
-              paintOrder: 'stroke',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {f.text}
-          </motion.div>
-        ))}
-      </motion.div>
-
-      <div style={{ background: '#0001', borderRadius: 6, height: 20, overflow: 'hidden', border: '2px solid var(--border)' }}>
-        <div
-          style={{
-            width: `${pct}%`,
-            height: '100%',
-            background: low ? 'var(--crayon-red)' : 'var(--crayon-green)',
-            transition: 'width .4s cubic-bezier(.2,.8,.2,1)',
-          }}
-        />
-      </div>
-      <div style={{ fontSize: 'clamp(1.05rem,3.4vw,1.35rem)', fontWeight: 700 }}>
-        {Math.max(0, Math.round(hp))} <span style={{ fontSize: '0.7em', opacity: 0.6 }}>/ {maxHp}</span>
-      </div>
-
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 3, minHeight: 16 }}>
-        {statuses.map((s, i) => (
-          <span
-            key={i}
-            style={{
-              fontSize: '0.68rem',
-              padding: '1px 5px',
-              borderRadius: 5,
-              background: s.good ? 'rgba(58,166,97,.18)' : 'rgba(236,106,156,.18)',
-            }}
-          >
-            {s.jp}
-          </span>
-        ))}
-      </div>
     </div>
   );
 }
