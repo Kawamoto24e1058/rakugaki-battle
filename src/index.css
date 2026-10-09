@@ -240,8 +240,8 @@ button {
   white-space: nowrap;
 }
 .gcard-art {
-  flex: 1;
-  min-height: 0;
+  flex: 1 1 auto;
+  min-height: 44%;
   position: relative;
   overflow: hidden;
   border-top: 0.12em solid var(--ink);

@@ -1,6 +1,7 @@
 import type { CSSProperties } from 'react';
 import type { CardData } from './moveText';
 import { CardArt } from './art/CardArt';
+import { SceneArt } from './art/SceneArt';
 
 /** カードの表。size は CSS の長さ（例 'min(29vw, 9.6rem)'）。文字サイズも size から決まる。 */
 export function GameCard({
@@ -41,7 +42,7 @@ export function GameCard({
         <span>{card.tag}</span>
       </div>
       <div className="gcard-art">
-        <CardArt art={card.art} />
+        {card.move ? <SceneArt move={card.move} /> : <CardArt art={card.art} />}
         {card.rare && <div className="gcard-foil" />}
       </div>
       <div className="gcard-name" style={{ fontSize: long ? '1.02em' : '1.3em' }}>

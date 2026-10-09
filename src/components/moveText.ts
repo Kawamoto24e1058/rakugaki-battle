@@ -105,9 +105,9 @@ export function moveChips(m: MoveDef): EffectChip[] {
   if (m.riskShift && m.riskShift >= 6) out.push({ text: 'かすりやすい', tone: 'info' });
   if (hasPriority(m) && !m.charge) out.unshift({ text: '先に うごく', tone: 'quick' });
   // 先頭（ダメージ/かいふく）→ 条件 → ほか の順に並べて3つまで
-  const rank = (t: ChipTone) => ({ quick: 0, dmg: 1, heal: 1, cond: 2, hand: 4, info: 5 } as Record<string, number>)[t] ?? 3;
+  const rank = (t: ChipTone) => ({ quick: 0, cond: 1, dmg: 2, heal: 2, hand: 4, info: 5 } as Record<string, number>)[t] ?? 3;
   const sorted = out.map((c, i) => ({ c, i })).sort((a, b) => rank(a.c.tone) - rank(b.c.tone) || a.i - b.i).map((x) => x.c);
-  return sorted.slice(0, 3);
+  return sorted.slice(0, 2);
 }
 
 function handShort(h: HandEffect): string {
@@ -189,6 +189,8 @@ export interface CardData {
   kind: CardKind;
   name: string;
   art: ArtSpec;
+  /** 絵で説明するための元データ（こせい技は無し）。 */
+  move?: MoveDef;
   color: string;
   power: number | null;
   tag: string;
@@ -207,6 +209,7 @@ export function moveCard(m: MoveDef): CardData {
     kind: m.category,
     name: m.name,
     art: artFor(m),
+    move: m,
     color,
     power: m.category === 'attack' ? m.power : null,
     tag: `${m.category === 'attack' ? 'こうげき' : 'ほじょ'}${m.attribute ? `・${ATTRIBUTE_META[m.attribute].jp}` : ''}`,
