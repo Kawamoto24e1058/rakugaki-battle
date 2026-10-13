@@ -55,12 +55,10 @@ const PRED_WORD: Record<string, string> = {
 };
 export function handText(h: HandEffect): string {
   switch (h.kind) {
-    case 'guarantee': return `つぎの手札に ${PRED_WORD[h.pred]}が ${h.n}まい かならず 来る`;
-    case 'extra': return `つぎの手札が ${h.n}まい ふえる`;
-    case 'foeLess': return `あいての つぎの手札が ${h.n}まい へる`;
-    case 'luck': return 'つぎの手札に 大技・ため技が 来やすい';
-    case 'ban': return `あいての つぎの手札に ${PRED_WORD[h.pred]}が 出なくなる`;
-    case 'only': return `あいての つぎの手札が ${PRED_WORD[h.pred]}だけになる`;
+    case 'guarantee': return `つぎの技は ${PRED_WORD[h.pred]}になる（もっていれば）`;
+    case 'luck': return 'つぎの技は 大技・ため技が 出やすい';
+    case 'ban': return `あいての つぎの技に ${PRED_WORD[h.pred]}が 出なくなる`;
+    case 'only': return `あいての つぎの技が ${PRED_WORD[h.pred]}になる（もっていれば）`;
   }
 }
 
@@ -127,12 +125,10 @@ export function moveChips(m: MoveDef): EffectChip[] {
 
 function handShort(h: HandEffect): string {
   switch (h.kind) {
-    case 'guarantee': return `つぎ：${PRED_WORD[h.pred]} ${h.n}まい来る`;
-    case 'extra': return `つぎ：てふだ +${h.n}`;
-    case 'foeLess': return `あいての てふだ -${h.n}`;
-    case 'luck': return 'つぎ：大技が来やすい';
+    case 'guarantee': return `つぎの技：${PRED_WORD[h.pred]}`;
+    case 'luck': return 'つぎの技：大技が出やすい';
     case 'ban': return `あいて：${PRED_WORD[h.pred]}ふうじ`;
-    case 'only': return `あいて：${PRED_WORD[h.pred]}だけ`;
+    case 'only': return `あいての技：${PRED_WORD[h.pred]}`;
   }
 }
 

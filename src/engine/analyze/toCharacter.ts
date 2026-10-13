@@ -1,6 +1,7 @@
 import type { Attribute, AnalysisReason, Character, Stats, Weapon } from '../types';
 import { ATTRIBUTE_META } from '../attributes';
 import { activeTags } from './tags';
+import { assignMoves } from '../moves/assign';
 import { assignKosei, getKosei, koseiTitle } from '../personalities';
 import { mulberry32, randInt, type Rng } from '../rng';
 import { clamp01, type FeatureVector } from './features';
@@ -209,6 +210,7 @@ export function featuresToCharacter(
     weapon,
     personality,
     baseStats,
+    moveIds: assignMoves(seed >>> 0, attribute, personality),
     koseiId,
     koseiTitle: koseiName,
     analysis,

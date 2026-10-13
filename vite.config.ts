@@ -160,6 +160,8 @@ export default defineConfig(({ mode }) => {
   test: {
     environment: 'node',
     include: ['tests/**/*.test.ts'],
+    // バランス検証は数千戦シミュレートするので、負荷が高いときに5秒では足りない
+    testTimeout: 30000,
   },
   }
 })

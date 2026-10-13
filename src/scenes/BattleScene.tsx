@@ -1,47 +1,31 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useGame } from '../store/gameStore';
 import {
   createClashState,
   resolveClashTurn,
-  cpuChoose,
-  dealHand,
-  forcedChoice,
+  pickMoveFor,
   getKosei,
-  mulberry32,
   type ClashState,
   type ClashChoice,
-  type ClashCombatant,
   type Side,
 } from '../engine';
 import type { Character } from '../engine/types';
 import { CharacterSprite } from '../components/bits';
-import { HandTable } from '../components/HandTable';
 import { EMPTY_TABLE } from '../components/PlayArea';
 import { buildBeats, snapOf } from './battle/beats';
 import { HpBar, Stage } from './battle/Stage';
 import { buildRecap, TurnRecap, type RecapSide } from './battle/Recap';
+import { MoveReveal } from './battle/MoveReveal';
 import { STATUS_META } from '../engine/status';
 import { sfx } from '../audio/sfx';
+import { MinigameStage, pickMinigame, type MinigameOutcome } from '../minigames';
 import type { Beat, Snap } from './battle/types';
 
-const SIDE_COLOR: [string, string] = ['var(--crayon-red)', 'var(--crayon-blue)'];
+/** reveal＝このターンの技が きまる → minigame＝ミニゲーム → animating＝こうげきの演出 → over */
+type Phase = 'reveal' | 'minigame' | 'animating' | 'over';
 
-type Phase = 'choose-p1' | 'handoff' | 'choose-p2' | 'animating' | 'over';
-
-/** 前のターンの技で手札が変わったときの お知らせ。 */
-function handNote(c: ClashCombatant): string | null {
-  const parts: string[] = [];
-  for (const m of c.handMods) {
-    if (m.kind === 'extra') parts.push('てふだが ふえた！');
-    else if (m.kind === 'foeLess') parts.push('てふだが へらされた…');
-    else if (m.kind === 'luck') parts.push('大技が 来やすい！');
-    else parts.push('ねらいの カードが 来る！');
-  }
-  return parts.length > 0 ? [...new Set(parts)].join(' ') : null;
-}
-
-/** 選ぶ待ちのあいだの ステージの状態。 */
+/** 待ちのあいだの ステージの状態。 */
 function restBeat(snap: Snap, banner: string): Beat {
   return {
     ...snap,
@@ -65,32 +49,43 @@ export function BattleScene() {
   const player = useGame((s) => s.player)!;
   const opponent = useGame((s) => s.opponent)!;
   const mode = useGame((s) => s.mode);
+  const runWins = useGame((s) => s.runWins);
   const finishBattle = useGame((s) => s.finishBattle);
 
   const seed = useMemo(
     () => (player.character.seed ^ opponent.character.seed ^ Date.now()) >>> 0,
     [player, opponent],
   );
-  const [state, setState] = useState<ClashState>(() =>
-    createClashState(player.character, opponent.character, seed),
-  );
+  const [state, setState] = useState<ClashState>(() => createClashState(player.character, opponent.character, seed));
   const chars: [Character, Character] = [player.character, opponent.character];
   const names: [string, string] = [chars[0].name, chars[1].name];
   const maxHp: [number, number] = [chars[0].baseStats.hp, chars[1].baseStats.hp];
   const images: [string | null, string | null] = [player.imageUrl, opponent.imageUrl];
+  const cpu = mode !== 'versus';
+  const cpuSkill = Math.min(0.85, 0.45 + runWins * 0.08);
 
-  const [phase, setPhase] = useState<Phase>('choose-p1');
-  const [p1Pick, setP1Pick] = useState<ClashChoice | null>(null);
+  const [phase, setPhase] = useState<Phase>('reveal');
   const [beats, setBeats] = useState<Beat[]>([]);
   const [beatIdx, setBeatIdx] = useState(0);
   const pendingNext = useRef<ClashState | null>(null);
   const [snap, setSnap] = useState<Snap>(() => snapOf(createClashState(player.character, opponent.character, seed)));
-  const [banner, setBanner] = useState('ターン 1：カードを 1まい えらぶ');
   const [turnKey, setTurnKey] = useState(0);
   const [recap, setRecap] = useState<[RecapSide, RecapSide] | null>(null);
+  const lastGame = useRef<string | null>(null);
 
-  const curBeat: Beat = phase === 'animating' && beats[beatIdx] ? beats[beatIdx] : restBeat(snap, banner);
+  // このターンの技と ミニゲーム（state から決まる）
+  const picks = useMemo<[ClashChoice, ClashChoice]>(() => [pickMoveFor(state, 0), pickMoveFor(state, 1)], [state]);
+  const game = useMemo(() => pickMinigame(state.seed, state.turn, lastGame.current), [state]);
+
+  const curBeat: Beat = phase === 'animating' && beats[beatIdx] ? beats[beatIdx] : restBeat(snap, '');
   const lastBeat = beatIdx >= beats.length - 1;
+
+  // 技が きまったら ミニゲームへ
+  useEffect(() => {
+    if (phase !== 'reveal' || state.done) return;
+    const t = window.setTimeout(() => setPhase('minigame'), 2300);
+    return () => window.clearTimeout(t);
+  }, [phase, state]);
 
   // 場面が変わるたびに効果音
   useEffect(() => {
@@ -127,14 +122,20 @@ export function BattleScene() {
     return () => window.clearTimeout(t);
   }, [phase, state.winner, finishBattle]);
 
-  function submit(myChoice: ClashChoice, foeChoice: ClashChoice) {
-    if (phase === 'animating' || state.done) return;
-    const next = resolveClashTurn(state, [myChoice, foeChoice]);
-    pendingNext.current = next;
-    setBeats(buildBeats(next.log.slice(state.log.length), snap, next, names, chars));
-    setBeatIdx(0);
-    setPhase('animating');
-  }
+  const onMinigameDone = useCallback(
+    (o: MinigameOutcome) => {
+      if (state.done) return;
+      lastGame.current = game.id;
+      const mg = { winner: o.winner, perfect: o.perfect };
+      const next = resolveClashTurn(state, picks, mg);
+      pendingNext.current = next;
+      setBeats(buildBeats(next.log.slice(state.log.length), snap, next, names, chars, mg));
+      setBeatIdx(0);
+      setPhase('animating');
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [state, picks, game, snap],
+  );
 
   function advance() {
     if (!lastBeat) {
@@ -149,76 +150,13 @@ export function BattleScene() {
     setSnap(snapOf(next));
     setTurnKey((k) => k + 1);
     setRecap(buildRecap(next.log.slice(state.log.length), (k) => STATUS_META[k as keyof typeof STATUS_META]?.jp ?? k));
-    setBanner(
-      next.done
-        ? next.winner === 'draw'
-          ? 'ひきわけ'
-          : `${names[next.winner as Side]} の かち！`
-        : mode === 'versus'
-          ? `ターン ${next.turn}：P1（${names[0]}）が えらぶ`
-          : `ターン ${next.turn}：カードを 1まい えらぶ`,
-    );
-    setPhase(next.done ? 'over' : 'choose-p1');
+    setPhase(next.done ? 'over' : 'reveal');
   }
-
-  function pickSolo(choice: ClashChoice) {
-    if (phase !== 'choose-p1' || state.done) return;
-    const rng = mulberry32((state.seed + state.turn * 2654435761) >>> 0);
-    submit(choice, cpuChoose(state, 1, rng));
-  }
-  function pickP1(choice: ClashChoice) {
-    if (phase !== 'choose-p1') return;
-    setP1Pick(choice);
-    setPhase('handoff');
-  }
-  function pickP2(choice: ClashChoice) {
-    if (phase !== 'choose-p2' || !p1Pick) return;
-    submit(p1Pick, choice);
-    setP1Pick(null);
-  }
-
-  // ため技を はなつターンは 自動（えらべない）
-  const forced: [ClashChoice | null, ClashChoice | null] = [forcedChoice(state, 0), forcedChoice(state, 1)];
-  useEffect(() => {
-    if (state.done) return;
-    if (phase === 'choose-p1' && forced[0]) {
-      const t = window.setTimeout(() => {
-        if (mode === 'versus') {
-          if (forced[1]) submit('release', 'release');
-          else {
-            setP1Pick('release');
-            setPhase('choose-p2');
-          }
-        } else {
-          const rng = mulberry32((state.seed + state.turn * 2654435761) >>> 0);
-          submit('release', cpuChoose(state, 1, rng));
-        }
-      }, 1400);
-      return () => window.clearTimeout(t);
-    }
-    if (phase === 'choose-p2' && forced[1] && p1Pick) {
-      const t = window.setTimeout(() => {
-        submit(p1Pick, 'release');
-        setP1Pick(null);
-      }, 1400);
-      return () => window.clearTimeout(t);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, state]);
 
   const pinch = curBeat.hp.some((h, i) => h > 0 && h / maxHp[i] <= 0.3);
-  const chooserSide: Side = phase === 'choose-p2' ? 1 : 0;
-  const hand = useMemo(() => {
-    // 開発用：?deal=ID,ID,ID で手札を固定（本番ビルドでは無効）
-    if (import.meta.env.DEV && chooserSide === 0) {
-      const dev = new URLSearchParams(window.location.search).get('deal');
-      if (dev && !state.combatants[0].charging) return dev.split(',').filter(Boolean);
-    }
-    return dealHand(state, chooserSide);
-  }, [state, chooserSide]);
   const impact = curBeat.impact;
-  const stageLabel = `ターン ${state.turn}${mode === 'versus' ? (phase === 'choose-p2' ? '・P2' : '・P1') : ''}：カードを 1まい えらぶ`;
   const [soundOff, setSoundOff] = useState(sfx.isMuted());
+  const stageLabel = phase === 'reveal' ? `ターン ${state.turn}：わざが きまるよ` : phase === 'minigame' ? `ターン ${state.turn}：ミニゲーム！` : null;
 
   return (
     <div className="scene" style={{ justifyContent: 'flex-start', paddingTop: 'clamp(.3rem,1vh,.7rem)', gap: '0.4rem' }}>
@@ -247,9 +185,7 @@ export function BattleScene() {
           {impact}
         </motion.div>
       )}
-      {curBeat.win != null && (
-        <VictoryOverlay name={names[curBeat.win]} char={chars[curBeat.win]} image={images[curBeat.win]} />
-      )}
+      {curBeat.win != null && <VictoryOverlay name={names[curBeat.win]} char={chars[curBeat.win]} image={images[curBeat.win]} />}
       {curBeat.koseiAct && (
         <KoseiCutIn
           key={beatIdx}
@@ -268,7 +204,7 @@ export function BattleScene() {
           ))}
         </div>
 
-        <Stage chars={chars} images={images} names={names} beat={curBeat} beatKey={phase === 'animating' ? beatIdx : -1 - turnKey} label={phase === 'animating' || phase === 'over' ? null : stageLabel} />
+        <Stage chars={chars} images={images} names={names} beat={curBeat} beatKey={phase === 'animating' ? beatIdx : -1 - turnKey} label={stageLabel} />
 
         {(phase === 'animating' || phase === 'over') && (
           <div
@@ -287,56 +223,26 @@ export function BattleScene() {
               cursor: phase === 'animating' ? 'pointer' : 'default',
             }}
           >
-            {phase === 'animating' ? curBeat.banner : banner}
+            {phase === 'animating' ? curBeat.banner : state.winner === 'draw' ? 'ひきわけ' : `${names[state.winner as Side]} の かち！`}
           </div>
         )}
       </div>
 
       {phase === 'animating' ? (
-        <div style={{ display: 'grid', placeItems: 'center', gap: '0.35rem', width: '100%', position: 'relative', zIndex: 40 }}>
-          <div style={{ display: 'flex', gap: 5 }}>
-            {beats.map((_, i) => (
-              <span key={i} style={{ width: 8, height: 8, borderRadius: 99, background: i <= beatIdx ? 'var(--crayon-blue)' : 'var(--border)' }} />
-            ))}
-          </div>
+        <div style={{ display: 'flex', gap: 5 }}>
+          {beats.map((_, i) => (
+            <span key={i} style={{ width: 8, height: 8, borderRadius: 99, background: i <= beatIdx ? 'var(--crayon-blue)' : 'var(--border)' }} />
+          ))}
         </div>
       ) : phase === 'over' ? (
         <div style={{ fontSize: '0.9rem', opacity: 0.7 }}>けっかへ…</div>
-      ) : phase === 'handoff' ? (
-        <div style={{ display: 'grid', gap: '0.8rem', placeItems: 'center' }}>
-          <div style={{ fontWeight: 700 }}>P1 は えらんだ！ がめんを P2 にわたして…</div>
-          <button className="crayon-btn primary big" onClick={() => setPhase('choose-p2')}>
-            P2 の ばん →
-          </button>
+      ) : phase === 'reveal' ? (
+        <div style={{ width: '100%', maxWidth: '52rem', display: 'grid', gap: '0.4rem', justifyItems: 'center' }}>
+          {recap && <TurnRecap recap={recap} names={names} />}
+          <MoveReveal key={turnKey} chars={chars} picks={picks} charging={[state.combatants[0].charging, state.combatants[1].charging]} />
         </div>
       ) : (
-        <>
-          {recap && <TurnRecap recap={recap} names={names} />}
-          {mode === 'versus' && (
-            <div style={{ fontWeight: 700, color: phase === 'choose-p2' ? 'var(--crayon-blue)' : 'var(--crayon-red)' }}>
-              {phase === 'choose-p2' ? `P2（${names[1]}）` : `P1（${names[0]}）`} の てふだ
-            </div>
-          )}
-          {forced[chooserSide] ? (
-            <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} style={{ textAlign: 'center', display: 'grid', gap: '0.4rem', padding: '1rem 0' }}>
-              <motion.div animate={{ scale: [1, 1.12, 1] }} transition={{ repeat: Infinity, duration: 0.7 }} style={{ fontFamily: 'var(--font-display)', fontSize: '1.6rem', color: SIDE_COLOR[chooserSide] }}>
-                ためた ちからを はなつ！
-              </motion.div>
-              <div style={{ fontSize: '0.85rem', color: 'var(--ink-soft)' }}>
-                {mode === 'versus' ? `${names[chooserSide]} は えらべない（じどうで はなつ）` : 'このターンは じどうで はなつよ'}
-              </div>
-            </motion.div>
-          ) : (
-            <HandTable
-              hand={hand}
-              koseiId={state.combatants[chooserSide].koseiId}
-              turn={state.turn * 2 + chooserSide}
-              accent={SIDE_COLOR[chooserSide]}
-              note={handNote(state.combatants[chooserSide])}
-              onPick={phase === 'choose-p2' ? pickP2 : mode === 'versus' ? pickP1 : pickSolo}
-            />
-          )}
-        </>
+        <MinigameStage key={`mg-${turnKey}`} def={game} seed={(state.seed ^ Math.imul(state.turn, 0x9e37)) >>> 0} cpu={cpu} cpuSkill={cpuSkill} names={names} onDone={onMinigameDone} />
       )}
       <button
         className="crayon-btn"

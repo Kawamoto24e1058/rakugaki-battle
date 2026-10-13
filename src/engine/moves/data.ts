@@ -15,24 +15,25 @@ export type Cond =
   | { t: 'prev'; tag: string }
   | { t: 'foeCharging' };
 
-/** 手札いじり。次のターンの手札に影響する。 */
+/** 技えらびへの効果。次のターンに出る技に影響する。 */
 export type HandPred = 'attack' | 'support' | 'guard' | 'heal' | 'first' | 'rare' | 'status';
+/** つぎのターンに出る技（キャラの4つの技から ランダムに1つ）に かける効果。 */
 export type HandEffect =
+  /** じぶんの つぎの技を この種類にする（もっていれば）。 */
   | { kind: 'guarantee'; pred: HandPred; n: number }
-  | { kind: 'extra'; n: number }
-  | { kind: 'foeLess'; n: number }
+  /** じぶんの つぎの技に 大技・ため技が 出やすい。 */
   | { kind: 'luck' }
-  /** あいての つぎの手札から、この種類のカードを出なくする。 */
+  /** あいての つぎの技に、この種類が出なくなる。 */
   | { kind: 'ban'; pred: HandPred }
-  /** あいての つぎの手札を、この種類のカードだけにする。 */
+  /** あいての つぎの技を、この種類だけにする（もっていれば）。 */
   | { kind: 'only'; pred: HandPred };
 
 /** 場の効果（天気）。数ターン、属性わざが強く／弱くなる。 */
 export type FieldKind = 'rain' | 'sun' | 'thunder' | 'night';
 
 /**
- * 手札バトルで配られる技。
- * 毎ターン全ワザから3枚が配られるので、「どの手札でも1枚ごとに意味がある」ように
+ * キャラに4つずつ割り振られる技。毎ターン その4つから1つがランダムに出て、ミニゲームの結果で
+ * 先攻と威力が決まる。どの技が出ても意味があるように
  * 技ごとに はっきりした役割（先制・連続攻撃・状態異常・まもり・かいふく …）を持たせる。
  */
 export interface MoveDef {
@@ -84,7 +85,7 @@ export interface MoveDef {
   /** この条件を満たすと、効果（ダメージ・かいふく量）が whenMult 倍になる。 */
   when?: Cond;
   whenMult?: number;
-  /** つかうと、次のターンの手札が変わる。 */
+  /** つかうと、次のターンに出る技が変わる。 */
   hand?: HandEffect;
   /** 場の効果をはじめる（両者に効く）。 */
   field?: { kind: FieldKind; turns: number };
@@ -154,7 +155,7 @@ export const MOVES: Record<MoveId, MoveDef> = Object.fromEntries(
       atk('wg_dive', 'きゅうこうか', 24, 'かならず 先に うごく。', { first: true, tags: ['wind'] }),
       atk('fi_charge', 'とっしん', 30, '先に うごく。そのかわり 反動を うける。', { first: true, recoil: 20, tags: ['blow'] }),
       atk('as_sucker', 'ふいうち', 32, 'あいてが こうげきを えらんだときだけ 先に きまる。ほかは しっぱい。', { first: true, ambush: true, tags: ['trick'] }),
-      atk('c_quickdraw', 'はやうち', 18, '先に うごく。つぎの手札に こうげきが 1まい 来る。', { first: true, hand: { kind: 'guarantee', pred: 'attack', n: 1 } }),
+      atk('c_quickdraw', 'はやうち', 18, '先に うごく。つぎの技は こうげきになる。', { first: true, hand: { kind: 'guarantee', pred: 'attack', n: 1 } }),
 
       // くせのある技
       atk('sw_rapid', 'れんぞくぎり', 9, '3かい つづけて きる。', { hits: 3, tags: ['slash'] }),
@@ -194,7 +195,7 @@ export const MOVES: Record<MoveId, MoveDef> = Object.fromEntries(
       atk('f_burnout', 'やきつくす', 24, 'あいての HPが 4わり いかだと 1.5ばい。50% で やけど。', { attribute: 'fire', execute: 1.5, status: { kind: 'burn', chance: 0.5 } }),
       atk('ch_inferno', 'ごうかのたま', 56, 'ためて つぎのターンに 90% で やけど。', { attribute: 'fire', charge: true, status: { kind: 'burn', chance: 0.9 } }),
       atk('fire_sig', 'フレアバスター', 36, 'ぼうぎょ無視。かならず やけど。', { attribute: 'fire', pierce: true, riskShift: 6, status: { kind: 'burn', chance: 1 } }),
-      sup('f_stoke', 'ひをおこす', '3ターン、こうげきが 5わり あがる。つぎの手札に こうげきが 1まい 来る。', { attribute: 'fire', buff: { stat: 'atk', turns: 3 }, hand: { kind: 'guarantee', pred: 'attack', n: 1 } }),
+      sup('f_stoke', 'ひをおこす', '3ターン、こうげきが 5わり あがる。つぎの技は こうげきになる。', { attribute: 'fire', buff: { stat: 'atk', turns: 3 }, hand: { kind: 'guarantee', pred: 'attack', n: 1 } }),
       sup('fire_dry', 'ねっぷう', 'こおりや どくを ふきとばして かいふく。', { attribute: 'fire', cures: 'one', heal: 14 }),
 
       // ============================================================
@@ -239,11 +240,11 @@ export const MOVES: Record<MoveId, MoveDef> = Object.fromEntries(
       atk('b_rising', 'ライジングショット', 26, 'きゅうしょに とても あたりやすい。', { attribute: 'bolt', critBoost: 0.4 }),
       atk('ch_thunder', 'らいめい', 58, 'ためて つぎのターンに 80% で まひ。', { attribute: 'bolt', charge: true, status: { kind: 'paralysis', chance: 0.8 } }),
       atk('bolt_sig', 'サンダーレイド', 32, '先に うごく。90% で まひ。', { attribute: 'bolt', first: true, status: { kind: 'paralysis', chance: 0.9 } }),
-      sup('b_static', 'せいでんき', '3ターン、すばやさ 5わり あがる。つぎの手札に 先に うごく技が 1まい 来る。', { attribute: 'bolt', buff: { stat: 'spd', turns: 3 }, hand: { kind: 'guarantee', pred: 'first', n: 1 } }),
-      sup('b_flashidea', 'ひらめき', '3ターン、きゅうしょに とても あたりやすい。つぎの手札が 1まい ふえる。', { attribute: 'bolt', buff: { stat: 'luck', turns: 3 }, hand: { kind: 'extra', n: 1 } }),
+      sup('b_static', 'せいでんき', '3ターン、すばやさ 5わり あがる。つぎの技は 先に うごく技になる。', { attribute: 'bolt', buff: { stat: 'spd', turns: 3 }, hand: { kind: 'guarantee', pred: 'first', n: 1 } }),
+      sup('b_flashidea', 'ひらめき', '3ターン、きゅうしょに とても あたりやすい。つぎの技は 大技が 出やすい。', { attribute: 'bolt', buff: { stat: 'luck', turns: 3 }, hand: { kind: 'luck' } }),
 
       // ============================================================
-      //  やみ（こんらん・ねむり・すいとり・てふだくずし）
+      //  やみ（こんらん・ねむり・すいとり・まどわし）
       // ============================================================
       atk('d_shadow', 'かげぬい', 14, '40% で こんらん。', { attribute: 'dark', status: { kind: 'confuse', chance: 0.4 } }),
       atk('dark_a2', 'やみのやいば', 24, '55% で こんらん。', { attribute: 'dark', status: { kind: 'confuse', chance: 0.55 }, tags: ['slash'] }),
@@ -253,9 +254,9 @@ export const MOVES: Record<MoveId, MoveDef> = Object.fromEntries(
       atk('ch_blackhole', 'ブラックホール', 54, 'ためて つぎのターンに すいとり＋50% で こんらん。', { attribute: 'dark', charge: true, drain: 40, status: { kind: 'confuse', chance: 0.5 } }),
       atk('dark_sig', 'ドレインバイト', 32, 'ダメージの 半分を かいふく。50% で こんらん。', { attribute: 'dark', drain: 55, status: { kind: 'confuse', chance: 0.5 }, tags: ['bite'] }),
       sup('d_lullaby', 'ねむりのうた', '55% で あいてを ねむらせる。', { attribute: 'dark', target: 'enemy', status: { kind: 'sleep', chance: 0.55 } }),
-      sup('d_scramble', 'てふだくずし', 'あいての つぎの手札を 1まい へらす。', { attribute: 'dark', target: 'enemy', hand: { kind: 'foeLess', n: 1 } }),
+      sup('d_scramble', 'まどわし', 'あいての つぎの技が ほじょわざに なる（もっていれば）。', { attribute: 'dark', target: 'enemy', hand: { kind: 'only', pred: 'support' } }),
       sup('d_moonpray', 'よるのいのり', 'あいてが じょうたいいじょうなら かいふくが 1.7ばい。', { attribute: 'dark', heal: 22, when: FOE_HAS('debuff'), whenMult: 1.7 }),
-      sup('d_hex', 'おまじない', 'あいての ぼうぎょを 2ターン さげる。つぎの手札に 大技が 来やすい。', { attribute: 'dark', target: 'enemy', debuff: { stat: 'def', turns: 2 }, hand: { kind: 'luck' } }),
+      sup('d_hex', 'おまじない', 'あいての ぼうぎょを 2ターン さげる。つぎの技は 大技が 出やすい。', { attribute: 'dark', target: 'enemy', debuff: { stat: 'def', turns: 2 }, hand: { kind: 'luck' } }),
 
       // ============================================================
       //  ほじょ：まもり（先に うごく）
@@ -263,7 +264,7 @@ export const MOVES: Record<MoveId, MoveDef> = Object.fromEntries(
       sup('c_guard', 'ガード', '先に うごく。2ターン、うけるダメージが 半分。', { guardPct: 50 }),
       sup('sh_counter', 'カウンター', '先に うごく。2ターン、こうげきしてきた あいてに ダメージの 半分を かえす。', { reflect: 35 }),
       sup('c_roll', 'まるまる', '先に うごく。2ターン、ダメージ半分。少し かいふく。', { guardPct: 50, heal: 8 }),
-      sup('c_dodge', 'みがまえ', '先に うごく。3ターン ダメージ 40%へらす。つぎの手札に まもりが 1まい 来る。', { buff: { stat: 'def', turns: 3 }, hand: { kind: 'guarantee', pred: 'guard', n: 1 } }),
+      sup('c_dodge', 'みがまえ', '先に うごく。3ターン ダメージ 40%へらす。つぎの技は まもりになる。', { buff: { stat: 'def', turns: 3 }, hand: { kind: 'guarantee', pred: 'guard', n: 1 } }),
 
       // ============================================================
       //  ほじょ：かいふく
@@ -271,7 +272,7 @@ export const MOVES: Record<MoveId, MoveDef> = Object.fromEntries(
       sup('ca_heal', 'いやしのて', 'HPを おおきく かいふく。', { heal: 34 }),
       sup('ca_breath', 'ふかこきゅう', 'じょうたいいじょうを 1つ なおして かいふく。', { cures: 'one', heal: 15 }),
       sup('u_detox', 'デトックス', 'じょうたいいじょうを ぜんぶ なおす。', { cures: 'all' }),
-      sup('c_onigiri', 'おにぎり', 'HPを ふつうに かいふく。つぎの手札が 1まい ふえる。', { heal: 20, hand: { kind: 'extra', n: 1 } }),
+      sup('c_onigiri', 'おにぎり', 'HPを かいふく。', { heal: 24 }),
       sup('c_rest', 'ひとやすみ', '自分の HPが 3わり いかなら かいふくが 2ばい。', { heal: 20, when: { t: 'selfHp', below: 0.3 }, whenMult: 2 }),
       sup('c_lunch', 'あとのおたのしみ', 'まえのターンに まもっていたら かいふくが 1.8ばい。', { heal: 22, when: PREV('guard'), whenMult: 1.8 }),
 
@@ -281,9 +282,9 @@ export const MOVES: Record<MoveId, MoveDef> = Object.fromEntries(
       sup('c_focus', 'きあいだめ', '3ターン、こうげきが 5わり あがる。', { buff: { stat: 'atk', turns: 3 } }),
       sup('wg_flap', 'はばたき', '3ターン、すばやさが 5わり あがる。かわしやすい。', { buff: { stat: 'spd', turns: 3 } }),
       sup('ey_read', 'よみのちから', '3ターン、きゅうしょに とても あたりやすい。', { buff: { stat: 'luck', turns: 3 } }),
-      sup('c_wish', 'ねがいごと', 'つぎの手札に 大技・ため技が 来やすい。', { hand: { kind: 'luck' } }),
-      sup('c_gather', 'みちびき', 'つぎの手札に こうげきが 2まい 来る。', { hand: { kind: 'guarantee', pred: 'attack', n: 2 } }),
-      sup('c_ward', 'おまもり', 'つぎの手札に かいふくが 1まい 来る。', { hand: { kind: 'guarantee', pred: 'heal', n: 1 } }),
+      sup('c_wish', 'ねがいごと', 'つぎの技は 大技・ため技が 出やすい。', { hand: { kind: 'luck' } }),
+      sup('c_gather', 'みちびき', 'つぎの技は かならず こうげきになる。', { hand: { kind: 'guarantee', pred: 'attack', n: 2 } }),
+      sup('c_ward', 'おまもり', 'つぎの技は かいふくになる（もっていれば）。', { hand: { kind: 'guarantee', pred: 'heal', n: 1 } }),
 
       // ============================================================
       //  ほじょ：あいてを よわらせる
@@ -291,7 +292,6 @@ export const MOVES: Record<MoveId, MoveDef> = Object.fromEntries(
       sup('ey_glare', 'にらむ', 'あいての こうげきを 2ターン さげる。', { target: 'enemy', debuff: { stat: 'atk', turns: 2 } }),
       sup('ta_look', 'みおろす', 'あいての すばやさを 2ターン さげる。', { target: 'enemy', debuff: { stat: 'spd', turns: 2 } }),
       sup('bg_roar', 'ほえる', 'あいてが うけるダメージを 2ターン 3わり ふやす。', { target: 'enemy', debuff: { stat: 'def', turns: 2 } }),
-      sup('c_disturb', 'じゃまをする', 'あいての つぎの手札を 1まい へらす。', { target: 'enemy', hand: { kind: 'foeLess', n: 1 } }),
 
       // ============================================================
       //  とくしゅ：場の効果（天気）
@@ -326,8 +326,8 @@ export const MOVES: Record<MoveId, MoveDef> = Object.fromEntries(
       //  とくしゅ：まねる・ふうじる
       // ============================================================
       sup('cp_copy', 'まねっこ', 'あいてが えらんだ技を そのまま つかう。', { copy: true }),
-      sup('cp_nobig', 'だいわざふうじ', 'あいての つぎの手札に 大技・ため技が 出なくなる。', { target: 'enemy', hand: { kind: 'ban', pred: 'rare' } }),
-      sup('cp_noguard', 'まもりふうじ', 'あいての つぎの手札に まもりが 出なくなる。', { target: 'enemy', hand: { kind: 'ban', pred: 'guard' } }),
+      sup('cp_nobig', 'だいわざふうじ', 'あいての つぎの技に 大技・ため技が 出なくなる。', { target: 'enemy', hand: { kind: 'ban', pred: 'rare' } }),
+      sup('cp_noguard', 'まもりふうじ', 'あいての つぎの技に まもりが 出なくなる。', { target: 'enemy', hand: { kind: 'ban', pred: 'guard' } }),
 
       // ============================================================
       //  とくしゅ：いれかえ
@@ -346,7 +346,7 @@ export const MOVES: Record<MoveId, MoveDef> = Object.fromEntries(
       // ============================================================
       //  とくしゅ：きょうせい・よみ
       // ============================================================
-      sup('fc_taunt', 'ちょうはつ', 'あいての つぎの手札が こうげきだけに なる。', { target: 'enemy', hand: { kind: 'only', pred: 'attack' } }),
+      sup('fc_taunt', 'ちょうはつ', 'あいての つぎの技が こうげきに なる。', { target: 'enemy', hand: { kind: 'only', pred: 'attack' } }),
       sup('fc_read', 'みきり', '先に うごく。あいてが こうげきなら ふせいで 30の はんげき。', { read: { power: 30 } }),
     ] as MoveDef[]
   ).map((m) => [m.id, m]),
@@ -374,7 +374,7 @@ export function moveTags(m: MoveDef): string[] {
   return [...t];
 }
 
-/** 手札いじりの「このタイプのカードを保証」の判定。 */
+/** 技えらびの「この種類の技」の判定。 */
 export function matchesPred(m: MoveDef, pred: HandPred): boolean {
   switch (pred) {
     case 'attack': return m.category === 'attack';

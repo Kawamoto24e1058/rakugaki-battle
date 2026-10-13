@@ -225,10 +225,8 @@ function stickersFor(move: MoveDef, pal: Pal): ReactElement[] {
     out.push(
       <g key="hd">
         <Glyph motif="cards" pal={pal} x={-1} y={1} s={0.2} />
-        {(h.kind === 'extra' || h.kind === 'foeLess' || h.kind === 'guarantee') && (
-          <text x={7} y={-3} textAnchor="middle" fontSize={9} fontWeight={900} fill={h.kind === 'foeLess' ? '#d8321c' : '#1b7a47'} fontFamily="var(--font-display)" stroke="#fff" strokeWidth={2} paintOrder="stroke">
-            {h.kind === 'extra' ? `+${h.n}` : h.kind === 'foeLess' ? `-${h.n}` : h.n}
-          </text>
+        {(h.kind === 'ban' || h.kind === 'only') && (
+          <path d="M-8,-8 L8,8" stroke="#d8321c" strokeWidth={2.4} strokeLinecap="round" />
         )}
       </g>,
     );

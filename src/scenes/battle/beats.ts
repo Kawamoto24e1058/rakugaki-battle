@@ -1,4 +1,5 @@
-import type { ClashEvent, ClashState, Side } from '../../engine';
+import type { ClashEvent, ClashState, MinigameResult, Side } from '../../engine';
+import { MG_LOSE_MULT, MG_WIN_MULT } from '../../engine';
 import { getKosei, FIELD_META } from '../../engine';
 import { STATUS_META } from '../../engine/status';
 import { getMove, MOVES, type MoveDef } from '../../engine/moves';
@@ -62,6 +63,7 @@ export function buildBeats(
   next: ClashState,
   names: [string, string],
   chars: [Character, Character],
+  mg: MinigameResult | null = null,
 ): Beat[] {
   const beats: Beat[] = [];
   let hp: [number, number] = [...start.hp];
@@ -132,7 +134,8 @@ export function buildBeats(
         callout = null;
         const order: OrderInfo = { first: ev.first, reason: ev.reason, spd: ev.spd };
         table = { ...EMPTY_TABLE, first: ev.first };
-        add('すばやさくらべ！', { order, ms: 2800 });
+        if (ev.reason === 'minigame') add(`${names[ev.first]} が ミニゲームに かった！ 先に こうげき`, { order, ms: 1500 });
+        else add('すばやさくらべ！', { order, ms: 2600 });
         break;
       }
       case 'act': {
@@ -170,6 +173,7 @@ export function buildBeats(
           quick: !!card?.quick,
           rare: !!card?.rare,
           blocked: ev.kind === 'blocked',
+          boost: !mg || mg.winner == null || ev.kind === 'blocked' ? undefined : mg.winner === side ? `ミニゲーム かち ×${MG_WIN_MULT}${mg.perfect ? '・クリティカル' : ''}` : `ミニゲーム まけ ×${MG_LOSE_MULT}`,
         };
         if (ev.kind === 'charge') {
           add(`${names[side]} は ちからを ためている…！ 次の ターンに はなつよ`, {

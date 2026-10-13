@@ -11,6 +11,7 @@ import type { Beat, Callout, Chip, Floating, OrderInfo } from './types';
 const SIDE_COLOR: [string, string] = ['#e8503a', '#2f7dd1'];
 
 const REASON_TEXT: Record<OrderReason, string> = {
+  minigame: 'ミニゲームに かった ほうが 先に うごく！',
   kosei: 'こせいわざは かならず 先に うごく！',
   priority: '先に うごく わざを つかった！',
   passive: 'こせいの ちからで 先に うごく！',
@@ -160,6 +161,7 @@ function CalloutBand({ c }: { c: Callout }) {
         <div style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: '0.72rem', fontWeight: 800, color: '#fff' }}>
           {c.tag && <span style={{ background: 'rgba(0,0,0,.28)', borderRadius: 99, padding: '0 0.5rem' }}>{c.tag}</span>}
           {c.quick && <span style={{ background: '#fff4c9', color: '#7a5a00', borderRadius: 99, padding: '0 0.5rem' }}>先に うごく</span>}
+          {c.boost && <span style={{ background: c.boost.includes('かち') ? '#fff4c9' : '#e6e1d3', color: '#33302b', borderRadius: 99, padding: '0 0.5rem' }}>{c.boost}</span>}
         </div>
         <div style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(1.35rem, 4.6vw, 2rem)', color: '#fff', WebkitTextStroke: '3.5px var(--ink)', paintOrder: 'stroke', lineHeight: 1.15 }}>
           {c.name}

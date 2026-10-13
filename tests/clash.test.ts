@@ -5,12 +5,10 @@ import { rectImage } from './helpers';
 import {
   createClashState,
   resolveClashTurn,
-  dealHand,
-  cpuChoose,
+  pickMoveFor,
   playClashToEnd,
   koseiReady,
   forcedChoice,
-  HAND_SIZE,
   type ClashState,
   type ClashEvent,
 } from '../src/engine/battle/clash';
@@ -23,69 +21,77 @@ function drawn(color: [number, number, number], w = 80, h = 90) {
 const acts = (log: ClashEvent[]) => log.filter((e): e is Extract<ClashEvent, { t: 'act' }> => e.t === 'act');
 
 describe('手札バトル', () => {
-  it('手札：毎ターン3枚・重複なし・同じ状態なら同じ手札（UIが先に見せられる）', () => {
-    const st = createClashState(drawn([210, 40, 30]), drawn([30, 90, 210]), 11);
-    for (const side of [0, 1] as const) {
-      const h = dealHand(st, side);
-      expect(h.length).toBe(HAND_SIZE);
-      expect(new Set(h).size).toBe(HAND_SIZE);
-      expect(dealHand(st, side)).toEqual(h);
-      for (const id of h) if (id !== 'kosei') expect(MOVES[id]).toBeTruthy();
-    }
-    // ターンが進むと手札が変わる
-    const t1 = dealHand(st, 0).join();
-    let changed = false;
-    let cur: ClashState = st;
-    for (let i = 0; i < 4 && !cur.done; i++) {
-      cur = resolveClashTurn(cur, [dealHand(cur, 0)[0], dealHand(cur, 1)[0]]);
-      if (!cur.done && dealHand(cur, 0).join() !== t1) changed = true;
-    }
-    expect(changed).toBe(true);
-  });
-
-  it('手札はキャラの絵（属性・形）に左右されず、ぜんぶのワザから配られる', () => {
+  it('技：キャラは4つの技をもち、毎ターン その中から1つ出る（同じ状態なら同じ技）', () => {
+    const a = drawn([210, 40, 30]);
+    expect(a.moveIds.length).toBe(4);
+    expect(new Set(a.moveIds).size).toBe(4);
+    let st = createClashState(a, drawn([30, 90, 210]), 11);
     const seen = new Set<string>();
-    for (let seed = 1; seed <= 300; seed++) {
-      const st = createClashState(drawn([210, 40, 30]), drawn([30, 90, 210]), seed);
-      for (const id of dealHand(st, 0)) seen.add(id);
-    }
-    expect(seen.size).toBeGreaterThan(Object.keys(MOVES).length * 0.6);
-  });
-
-  it('性格：あばれん坊は こうげきわざ、おだやかは ほじょわざが 出やすい', () => {
-    const atkShare = (personality: 'aggressive' | 'calm') => {
-      const c = drawn([210, 40, 30]);
-      c.personality = personality;
-      let atk = 0;
-      let n = 0;
-      for (let seed = 1; seed <= 400; seed++) {
-        const st = createClashState(c, c, seed);
-        for (const id of dealHand(st, 0)) {
-          if (id === 'kosei') continue;
-          n++;
-          if (getMove(id).category === 'attack') atk++;
-        }
+    for (let i = 0; i < 20 && !st.done; i++) {
+      const p0 = pickMoveFor(st, 0);
+      expect(pickMoveFor(st, 0)).toBe(p0);
+      if (p0 !== 'kosei' && p0 !== 'release') {
+        expect(a.moveIds).toContain(p0);
+        seen.add(p0);
       }
-      return atk / n;
-    };
-    expect(atkShare('aggressive')).toBeGreaterThan(atkShare('calm') + 0.1);
+      st = resolveClashTurn(st, [p0, pickMoveFor(st, 1)]);
+    }
+    expect(seen.size).toBeGreaterThanOrEqual(2);
   });
 
-  it('こせい：使えるとき ときどき手札に混ざる／使えないときは混ざらない', () => {
+  it('技の割り振り：同じ絵なら同じ技、いろんな絵で いろんな技が出る', () => {
+    expect(drawn([210, 40, 30]).moveIds).toEqual(drawn([210, 40, 30]).moveIds);
+    const seen = new Set<string>();
+    for (let i = 0; i < 60; i++) for (const id of drawn([(i * 53) % 256, (i * 97) % 256, (i * 29) % 256], 40 + (i % 60), 50 + ((i * 7) % 60)).moveIds) seen.add(id);
+    expect(seen.size).toBeGreaterThan(40);
+  });
+
+  it('技の割り振り：属性のこうげき・ふつうのこうげき・ほじょを かならず もつ', () => {
+    for (let i = 0; i < 40; i++) {
+      const c = drawn([(i * 53) % 256, (i * 97) % 256, (i * 29) % 256], 40 + (i % 60), 50 + ((i * 7) % 60));
+      const ms = c.moveIds.map((id) => getMove(id));
+      expect(ms.some((m) => m.category === 'attack' && m.attribute === c.attribute)).toBe(true);
+      expect(ms.some((m) => m.category === 'attack' && !m.attribute)).toBe(true);
+      expect(ms.some((m) => m.category === 'support')).toBe(true);
+    }
+  });
+
+  it('こせい：使えるとき ときどき技のかわりに出る／使えないときは出ない', () => {
     let withKosei = 0;
     for (let seed = 1; seed <= 200; seed++) {
       const st = createClashState(drawn([210, 40, 30]), drawn([30, 90, 210]), seed);
-      if (dealHand(st, 0).includes('kosei')) withKosei++;
+      if (pickMoveFor(st, 0) === 'kosei') withKosei++;
     }
-    expect(withKosei).toBeGreaterThan(20);
-    expect(withKosei).toBeLessThan(120);
-
+    expect(withKosei).toBeGreaterThan(15);
+    expect(withKosei).toBeLessThan(90);
     const st = createClashState(drawn([210, 40, 30]), drawn([30, 90, 210]), 5);
     st.combatants[0].koseiCd = 3;
     for (let t = 1; t <= 40; t++) {
       st.turn = t;
-      expect(dealHand(st, 0)).not.toContain('kosei');
+      expect(pickMoveFor(st, 0)).not.toBe('kosei');
     }
+  });
+
+  it('ミニゲーム：勝った方が先に うごき 威力アップ、負けた方は 威力ダウン、パーフェクトは クリティカル', () => {
+    const dmg = (mg: { winner: 0 | 1 | null; perfect: boolean }) => {
+      let d0 = 0;
+      for (let seed = 1; seed <= 40; seed++) {
+        const st = resolveClashTurn(createClashState(drawn([210, 40, 30]), drawn([30, 90, 210]), seed), ['c_tackle', 'c_tackle'], mg);
+        d0 += st.log.reduce((x, e) => (e.t === 'damage' && e.side === 1 ? x + e.amount : x), 0);
+      }
+      return d0;
+    };
+    const win = dmg({ winner: 0, perfect: false });
+    const lose = dmg({ winner: 1, perfect: false });
+    expect(win).toBeGreaterThan(lose * 1.25);
+    // 勝った方が先
+    const st = resolveClashTurn(createClashState(drawn([210, 40, 30]), drawn([30, 90, 210]), 3), ['c_tackle', 'sm_dart'], { winner: 0, perfect: false });
+    expect(acts(st.log)[0].side).toBe(0);
+    const ord = st.log.find((e) => e.t === 'order');
+    expect(ord && ord.t === 'order' && ord.reason).toBe('minigame');
+    // パーフェクト：クリティカル
+    const p = resolveClashTurn(createClashState(drawn([210, 40, 30]), drawn([30, 90, 210]), 4), ['c_tackle', 'c_guard'], { winner: 0, perfect: true });
+    expect(p.log.some((e) => e.t === 'damage' && e.side === 1 && e.tag === 'クリティカル')).toBe(true);
   });
 
   it('決定論：同じシード・同じ選択なら結果が完全一致', () => {
@@ -184,19 +190,11 @@ describe('手札バトル', () => {
     expect(c0.koseiCd > 0 || c0.koseiUses < 99).toBe(true);
   });
 
-  it('使えないこせいを選んでも 手札の技が出る（固まらない）', () => {
+  it('使えないこせいを選んでも キャラの技が出る（固まらない）', () => {
     const st0 = createClashState(drawn([210, 40, 30]), drawn([30, 90, 210]), 8);
     st0.combatants[0].koseiCd = 5;
     const st = resolveClashTurn(st0, ['kosei', 'c_tackle']);
     expect(acts(st.log).some((e) => e.side === 0 && e.kind !== 'kosei')).toBe(true);
-  });
-
-  it('CPU は手札の中から選ぶ', () => {
-    for (let seed = 1; seed <= 40; seed++) {
-      const st = createClashState(drawn([210, 40, 30]), drawn([30, 90, 210]), seed);
-      const pick = cpuChoose(st, 1, mulberry32(seed));
-      expect(dealHand(st, 1)).toContain(pick);
-    }
   });
 
   it('同キャラ同士なら 左右の勝率はほぼ五分', () => {
@@ -355,30 +353,15 @@ describe('手札バトル', () => {
     expect(st2.log.some((e) => e.t === 'bonus')).toBe(false);
   });
 
-  it('手札いじり：おにぎり→つぎの手札が4まい／てふだくずし→あいての手札が2まい', () => {
-    let st = createClashState(drawn([210, 40, 30]), drawn([30, 90, 210]), 51);
-    expect(dealHand(st, 0).length).toBe(3);
-    st = resolveClashTurn(st, ['c_scratch', 'd_scramble']);
-    expect(dealHand(st, 0).length).toBe(2); // あいてに へらされた
-    expect(dealHand(st, 1).length).toBe(3);
-    st = resolveClashTurn(st, ['c_scratch', 'c_scratch']);
-    // 効果は1ターンだけ
-    expect(dealHand(st, 0).length).toBe(3);
-    // おにぎり単体
-    let st2 = createClashState(drawn([210, 40, 30]), drawn([30, 90, 210]), 52);
-    st2 = resolveClashTurn(st2, ['c_onigiri', 'c_scratch']);
-    expect(dealHand(st2, 0).length).toBe(4);
-  });
-
-  it('手札いじり：みちびき→つぎの手札に こうげきが2まい以上／おまもり→かいふくが入る', () => {
+  it('つぎの技いじり：みちびき→じぶんの次の技は こうげき／まどわし→あいての次の技は ほじょ', () => {
     for (let seed = 1; seed <= 25; seed++) {
-      let st = createClashState(drawn([210, 40, 30]), drawn([30, 90, 210]), seed);
-      st = resolveClashTurn(st, ['c_gather', 'c_scratch']);
-      const attacks = dealHand(st, 0).filter((id) => id !== 'kosei' && getMove(id).category === 'attack');
-      expect(attacks.length).toBeGreaterThanOrEqual(2);
-      let st2 = createClashState(drawn([210, 40, 30]), drawn([30, 90, 210]), seed);
-      st2 = resolveClashTurn(st2, ['c_ward', 'c_scratch']);
-      expect(dealHand(st2, 0).some((id) => id !== 'kosei' && (getMove(id).heal || getMove(id).cures))).toBe(true);
+      const a = drawn([210, 40, 30]);
+      let st = resolveClashTurn(createClashState(a, drawn([30, 90, 210]), seed), ['c_gather', 'c_scratch']);
+      const p = pickMoveFor(st, 0);
+      if (p !== 'kosei' && p !== 'release') expect(getMove(p).category).toBe('attack');
+      st = resolveClashTurn(createClashState(a, drawn([30, 90, 210]), seed), ['d_scramble', 'c_scratch']);
+      const q = pickMoveFor(st, 1);
+      if (q !== 'kosei' && q !== 'release') expect(getMove(q).category).toBe('support');
     }
   });
 
@@ -552,18 +535,17 @@ describe('手札バトル', () => {
     expect(miss.log.some((e) => e.t === 'bonus' && e.label.includes('からぶり'))).toBe(true);
   });
 
-  it('手札を縛る：ふうじは そのカードが出なくなる／ちょうはつは こうげきだけ', () => {
+  it('技を縛る：だいわざふうじ／ちょうはつ は あいての次の技に効く', () => {
     for (let seed = 1; seed <= 25; seed++) {
-      let st = mk(seed);
-      st = resolveClashTurn(st, ['cp_nobig', 'c_scratch']);
-      for (const id of dealHand(st, 1)) {
-        if (id === 'kosei') continue;
-        const m = getMove(id);
-        expect(m.charge || (m.category === 'attack' && m.power >= 34)).toBeFalsy();
-      }
-      let t = mk(seed);
-      t = resolveClashTurn(t, ['fc_taunt', 'c_scratch']);
-      for (const id of dealHand(t, 1)) if (id !== 'kosei') expect(getMove(id).category).toBe('attack');
+      const b = drawn([30, 90, 210]);
+      b.moveIds = ['c_tackle', 'sw_great', 'c_guard', 'ca_heal'];
+      let st = resolveClashTurn(createClashState(drawn([210, 40, 30]), b, seed), ['cp_nobig', 'c_scratch']);
+      expect(pickMoveFor(st, 1)).not.toBe('sw_great');
+      let t = resolveClashTurn(createClashState(drawn([210, 40, 30]), b, seed), ['fc_taunt', 'c_scratch']);
+      const q = pickMoveFor(t, 1);
+      if (q !== 'kosei') expect(getMove(q).category).toBe('attack');
+      void st;
+      void t;
     }
   });
 });

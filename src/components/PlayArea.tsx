@@ -29,6 +29,7 @@ export const EMPTY_TABLE: TableState = {
 const SLOT = 'min(17vw, 5.4rem)';
 
 const REASON_TEXT: Record<OrderReason, string> = {
+  minigame: 'ミニゲームに かった ほうが 先！',
   kosei: 'こせいわざは かならず 先に うごく！',
   priority: '先に うごく わざで 先手！',
   passive: 'こせいの ちからで 先に うごく！',

@@ -46,6 +46,8 @@ export interface Callout {
   quick: boolean;
   rare: boolean;
   blocked: boolean;
+  /** ミニゲームの勝ち負けによる 威力（例 'かち ×1.3'）。 */
+  boost?: string;
 }
 
 export interface OrderInfo {

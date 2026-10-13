@@ -10,8 +10,17 @@ import { ZukanScene } from './scenes/ZukanScene';
 import { CardGalleryScene } from './scenes/CardGalleryScene';
 import { CrayonDefs } from './components/art/CardArt';
 import { FxDemo } from './scenes/battle/FxDemo';
+import { MinigameDemo } from './minigames/MinigameDemo';
 
 export default function App() {
+  if (import.meta.env.DEV && window.location.search.includes('mg=')) {
+    return (
+      <>
+        <CrayonDefs />
+        <MinigameDemo />
+      </>
+    );
+  }
   if (import.meta.env.DEV && window.location.search.includes('fxdemo')) {
     return (
       <>

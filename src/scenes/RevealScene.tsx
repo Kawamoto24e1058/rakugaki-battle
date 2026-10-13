@@ -4,6 +4,9 @@ import { useGame } from '../store/gameStore';
 import { AttributeBadge, AnimatedStatBar, STAT_MAX, STAT_LABEL_JP as STAT_JP, CharacterSprite } from '../components/bits';
 import { archetypeLabel, getKosei, limitJp } from '../engine';
 import type { Stats } from '../engine/types';
+import { getMove } from '../engine/moves';
+import { GameCard } from '../components/GameCard';
+import { moveCard } from '../components/moveText';
 
 const WEAPON_JP: Record<string, string> = { sword: 'ツメ・剣', wand: '杖', shield: '盾', wing: '翼' };
 
@@ -187,13 +190,18 @@ export function RevealScene() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.25 + STAT_ORDER.length * 0.16 + 0.35 }}
-          style={{ fontSize: '0.78rem', color: 'var(--ink-soft)', textAlign: 'center' }}
+          style={{ fontSize: '0.78rem', color: 'var(--ink-soft)', textAlign: 'center', width: '100%' }}
         >
-          わざは まいターン ランダムに 3まい くばられる！
-          <br />
-          {character.personality === 'aggressive'
-            ? 'あばれん坊だから こうげきわざが 出やすいよ'
-            : 'おだやかだから ほじょわざが 出やすいよ'}
+          <div style={{ fontWeight: 800, color: 'var(--ink)', marginBottom: 4 }}>この子の わざ（まいターン この中から 1つが でるよ）</div>
+          <div style={{ display: 'flex', gap: '0.45rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+            {character.moveIds.map((id) => {
+              try {
+                return <GameCard key={id} card={moveCard(getMove(id))} size="min(21vw, 6.8rem)" />;
+              } catch {
+                return null;
+              }
+            })}
+          </div>
         </motion.div>
       </motion.div>
 

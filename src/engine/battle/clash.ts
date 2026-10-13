@@ -1,16 +1,16 @@
 /**
- * 手札バトル。
+ * ミニゲームバトル。
  *
- * 毎ターン、全ワザの中から「3枚」がランダムに配られ（性格・運でかたよりが出る）、
- * その中から1枚を伏せて選ぶ → 同時公開 → 速さ順（まもり系・先制技・こせいは先に）に発動する。
- * こせい技は、ときどき手札に混ざる。絵が決めるのはステータス・性格・こせい。
+ * キャラは 絵から決まった技を4つ もっている。毎ターン、その4つから1つがランダムに出る（こせい技も ときどき出る）。
+ * 両者がミニゲームで勝負し、勝った方が 先に うごき 威力アップ、負けた方は 後から 威力ダウン。
+ * 大差（パーフェクト）で勝つと クリティカル。引き分けは すばやさ順。
  *
- * ターンの手札は state.seed と turn から決まる（dealHand）ので、UI は選ぶ前に手札を表示できる。
+ * そのターンに出る技は state.seed と turn から決まる（pickMoveFor）ので、UI は ミニゲームの前に見せられる。
  */
 import type { Attribute, Character, StatusKind, Stats } from '../types';
 import { attributeStatusMult } from '../attributes';
 import { STATUS_META, type ActiveStatus } from '../status';
-import { MOVES, getMove, hasPriority, isRareMove, matchesPred, moveTags, type Cond, type FieldKind, type HandEffect, type HandPred, type MoveDef, type MoveId } from '../moves';
+import { MOVES, getMove, hasPriority, isRareMove, matchesPred, moveTags, type Cond, type FieldKind, type HandEffect, type MoveDef, type MoveId } from '../moves';
 import { ATTRIBUTE_STATUS } from '../status';
 import { ATTRIBUTES } from '../types';
 import { koseiOrDefault, type Kosei } from '../personalities';
@@ -26,17 +26,12 @@ const PER_HIT_CAP_PCT = 0.42;
 /** ため技の1発の上限。 */
 const CHARGE_CAP_PCT = 0.62;
 /** 全体の火力。試合が「時間切れ（サドンデス）」でなく選択で決着するように調整。 */
-const DMG_SCALE = 0.9;
+const DMG_SCALE = 1.5;
 /** 回復の底上げ。 */
 const HEAL_SCALE = 1.5;
 /** こせいのアクティブ技の威力の底上げ（絵の個性の主役にする）。 */
 const KOSEI_POWER_MULT = 1.25;
 
-/** 手札の枚数（ふだん）。技で ふえたり へったりする。 */
-export const HAND_SIZE = 3;
-const MAX_HAND = 4;
-/** こせいが使えるとき、手札に混ざる確率。 */
-const KOSEI_DEAL_CHANCE = 0.3;
 
 // ---------- 状態 ----------
 
@@ -54,11 +49,15 @@ export interface ClashCombatant {
   statuses: ActiveStatus[];
   /** ため中の技（次のターンに自動で はなつ）。 */
   charging: MoveId | null;
+  /** このキャラの技（4つ）。 */
+  moveIds: MoveId[];
+  /** 前のターンに出た技（同じ技が続きにくくする）。 */
+  lastMoveId: MoveId | null;
   /** 前のターンに つかった技のタグ（コンボ判定用）。 */
   lastTags: string[];
-  /** このターンの手札にかかる効果（前のターンに決まったもの）。 */
+  /** このターンに出る技にかかる効果（前のターンに決まったもの）。 */
   handMods: HandEffect[];
-  /** このターンの行動で決まる、次のターンの手札への効果。 */
+  /** このターンの行動で決まる、次のターンに出る技への効果。 */
   nextMods: HandEffect[];
   /** バリア（HPの前に ダメージを うける）。 */
   barrier: { amount: number; turns: number } | null;
@@ -88,7 +87,16 @@ const FIELD_DOWN = 0.75;
 export type ActKind = 'attack' | 'support' | 'kosei' | 'blocked' | 'charge';
 
 /** どちらが先に動くか、の理由。 */
-export type OrderReason = 'kosei' | 'priority' | 'passive' | 'speed' | 'coin';
+export type OrderReason = 'minigame' | 'kosei' | 'priority' | 'passive' | 'speed' | 'coin';
+
+/** ミニゲームの結果。winner=null は引き分け。perfect=大差で勝った。 */
+export interface MinigameResult {
+  winner: Side | null;
+  perfect: boolean;
+}
+/** ミニゲームに勝った側／負けた側の 威力倍率。 */
+export const MG_WIN_MULT = 1.3;
+export const MG_LOSE_MULT = 0.8;
 
 export type ClashEvent =
   | { t: 'turn'; turn: number }
@@ -140,6 +148,8 @@ function toCombatant(c: Character): ClashCombatant {
     hp: c.baseStats.hp,
     statuses: [],
     charging: null,
+    moveIds: c.moveIds?.length ? [...c.moveIds] : ['c_tackle', 'c_scratch', 'c_guard', 'ca_heal'],
+    lastMoveId: null,
     lastTags: [],
     handMods: [],
     nextMods: [],
@@ -189,80 +199,43 @@ export function effStat(c: ClashCombatant, stat: keyof Stats): number {
   return Math.max(1, v);
 }
 
-// ---------- 手札 ----------
+// ---------- そのターンに出る技 ----------
 
-const DRAW_POOL: MoveDef[] = Object.values(MOVES);
-
-function dealWeight(c: ClashCombatant, m: MoveDef): number {
-  let w = 1;
-  if (m.category === 'attack') {
-    if (c.personality === 'aggressive') w *= 1.3;
-  } else {
-    w *= c.personality === 'calm' ? 1.4 : 0.9;
-  }
-  if (isRareMove(m)) w *= 0.6 * (1 + c.base.luck / 40);
-  return w;
-}
+/** こせいが使えるとき、技のかわりに こせいが出る確率。 */
+const KOSEI_PICK_CHANCE = 0.22;
 
 /**
- * side のこのターンの手札（技ID 3枚。こせいが使えるときは、ときどき1枚が 'kosei' になる）。
+ * side のこのターンに出る技（キャラの4つの技から ランダムに1つ／ときどき 'kosei'／ため中は 'release'）。
  * state.seed・turn・side だけで決まるので、何度呼んでも同じ。
  */
-export function dealHand(state: ClashState, side: Side): ClashChoice[] {
+export function pickMoveFor(state: ClashState, side: Side): ClashChoice {
   const c = state.combatants[side];
+  if (c.charging) return 'release';
   const rng = mulberry32((state.seed ^ Math.imul(state.turn + 1, 0x9e3779b1) ^ Math.imul(side + 7, 0x85ebca6b)) >>> 0);
   rng();
   rng();
-  // 前のターンの技による手札いじり
-  let size = HAND_SIZE;
+  if (koseiReady(c) && rng() < KOSEI_PICK_CHANCE) return 'kosei';
+  let pool = c.moveIds.map((id) => MOVES_SAFE(id)).filter((m): m is MoveDef => !!m);
+  if (pool.length === 0) return 'c_tackle';
   let lucky = false;
-  const guarantees: Extract<HandEffect, { kind: 'guarantee' }>[] = [];
-  const bans: HandPred[] = [];
-  let only: HandPred | null = null;
-  for (const m of c.handMods) {
-    if (m.kind === 'extra') size += m.n;
-    else if (m.kind === 'foeLess') size -= m.n;
-    else if (m.kind === 'luck') lucky = true;
-    else if (m.kind === 'ban') bans.push(m.pred);
-    else if (m.kind === 'only') only = m.pred;
-    else guarantees.push(m);
-  }
-  size = Math.max(2, Math.min(MAX_HAND, size));
-
-  let pool = DRAW_POOL.filter((m) => !bans.some((p) => matchesPred(m, p))).map((m) => ({ m, w: dealWeight(c, m) * (lucky && (isRareMove(m) || m.charge) ? 3 : 1) }));
-  if (only) {
-    const onlyPred: HandPred = only;
-    const filtered = pool.filter((p) => matchesPred(p.m, onlyPred));
-    if (filtered.length >= size) pool = filtered;
-  }
-  const hand: ClashChoice[] = [];
-  const take = (list: typeof pool) => {
-    const total = list.reduce((s2, p2) => s2 + p2.w, 0);
-    let r = rng() * total;
-    let idx = 0;
-    for (; idx < list.length - 1; idx++) {
-      r -= list[idx].w;
-      if (r < 0) break;
-    }
-    const picked = list[idx];
-    hand.push(picked.m.id);
-    pool.splice(pool.indexOf(picked), 1);
-  };
-  // 保証されたカードを先に
-  for (const g of guarantees) {
-    for (let i = 0; i < g.n && hand.length < size; i++) {
-      const cand = pool.filter((p2) => matchesPred(p2.m, g.pred));
-      if (cand.length > 0) take(cand);
+  for (const mod of c.handMods) {
+    if (mod.kind === 'luck') lucky = true;
+    else if (mod.kind === 'ban') {
+      const kept = pool.filter((m) => !matchesPred(m, mod.pred));
+      if (kept.length > 0) pool = kept;
+    } else {
+      const only = pool.filter((m) => matchesPred(m, mod.pred));
+      if (only.length > 0) pool = only;
     }
   }
-  const locked = hand.length;
-  while (hand.length < size && pool.length > 0) take(pool);
-  // こせいが ときどき 混ざる（保証カードは そのまま残す）
-  if (koseiReady(c) && rng() < KOSEI_DEAL_CHANCE && hand.length > locked) {
-    hand[locked + Math.floor(rng() * (hand.length - locked))] = 'kosei';
+  const weights = pool.map((m) => (m.id === c.lastMoveId && pool.length > 1 ? 0.45 : 1) * (lucky && (isRareMove(m) || m.charge) ? 4 : 1));
+  const total = weights.reduce((x, y) => x + y, 0);
+  let r = rng() * total;
+  for (let i = 0; i < pool.length; i++) {
+    r -= weights[i];
+    if (r < 0) return pool[i].id;
   }
-  // 並び：見やすいように こうげき → ほじょ
-  return hand.sort((x, y) => Number(x === 'kosei') - Number(y === 'kosei'));
+  return pool[pool.length - 1].id;
 }
 
 /** ため技を はなつターンの強制行動。そうでなければ null。 */
@@ -295,12 +268,11 @@ function resolveChoice(state: ClashState, side: Side, choice: ClashChoice): Pick
   if (choice === 'kosei' && koseiReady(c)) return { move: null };
   const m = choice === 'kosei' || choice === 'release' ? null : MOVES_SAFE(choice);
   if (m) return { move: m };
-  // 使えない/知らない技 → 手札の先頭
-  const fb = dealHand(state, side).find((h) => h !== 'kosei' && MOVES_SAFE(h));
-  return { move: (fb && MOVES_SAFE(fb)) || MOVES.c_tackle };
+  // 使えない/知らない技 → そのキャラの最初の技
+  return { move: MOVES_SAFE(c.moveIds[0] ?? 'c_tackle') || MOVES.c_tackle };
 }
 
-export function resolveClashTurn(state: ClashState, choices: [ClashChoice, ClashChoice]): ClashState {
+export function resolveClashTurn(state: ClashState, choices: [ClashChoice, ClashChoice], mg: MinigameResult | null = null): ClashState {
   if (state.done) return state;
   const rng = mulberry32((state.seed + state.turn * 0x9e3779b1) >>> 0);
   const next = clone(state);
@@ -312,7 +284,11 @@ export function resolveClashTurn(state: ClashState, choices: [ClashChoice, Clash
     const m = picks[side].move;
     if (m?.charge && !picks[side].release) applyStatus(next.combatants[side], 'charging', 1);
   }
-  const { order, reason } = decideOrder(next, picks, rng);
+  const { order, reason } = mg && mg.winner != null ? { order: [mg.winner, (1 - mg.winner) as Side], reason: 'minigame' as OrderReason } : decideOrder(next, picks, rng);
+  for (const side of [0, 1] as Side[]) {
+    const pm = picks[side].move;
+    next.combatants[side].lastMoveId = pm && !picks[side].release ? pm.id : null;
+  }
   log.push({
     t: 'order',
     first: order[0],
@@ -321,7 +297,9 @@ export function resolveClashTurn(state: ClashState, choices: [ClashChoice, Clash
   });
   for (const side of order) {
     if (next.winner !== null) break;
-    act(next, side, picks[side], picks[(1 - side) as Side], order[0] === side, rng, log);
+    const mgMult = !mg || mg.winner == null ? 1 : mg.winner === side ? MG_WIN_MULT : MG_LOSE_MULT;
+    const forceCrit = !!mg && mg.perfect && mg.winner === side;
+    act(next, side, picks[side], picks[(1 - side) as Side], order[0] === side, rng, log, mgMult, forceCrit);
     checkFaint(next);
   }
 
@@ -491,7 +469,7 @@ const BONUS_LABEL: Record<Cond['t'], string> = {
   foeCharging: 'ためを つぶした！',
 };
 
-function act(state: ClashState, side: Side, pick: Pick, foePick: Pick, isFirst: boolean, rng: Rng, log: ClashEvent[]): void {
+function act(state: ClashState, side: Side, pick: Pick, foePick: Pick, isFirst: boolean, rng: Rng, log: ClashEvent[], mgMult = 1, forceCrit = false): void {
   const c = state.combatants[side];
   const blocked = (moveName: string) => {
     log.push({ t: 'act', side, moveName, kind: 'blocked', moveId: pick.move?.id ?? 'kosei' });
@@ -588,9 +566,9 @@ function act(state: ClashState, side: Side, pick: Pick, foePick: Pick, isFirst: 
   }
 
   // 条件（コンボ・つけこみ…）
-  let mult = 1;
+  let mult = mgMult;
   if (move.when && move.whenMult && evalCond(move.when, { state, side, foePick, isFirst })) {
-    mult = move.whenMult;
+    mult *= move.whenMult;
     log.push({ t: 'bonus', side, label: BONUS_LABEL[move.when.t] });
   }
 
@@ -632,7 +610,7 @@ function act(state: ClashState, side: Side, pick: Pick, foePick: Pick, isFirst: 
     const target = state.combatants[1 - side as Side];
     for (let i = 0; i < (move.hits ?? 1); i++) {
       if (state.winner !== null || target.hp <= 0 || c.hp <= 0) break;
-      dealDamage(state, side, move, { mult, uncapped: !!pick.release }, rng, log);
+      dealDamage(state, side, move, { mult, uncapped: !!pick.release, forceCrit: forceCrit && i === 0 }, rng, log);
       checkFaint(state);
     }
     // わな：しかけられていたら、こうげきした ほうが ダメージ
@@ -649,7 +627,7 @@ function act(state: ClashState, side: Side, pick: Pick, foePick: Pick, isFirst: 
 
   // 手札いじり（次のターンの手札）
   if (move.hand && c.hp > 0) {
-    if (move.hand.kind === 'foeLess' || move.hand.kind === 'ban' || move.hand.kind === 'only') state.combatants[1 - side as Side].nextMods.push(move.hand);
+    if (move.hand.kind === 'ban' || move.hand.kind === 'only') state.combatants[1 - side as Side].nextMods.push(move.hand);
     else c.nextMods.push(move.hand);
   }
   c.lastTags = moveTags(move);
@@ -789,8 +767,6 @@ function applySupport(state: ClashState, side: Side, move: MoveDef, mult: number
   }
 }
 
-const KOSEI_SUPPORT = new Set(['mend', 'fortress', 'warcry', 'hex']);
-
 function applyKosei(state: ClashState, side: Side, rng: Rng, log: ClashEvent[]): void {
   const c = state.combatants[side];
   const tgt = state.combatants[1 - side as Side];
@@ -873,6 +849,8 @@ interface DamageOpts {
   mult?: number;
   /** ため技を はなつとき：1発の上限を ゆるめる。 */
   uncapped?: boolean;
+  /** ミニゲームで大差の勝ち：かならず クリティカル。 */
+  forceCrit?: boolean;
 }
 
 function dealDamage(
@@ -909,7 +887,10 @@ function dealDamage(
   // ひるみ：次の攻撃が かすり になる（1回で消える）
   const flinched = has(actor, 'flinch');
   if (flinched) actor.statuses = actor.statuses.filter((s) => s.kind !== 'flinch');
-  if (flinched || roll < grazeChance) {
+  if (opts.forceCrit) {
+    kimeMult = 1.7;
+    kimeTag = 'クリティカル';
+  } else if (flinched || roll < grazeChance) {
     kimeMult = 0.55;
     kimeTag = 'かすった';
   } else if (dodgeRoll < dodgeChance) {
@@ -1072,6 +1053,7 @@ function cloneC(c: ClashCombatant): ClashCombatant {
     ...c,
     base: { ...c.base },
     statuses: c.statuses.map((s) => ({ ...s })),
+    moveIds: [...c.moveIds],
     lastTags: [...c.lastTags],
     handMods: [...c.handMods],
     nextMods: [...c.nextMods],
@@ -1083,102 +1065,14 @@ function cloneC(c: ClashCombatant): ClashCombatant {
 }
 
 
-// ---------- CPU ----------
+// ---------- シミュレーション（テスト・バランス確認用） ----------
 
-/** CPU が手札から1枚えらぶ。ダメージ見込み・回復の必要度などで点数をつけ、ときどき気まぐれ。 */
-export function cpuChoose(state: ClashState, side: Side, rng: Rng): ClashChoice {
-  const me = state.combatants[side];
-  const foe = state.combatants[1 - side as Side];
-  const myPct = me.hp / me.maxHp;
-  const foePct = foe.hp / foe.maxHp;
-  const forced = forcedChoice(state, side);
-  if (forced) return forced;
-  const hand = dealHand(state, side);
-  // 条件の判定用（相手の手は わからないので「こうげきしてくる」と見ておく）
-  const guessFirst = effStat(me, 'spd') >= effStat(foe, 'spd');
-  const condOk = (m: MoveDef): boolean =>
-    !!m.when &&
-    !!m.whenMult &&
-    evalCond(m.when, { state, side, isFirst: guessFirst, foePick: { move: MOVES.c_tackle } });
-
-  const score = (choice: ClashChoice): number => {
-    if (choice === 'kosei') {
-      const offensive = !KOSEI_SUPPORT.has(kosei(me).active.kind);
-      if (offensive) return foePct < 0.5 ? 40 : 22;
-      return myPct < 0.6 ? 36 : 6;
-    }
-    const m = MOVES_SAFE(choice);
-    if (!m) return 0;
-    if (m.category === 'attack') {
-      const atkTerm = 0.95 + effStat(me, 'atk') / 46;
-      let basePower = m.power;
-      if (m.dice) basePower = (m.dice[0] + m.dice[1]) / 2;
-      if (m.coin) basePower *= 0.5;
-      if (m.allOrNothing != null) basePower *= m.allOrNothing;
-      let per = basePower * atkTerm * (m.pierce ? 1 : 40 / (40 + effStat(foe, 'def')));
-      if (state.field && m.attribute) {
-        const fm = FIELD_META[state.field.kind];
-        if (m.attribute === fm.up) per *= FIELD_UP;
-        else if (m.attribute === fm.down) per *= FIELD_DOWN;
-      }
-      if (condOk(m)) per *= m.whenMult as number;
-      if (m.execute && foePct < 0.4) per *= m.execute;
-      if (m.critBoost) per *= 1 + m.critBoost * 0.7;
-      per = Math.min(per, foe.maxHp * (m.charge ? CHARGE_CAP_PCT : PER_HIT_CAP_PCT));
-      let est = per * (m.hits ?? 1);
-      // ため技は 1ターン むぼうび。HPに余裕があるときだけ ねらう
-      if (m.charge) est *= myPct > 0.5 ? 0.85 : 0.4;
-      // ふいうちは、相手が こうげきしてきそうなときだけ
-      if (m.ambush) est *= 0.6;
-      let s = est;
-      if (est >= foe.hp) s += 60;
-      if (m.status && !m.status.toSelf && !has(foe, m.status.kind)) s += m.status.chance * 8;
-      if (m.status?.toSelf) s -= 4;
-      if (m.recoil) s -= 3;
-      if (m.drain && myPct < 0.7) s += 5;
-      if (m.first) s += 2;
-      if (m.hand) s += 3;
-      if (m.cost) s -= myPct < 0.45 ? 30 : 4;
-      if (m.coin) s -= 3;
-      return s;
-    }
-    let s = 3;
-    const missing = me.maxHp - me.hp;
-    if (m.heal) s += Math.min(missing, m.heal * HEAL_SCALE * (condOk(m) ? (m.whenMult as number) : 1)) * 0.9;
-    if (m.charge) s -= 2;
-    if (m.hand) s += 4;
-    if (m.field) s += state.field ? 1 : 7;
-    if (m.barrier) s += (has(me, 'guard') || me.barrier ? 1 : 8 + (foePct > 0.5 ? 5 : 0)) - (m.cost ? (myPct < 0.5 ? 12 : 2) : 0);
-    if (m.delay?.damage) s += state.turn <= 8 ? 14 : 5;
-    if (m.delay?.heal) s += Math.min(missing, me.maxHp * m.delay.heal) * 0.5;
-    if (m.trap) s += foe.traps.length > 0 ? 0 : 7;
-    if (m.bond || m.endure) s += myPct < 0.35 ? 22 : 1;
-    if (m.copy) s += 9;
-    if (m.read) s += 8;
-    if (m.swap === 'hp') s += foePct - myPct > 0.22 ? 32 : -12;
-    if (m.swap === 'debuffs') s += me.statuses.some((x) => STATUS_META[x.kind].kind === 'debuff') ? 16 : -6;
-    if (m.swap === 'steal') s += foe.statuses.some((x) => STATUS_META[x.kind].kind === 'buff') ? 16 : -6;
-    if (m.status && m.target === 'enemy' && !m.status.toSelf && !has(foe, m.status.kind)) s += m.status.chance * 14;
-    if (m.cures && me.statuses.some((x) => STATUS_META[x.kind].kind === 'debuff')) s += m.cures === 'all' ? 16 : 11;
-    if ((m.guardPct || m.reflect || m.buff?.stat === 'def') && !has(me, 'guard') && !has(me, 'defUp')) s += 8 + (foePct > myPct ? 6 : 0);
-    if (m.buff?.stat === 'atk' && !has(me, 'atkUp')) s += state.turn <= 6 ? 14 : 6;
-    if (m.buff?.stat === 'spd' && !has(me, 'spdUp')) s += 5;
-    if (m.buff?.stat === 'luck' && !has(me, 'luckUp')) s += 3;
-    if (m.debuff && !has(foe, m.debuff.stat === 'atk' ? 'atkDown' : m.debuff.stat === 'def' ? 'defDown' : 'spdDown')) s += 9;
-    return s;
-  };
-
-  if (rng() < 0.15) return hand[Math.floor(rng() * hand.length)];
-  let best = hand[0];
-  let bestScore = -Infinity;
-  for (const h of hand) {
-    const sc = score(h) + rng() * 1.5;
-    if (sc > bestScore) {
-      bestScore = sc;
-      best = h;
-    }
-  }
-  return best;
+/** ミニゲームの結果をランダムに作る（強さの差なし）。 */
+export function randomMinigame(rng: Rng): MinigameResult {
+  const r = rng();
+  if (r < 0.1) return { winner: null, perfect: false };
+  const winner: Side = r < 0.55 ? 0 : 1;
+  return { winner, perfect: rng() < 0.15 };
 }
 
 export function playClashToEnd(state: ClashState, seed = state.seed): ClashState {
@@ -1186,9 +1080,7 @@ export function playClashToEnd(state: ClashState, seed = state.seed): ClashState
   let guard = 0;
   while (!cur.done && guard++ < 60) {
     const rng = mulberry32((seed + cur.turn * 7919) >>> 0);
-    const c0 = cpuChoose(cur, 0, rng);
-    const c1 = cpuChoose(cur, 1, rng);
-    cur = resolveClashTurn(cur, [c0, c1]);
+    cur = resolveClashTurn(cur, [pickMoveFor(cur, 0), pickMoveFor(cur, 1)], randomMinigame(rng));
   }
   return cur;
 }
