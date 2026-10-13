@@ -11,6 +11,7 @@ import { CardGalleryScene } from './scenes/CardGalleryScene';
 import { CrayonDefs } from './components/art/CardArt';
 import { FxDemo } from './scenes/battle/FxDemo';
 import { MinigameDemo } from './minigames/MinigameDemo';
+import { CardLab } from './components/art/CardLab';
 
 export default function App() {
   if (import.meta.env.DEV && window.location.search.includes('mg=')) {
@@ -18,6 +19,14 @@ export default function App() {
       <>
         <CrayonDefs />
         <MinigameDemo />
+      </>
+    );
+  }
+  if (import.meta.env.DEV && window.location.search.includes('cardlab')) {
+    return (
+      <>
+        <CrayonDefs />
+        <CardLab />
       </>
     );
   }

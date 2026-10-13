@@ -1,5 +1,6 @@
 import { useId } from 'react';
 import { MOTIFS } from './motifs';
+import { PALETTES } from './palette';
 import type { ArtSpec } from './artSpec';
 
 /** 全カード共通のクレヨン風フィルター。画面のどこかに1回だけ置く。 */
@@ -15,6 +16,67 @@ export function CrayonDefs() {
           <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="8" />
           <feColorMatrix values="0 0 0 0 0.2  0 0 0 0 0.19  0 0 0 0 0.17  0 0 0 0.09 0" />
         </filter>
+        {/* クレヨンの ざらざら（絵ぜんたいに うすく かさねる） */}
+        <filter id="crayon-grain" x="0" y="0" width="100%" height="100%">
+          <feTurbulence type="fractalNoise" baseFrequency="1.4 0.55" numOctaves="2" seed="11" />
+          <feColorMatrix values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 -1.6 1.05" />
+        </filter>
+        {/* ひかる（エネルギー・ほのお・みずの ふち） */}
+        <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+          <feGaussianBlur stdDeviation="4" result="b" />
+          <feMerge>
+            <feMergeNode in="b" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+        <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
+          <feGaussianBlur stdDeviation="3" />
+        </filter>
+        {/* かげの ななめ線（クレヨンで ぬりつぶした かんじ） */}
+        <pattern id="hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(35)">
+          <line x1="0" y1="0" x2="0" y2="5" stroke="#33302b" strokeWidth="1.4" opacity="0.32" />
+        </pattern>
+        <pattern id="hatch-w" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(-35)">
+          <line x1="0" y1="0" x2="0" y2="6" stroke="#fffdf5" strokeWidth="1.6" opacity="0.55" />
+        </pattern>
+        {/* パレットごとの 立体グラデーション（上＝あかるい → 下＝こい） */}
+        {Object.entries(PALETTES).map(([k, p]) => (
+          <linearGradient key={k} id={`gv-${k}`} x1="0" y1="0" x2="0.35" y2="1">
+            <stop offset="0" stopColor={p.light} />
+            <stop offset="0.45" stopColor={p.main} />
+            <stop offset="1" stopColor={p.dark} />
+          </linearGradient>
+        ))}
+        {Object.entries(PALETTES).map(([k, p]) => (
+          <radialGradient key={k} id={`gr-${k}`}>
+            <stop offset="0" stopColor="#fffdf5" stopOpacity="0.95" />
+            <stop offset="0.35" stopColor={p.light} stopOpacity="0.8" />
+            <stop offset="1" stopColor={p.main} stopOpacity="0" />
+          </radialGradient>
+        ))}
+        <radialGradient id="gr-white">
+          <stop offset="0" stopColor="#fff" stopOpacity="0.95" />
+          <stop offset="1" stopColor="#fff" stopOpacity="0" />
+        </radialGradient>
+        <linearGradient id="gv-gold" x1="0" y1="0" x2="0.4" y2="1">
+          <stop offset="0" stopColor="#fff6c2" />
+          <stop offset="0.4" stopColor="#f2b705" />
+          <stop offset="0.7" stopColor="#b57c00" />
+          <stop offset="1" stopColor="#ffe27a" />
+        </linearGradient>
+        <linearGradient id="gv-steel" x1="0" y1="0" x2="0.5" y2="1">
+          <stop offset="0" stopColor="#ffffff" />
+          <stop offset="0.45" stopColor="#c9d3df" />
+          <stop offset="1" stopColor="#7d8a99" />
+        </linearGradient>
+        <linearGradient id="gv-skin" x1="0" y1="0" x2="0.3" y2="1">
+          <stop offset="0" stopColor="#ffe7d1" />
+          <stop offset="1" stopColor="#f2b48c" />
+        </linearGradient>
+        <linearGradient id="gv-foe" x1="0" y1="0" x2="0.3" y2="1">
+          <stop offset="0" stopColor="#d8d3e6" />
+          <stop offset="1" stopColor="#8e86a6" />
+        </linearGradient>
       </defs>
     </svg>
   );
