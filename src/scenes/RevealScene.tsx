@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useGame } from '../store/gameStore';
 import { AttributeBadge, AnimatedStatBar, STAT_MAX, STAT_LABEL_JP as STAT_JP, CharacterSprite } from '../components/bits';
-import { archetypeLabel, getKosei, limitJp } from '../engine';
+import { archetypeLabel, focusMult, getKosei, limitJp } from '../engine';
 import type { Stats } from '../engine/types';
 import { getMove } from '../engine/moves';
 import { GameCard } from '../components/GameCard';
@@ -194,14 +194,49 @@ export function RevealScene() {
         >
           <div style={{ fontWeight: 800, color: 'var(--ink)', marginBottom: 4 }}>この子の わざ（まいターン この中から 1つが でるよ）</div>
           <div style={{ display: 'flex', gap: '0.45rem', justifyContent: 'center', flexWrap: 'wrap' }}>
-            {character.moveIds.map((id) => {
+            {character.moveIds.map((id, i) => {
+              let card;
               try {
-                return <GameCard key={id} card={moveCard(getMove(id))} size="min(21vw, 6.8rem)" />;
+                card = moveCard(getMove(id));
               } catch {
                 return null;
               }
+              const why = character.moveReasons?.[i];
+              return (
+                <motion.div
+                  key={id}
+                  initial={{ opacity: 0, y: 14, rotate: -4 }}
+                  animate={{ opacity: 1, y: 0, rotate: 0 }}
+                  transition={{ delay: 0.25 + STAT_ORDER.length * 0.16 + 0.45 + i * 0.22, type: 'spring', stiffness: 260, damping: 18 }}
+                  style={{ display: 'grid', justifyItems: 'center', gap: 4, width: 'min(21vw, 6.8rem)' }}
+                >
+                  <GameCard card={card} size="min(21vw, 6.8rem)" />
+                  {why && (
+                    <div
+                      style={{
+                        fontSize: '0.7rem',
+                        fontWeight: 800,
+                        color: 'var(--ink)',
+                        background: '#fff8d6',
+                        border: '2px solid var(--ink)',
+                        borderRadius: 8,
+                        padding: '2px 5px',
+                        lineHeight: 1.3,
+                        width: '100%',
+                      }}
+                    >
+                      {why}
+                    </div>
+                  )}
+                </motion.div>
+              );
             })}
           </div>
+          {focusMult(character.moveIds) > 1 && (
+            <div style={{ marginTop: 6, fontWeight: 800, color: 'var(--crayon-red)' }}>
+              こうげき技が すくない ぶん、こうげきの いりょく ×{focusMult(character.moveIds)}
+            </div>
+          )}
         </motion.div>
       </motion.div>
 

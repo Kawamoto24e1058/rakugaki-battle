@@ -128,6 +128,31 @@ export const sfx = {
   ko() {
     tone(500, 0.6, 'triangle', 0.1, 70);
   },
+  /** ルーレット・シャッフルの カチッ。 */
+  tick(pitch = 1) {
+    tone(900 * pitch, 0.035, 'square', 0.035);
+  },
+  /** カードが めくれる。 */
+  flip() {
+    noise(0.12, 0.12, 6000, 900);
+  },
+  /** 技・ミニゲームが きまった！ */
+  reveal() {
+    [659, 880, 1175].forEach((f, i) => tone(f, 0.16, 'triangle', 0.08, undefined, i * 0.07));
+  },
+  /** 帯が スーッと入る。 */
+  whoosh() {
+    noise(0.35, 0.16, 600, 5000);
+  },
+  /** 3・2・1。 */
+  count() {
+    tone(660, 0.12, 'square', 0.06);
+  },
+  /** スタート！ */
+  go() {
+    tone(990, 0.28, 'square', 0.07);
+    tone(1320, 0.28, 'triangle', 0.05, undefined, 0.02);
+  },
   win() {
     [523, 659, 784, 1047, 784, 1047].forEach((f, i) => tone(f, 0.22, 'triangle', 0.08, undefined, i * 0.12));
   },

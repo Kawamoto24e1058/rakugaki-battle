@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { analyzeImageData } from '../src/engine/analyze';
-import { getMove, MOVES } from '../src/engine/moves';
+import { assignMoveSet, getMove, moveTags, MOVES } from '../src/engine/moves';
 import { rectImage } from './helpers';
 import {
   createClashState,
@@ -46,13 +46,48 @@ describe('手札バトル', () => {
     expect(seen.size).toBeGreaterThan(40);
   });
 
-  it('技の割り振り：属性のこうげき・ふつうのこうげき・ほじょを かならず もつ', () => {
+  it('技の割り振り：属性のこうげきを かならず もち、理由が つく', () => {
     for (let i = 0; i < 40; i++) {
       const c = drawn([(i * 53) % 256, (i * 97) % 256, (i * 29) % 256], 40 + (i % 60), 50 + ((i * 7) % 60));
       const ms = c.moveIds.map((id) => getMove(id));
       expect(ms.some((m) => m.category === 'attack' && m.attribute === c.attribute)).toBe(true);
-      expect(ms.some((m) => m.category === 'attack' && !m.attribute)).toBe(true);
-      expect(ms.some((m) => m.category === 'support')).toBe(true);
+      expect(c.moveReasons?.length).toBe(4);
+      for (const r of c.moveReasons!) expect(r.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('技の割り振り：絵の特徴で かたよる（トゲ・あらっぽい＝こうげき多め／まる・おだやか＝ほじょ多め）', () => {
+    const stats = (atk: number, def: number) => ({ hp: 90, atk, def, spd: 35, luck: 30, heart: 30 });
+    let fierce = 0;
+    let calm = 0;
+    for (let seed = 1; seed <= 60; seed++) {
+      const a = assignMoveSet({ seed, attribute: 'fire', personality: 'aggressive', tags: ['shape:spiky', 'mood:fierce'], weapon: 'sword', stats: stats(55, 25) });
+      const b = assignMoveSet({ seed, attribute: 'water', personality: 'calm', tags: ['shape:round', 'mood:calm'], weapon: 'shield', stats: stats(25, 55) });
+      fierce += a.filter((s) => getMove(s.id).category === 'attack').length;
+      calm += b.filter((s) => getMove(s.id).category === 'attack').length;
+    }
+    expect(fierce / 60).toBeGreaterThan(3.3);
+    expect(calm / 60).toBeLessThan(2.3);
+  });
+
+  it('技の割り振り：つばさの絵には 先制・かぜの技が 入りやすい', () => {
+    let quick = 0;
+    for (let seed = 1; seed <= 60; seed++) {
+      const set = assignMoveSet({ seed, attribute: 'bolt', personality: 'aggressive', tags: ['part:wings'], weapon: 'wing' });
+      if (set.some((s) => getMove(s.id).first || getMove(s.id).tags?.includes('wind'))) quick++;
+    }
+    expect(quick).toBeGreaterThan(50);
+  });
+
+  it('技の割り振り：コンボ技には あいぼうの技も入る', () => {
+    for (let seed = 1; seed <= 300; seed++) {
+      const ms = assignMoveSet({ seed, attribute: (['fire', 'water', 'wood', 'bolt', 'dark'] as const)[seed % 5], personality: seed % 2 ? 'calm' : 'aggressive', tags: ['deco:colorful'] }).map((s) => getMove(s.id));
+      for (const m of ms) {
+        if (m.when?.t === 'prev') {
+          const tag = m.when.tag;
+          expect(ms.some((x) => x.id !== m.id && moveTags(x).includes(tag))).toBe(true);
+        }
+      }
     }
   });
 

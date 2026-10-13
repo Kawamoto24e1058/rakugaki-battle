@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { motion } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useGame } from '../store/gameStore';
 import {
   createClashState,
@@ -19,11 +19,11 @@ import { buildRecap, TurnRecap, type RecapSide } from './battle/Recap';
 import { MoveReveal } from './battle/MoveReveal';
 import { STATUS_META } from '../engine/status';
 import { sfx } from '../audio/sfx';
-import { MinigameStage, pickMinigame, type MinigameOutcome } from '../minigames';
+import { MINIGAMES, MinigameIntro, MinigameStage, pickMinigame, type MinigameOutcome } from '../minigames';
 import type { Beat, Snap } from './battle/types';
 
-/** reveal＝このターンの技が きまる → minigame＝ミニゲーム → animating＝こうげきの演出 → over */
-type Phase = 'reveal' | 'minigame' | 'animating' | 'over';
+/** reveal＝このターンの技が きまる → mgIntro＝ミニゲームの しょうかい → minigame＝ミニゲーム → animating＝こうげきの演出 → over */
+type Phase = 'reveal' | 'mgIntro' | 'minigame' | 'animating' | 'over';
 
 /** 待ちのあいだの ステージの状態。 */
 function restBeat(snap: Snap, banner: string): Beat {
@@ -79,13 +79,6 @@ export function BattleScene() {
 
   const curBeat: Beat = phase === 'animating' && beats[beatIdx] ? beats[beatIdx] : restBeat(snap, '');
   const lastBeat = beatIdx >= beats.length - 1;
-
-  // 技が きまったら ミニゲームへ
-  useEffect(() => {
-    if (phase !== 'reveal' || state.done) return;
-    const t = window.setTimeout(() => setPhase('minigame'), 2300);
-    return () => window.clearTimeout(t);
-  }, [phase, state]);
 
   // 場面が変わるたびに効果音
   useEffect(() => {
@@ -156,7 +149,7 @@ export function BattleScene() {
   const pinch = curBeat.hp.some((h, i) => h > 0 && h / maxHp[i] <= 0.3);
   const impact = curBeat.impact;
   const [soundOff, setSoundOff] = useState(sfx.isMuted());
-  const stageLabel = phase === 'reveal' ? `ターン ${state.turn}：わざが きまるよ` : phase === 'minigame' ? `ターン ${state.turn}：ミニゲーム！` : null;
+  const stageLabel = phase === 'reveal' ? `ターン ${state.turn}：わざが きまるよ` : phase === 'mgIntro' || phase === 'minigame' ? `ターン ${state.turn}：${game.name}` : null;
 
   return (
     <div className="scene" style={{ justifyContent: 'flex-start', paddingTop: 'clamp(.3rem,1vh,.7rem)', gap: '0.4rem' }}>
@@ -185,6 +178,19 @@ export function BattleScene() {
           {impact}
         </motion.div>
       )}
+      <AnimatePresence>
+        {phase === 'reveal' && !state.done && (
+          <MoveReveal
+            key={`rv-${turnKey}`}
+            turn={state.turn}
+            chars={chars}
+            picks={picks}
+            charging={[state.combatants[0].charging, state.combatants[1].charging]}
+            onDone={() => setPhase('mgIntro')}
+          />
+        )}
+        {phase === 'mgIntro' && <MinigameIntro key={`mi-${turnKey}`} def={game} all={MINIGAMES} cpu={cpu} onDone={() => setPhase('minigame')} />}
+      </AnimatePresence>
       {curBeat.win != null && <VictoryOverlay name={names[curBeat.win]} char={chars[curBeat.win]} image={images[curBeat.win]} />}
       {curBeat.koseiAct && (
         <KoseiCutIn
@@ -236,10 +242,9 @@ export function BattleScene() {
         </div>
       ) : phase === 'over' ? (
         <div style={{ fontSize: '0.9rem', opacity: 0.7 }}>けっかへ…</div>
-      ) : phase === 'reveal' ? (
+      ) : phase === 'reveal' || phase === 'mgIntro' ? (
         <div style={{ width: '100%', maxWidth: '52rem', display: 'grid', gap: '0.4rem', justifyItems: 'center' }}>
           {recap && <TurnRecap recap={recap} names={names} />}
-          <MoveReveal key={turnKey} chars={chars} picks={picks} charging={[state.combatants[0].charging, state.combatants[1].charging]} />
         </div>
       ) : (
         <MinigameStage key={`mg-${turnKey}`} def={game} seed={(state.seed ^ Math.imul(state.turn, 0x9e37)) >>> 0} cpu={cpu} cpuSkill={cpuSkill} names={names} onDone={onMinigameDone} />

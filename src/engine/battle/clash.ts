@@ -27,6 +27,21 @@ const PER_HIT_CAP_PCT = 0.42;
 const CHARGE_CAP_PCT = 0.62;
 /** 全体の火力。試合が「時間切れ（サドンデス）」でなく選択で決着するように調整。 */
 const DMG_SCALE = 1.5;
+
+/**
+ * こうげき技が すくない キャラは、そのぶん こうげきが つよい（ほじょ型でも 決着が つくように）。
+ * こうげき技 3つ以上＝×1／2つ＝×1.2／1つ＝×1.45。
+ */
+export function focusMult(moveIds: readonly string[]): number {
+  const attacks = moveIds.filter((id) => {
+    try {
+      return getMove(id).category === 'attack';
+    } catch {
+      return false;
+    }
+  }).length;
+  return attacks >= 3 ? 1 : attacks === 2 ? 1.2 : 1.45;
+}
 /** 回復の底上げ。 */
 const HEAL_SCALE = 1.5;
 /** こせいのアクティブ技の威力の底上げ（絵の個性の主役にする）。 */
@@ -224,11 +239,21 @@ export function pickMoveFor(state: ClashState, side: Side): ClashChoice {
       const kept = pool.filter((m) => !matchesPred(m, mod.pred));
       if (kept.length > 0) pool = kept;
     } else {
-      const only = pool.filter((m) => matchesPred(m, mod.pred));
+      // まえのターンと 同じ技は のぞく（「みがまえ」→ また「みがまえ」… の くりかえしを ふせぐ）
+      const only = pool.filter((m) => matchesPred(m, mod.pred) && m.id !== c.lastMoveId);
       if (only.length > 0) pool = only;
     }
   }
-  const weights = pool.map((m) => (m.id === c.lastMoveId && pool.length > 1 ? 0.45 : 1) * (lucky && (isRareMove(m) || m.charge) ? 4 : 1));
+  // こうげき技は すくなくとも 半分くらい 出る（ほじょが 多いキャラでも 試合が すすむ）
+  const nAtk = pool.filter((m) => m.category === 'attack').length;
+  const nSup = pool.length - nAtk;
+  const supW = nAtk > 0 && nSup > nAtk ? nAtk / nSup : 1;
+  const weights = pool.map(
+    (m) =>
+      (m.id === c.lastMoveId && pool.length > 1 ? 0.45 : 1) *
+      (lucky && (isRareMove(m) || m.charge) ? 4 : 1) *
+      (m.category === 'support' ? supW : 1),
+  );
   const total = weights.reduce((x, y) => x + y, 0);
   let r = rng() * total;
   for (let i = 0; i < pool.length; i++) {
@@ -903,7 +928,7 @@ function dealDamage(
   let tag: string | null = kimeTag ?? opts.tag ?? null;
 
   const atkTerm = 0.95 + effStat(actor, 'atk') / 46;
-  let dmg = move.power * (opts.mult ?? 1) * kimeMult * atkTerm * DMG_SCALE;
+  let dmg = move.power * (opts.mult ?? 1) * kimeMult * atkTerm * DMG_SCALE * focusMult(actor.moveIds);
 
   // こおった相手に ほのお技 → 大ダメージ（このあと とかす）
   if (hasAttr && move.attribute === 'fire' && has(target, 'freeze')) dmg *= 1.5;

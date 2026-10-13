@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import type { MinigameDef, MinigameOutcome, Player } from './types';
 import { KEY_LABELS } from './input';
 import { P_COLOR } from './Arena';
+import { sfx } from '../audio/sfx';
 
 /** スコアから 勝ち負けを決める（4点差未満は ひきわけ）。 */
 export function judge(scores: [number, number]): MinigameOutcome {
@@ -39,15 +40,24 @@ export function MinigameStage({
   const [outcome, setOutcome] = useState<MinigameOutcome | null>(null);
   const done = useRef(false);
 
+  // 3・2・1・スタート！
   useEffect(() => {
     if (stage !== 'intro') return;
-    if (count <= 0) {
-      setStage('play');
-      return;
-    }
-    const t = window.setTimeout(() => setCount((c) => c - 1), count === 3 ? 1300 : 650);
+    if (count > 0) sfx.count();
+    else sfx.go();
+    const t = window.setTimeout(() => {
+      if (count <= 0) setStage('play');
+      else setCount((c) => c - 1);
+    }, count <= 0 ? 600 : 750);
     return () => window.clearTimeout(t);
   }, [stage, count]);
+
+  useEffect(() => {
+    if (stage === 'result' && outcome) {
+      if (outcome.winner != null) sfx.reveal();
+      else sfx.select();
+    }
+  }, [stage, outcome]);
 
   useEffect(() => {
     if (stage !== 'result' || !outcome) return;
@@ -83,9 +93,9 @@ export function MinigameStage({
               initial={{ scale: 0.3, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 1.6, opacity: 0 }}
-              style={{ fontFamily: 'var(--font-display)', fontSize: count === 3 ? '2rem' : '4rem', color: 'var(--crayon-red)' }}
+              style={{ fontFamily: 'var(--font-display)', fontSize: count <= 0 ? '3.2rem' : '5rem', color: count <= 0 ? 'var(--crayon-red)' : 'var(--ink)' }}
             >
-              {count === 3 ? 'じゅんびは いい？' : count}
+              {count <= 0 ? 'スタート！' : count}
             </motion.div>
           </AnimatePresence>
           <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--ink-soft)', textAlign: 'center' }}>

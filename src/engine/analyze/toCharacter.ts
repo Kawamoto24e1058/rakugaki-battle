@@ -1,7 +1,7 @@
 import type { Attribute, AnalysisReason, Character, Stats, Weapon } from '../types';
 import { ATTRIBUTE_META } from '../attributes';
 import { activeTags } from './tags';
-import { assignMoves } from '../moves/assign';
+import { assignMoveSet } from '../moves/assign';
 import { assignKosei, getKosei, koseiTitle } from '../personalities';
 import { mulberry32, randInt, type Rng } from '../rng';
 import { clamp01, type FeatureVector } from './features';
@@ -201,6 +201,7 @@ export function featuresToCharacter(
 
   const analysis = buildReasons(f, attribute, weapon, personality, baseStats, bst01, tags, kosei, overrides.statReasons);
   const name = overrides.name ?? overrides.flavor?.name ?? makeName(rng, attribute);
+  const moveSet = assignMoveSet({ seed: seed >>> 0, attribute, personality, tags, weapon, stats: baseStats });
 
   return {
     id: `c_${(seed >>> 0).toString(36)}_${Date.now().toString(36)}`,
@@ -210,7 +211,8 @@ export function featuresToCharacter(
     weapon,
     personality,
     baseStats,
-    moveIds: assignMoves(seed >>> 0, attribute, personality),
+    moveIds: moveSet.map((m) => m.id),
+    moveReasons: moveSet.map((m) => m.reason),
     koseiId,
     koseiTitle: koseiName,
     analysis,

@@ -73,6 +73,8 @@ export interface Character {
   baseStats: Stats;
   /** このキャラの技（4つ。毎ターン このなかから1つがランダムに出る）。 */
   moveIds: string[];
+  /** それぞれの技が「なぜ この技なのか」（moveIds と同じ順。古いセーブには ない）。 */
+  moveReasons?: string[];
   /** こせい（パッシブ＋専用アクティブ）のID。絵の特徴で決まる。 */
   koseiId: string;
   /** こせい名の前につく二つ名（例「あばれん坊の」）。表示上の個性を増やす。 */

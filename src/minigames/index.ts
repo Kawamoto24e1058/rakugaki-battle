@@ -6,6 +6,7 @@ import type { MinigameDef } from './types';
 
 export * from './types';
 export { MinigameStage, judge } from './Shell';
+export { MinigameIntro, KIND_META } from './Intro';
 
 export const MINIGAMES: MinigameDef[] = [
   { id: 'mash', name: 'れんだ！', kind: 'body', howto: '3びょうで たくさん おそう', input: 'main', Component: Mash },

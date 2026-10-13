@@ -21,6 +21,7 @@ export {
   type FieldState,
   effStat,
   koseiReady,
+  focusMult,
   type ClashState,
   type ClashEvent,
   type ClashCombatant,
