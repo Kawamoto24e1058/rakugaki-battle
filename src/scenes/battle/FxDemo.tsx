@@ -16,8 +16,12 @@ export function FxDemo() {
   });
   const chip = (kind: Chip['kind'], jp: string, good: boolean): Chip => ({ kind, jp, good });
   const scenes: [string, Beat][] = [
+    ['こうげき：とびかかる', base({ acting: 0, actKind: 'attack' })],
+    ['こうげき：あたる', base({ striker: 0, hit: 1, fx: mk('hit', 'atk', ['claw'], 1), floats: [{ id: 11, side: 1, text: '14', kind: 'dmg', big: false }], shake: 4 })],
+    ['ほじょ：はねる', base({ acting: 0, actKind: 'support' })],
+    ['ため：ふるえる', base({ acting: 0, actKind: 'charge', fx: { ...mk('charge', 'kosei', ['chargeorb']), target: 0 } })],
     ['ひっかき (ふつう)', base({ acting: 0, hit: 1, fx: mk('hit', 'atk', ['claw'], 1), floats: [{ id: 1, side: 1, text: '14', kind: 'dmg', big: false }], shake: 4, callout: { id: 1, side: 0, name: 'ひっかき', tag: 'こうげき', gist: 'ちいさな ダメージ', color: '#e8503a', dark: '#9c2a16', quick: false, rare: false, blocked: false } })],
-    ['かえん (クリティカル)', base({ hit: 1, fx: mk('hit', 'fire', ['flame'], 1.5, true), floats: [{ id: 2, side: 1, text: '38', kind: 'dmg', big: true, tag: 'クリティカル' }], shake: 10, flash: '#ef5a2a' })],
+    ['かえん (クリティカル)', base({ striker: 0, hit: 1, fx: mk('hit', 'fire', ['flame'], 1.5, true), floats: [{ id: 2, side: 1, text: '38', kind: 'dmg', big: true, tag: 'クリティカル' }], shake: 10, flash: '#ef5a2a' })],
     ['アクアカノン', base({ hit: 1, fx: mk('hit', 'water', ['wave'], 1.4), floats: [{ id: 3, side: 1, text: '30', kind: 'dmg', big: true }], shake: 8, flash: '#3b82f6' })],
     ['いなずま', base({ hit: 1, fx: mk('hit', 'bolt', ['bolt'], 1.3), floats: [{ id: 4, side: 1, text: '22', kind: 'dmg', big: false }], shake: 6, flash: '#f2b705' })],
     ['かいふく', base({ fx: { ...mk('heal', 'sup', ['cure']), target: 0 }, floats: [{ id: 5, side: 0, text: '+20', kind: 'heal', big: true }] })],
@@ -29,7 +33,7 @@ export function FxDemo() {
     ['こおり・ねむり', base({ chips: [[chip('freeze', 'こおり', false)], [chip('sleep', 'ねむり', false), chip('confuse', 'こんらん', false)]] })],
     ['すばやさくらべ', base({ order: { first: 0, reason: 'speed', spd: [42, 28] }, first: 0 })],
     ['せんせいわざ', base({ order: { first: 1, reason: 'priority', spd: [42, 28] }, first: 1 })],
-    ['ためわざ はっしゃ', base({ acting: 0, impact: 'どかん！', callout: { id: 9, side: 0, name: 'メガトンパンチ', tag: 'ためた力を はなつ', gist: 'ためて つぎのターンに どかん！', color: '#e8503a', dark: '#9c2a16', quick: false, rare: true, blocked: false }, shake: 12 })],
+    ['ためわざ はっしゃ', base({ acting: 0, actKind: 'release', impact: 'どかん！', callout: { id: 9, side: 0, name: 'メガトンパンチ', tag: 'ためた力を はなつ', gist: 'ためて つぎのターンに どかん！', color: '#e8503a', dark: '#9c2a16', quick: false, rare: true, blocked: false }, shake: 12 })],
     ['あめ', base({ field: { kind: 'rain', turnsLeft: 3 } })],
     ['はれ', base({ field: { kind: 'sun', turnsLeft: 3 } })],
     ['らいうん', base({ field: { kind: 'thunder', turnsLeft: 3 } })],

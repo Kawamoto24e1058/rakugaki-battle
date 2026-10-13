@@ -66,6 +66,10 @@ export interface Beat extends Snap {
   banner: string;
   /** 動いている（つっこむ）側。 */
   acting: Side | null;
+  /** acting の うごきかた。 */
+  actKind?: 'attack' | 'support' | 'charge' | 'release';
+  /** ダメージの場面で、こうげきした側（前に出たまま ぶつかる）。 */
+  striker?: Side;
   /** ダメージを受けた側。 */
   hit: Side | null;
   floats: Floating[];

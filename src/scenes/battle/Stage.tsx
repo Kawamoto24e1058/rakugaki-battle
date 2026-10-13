@@ -227,19 +227,33 @@ export function Stage({
   label?: string | null;
 }) {
   const shake = beat.shake;
+  // カメラ：クリティカル・ためた技・大ダメージは 当たった側へ ズーム。ためた技を はなつ ときは うつ側へ。
+  const big = beat.fx && beat.hit != null && beat.fx.kind === 'hit' && (beat.fx.crit || beat.fx.release || beat.fx.size >= 1.25);
+  const camTarget: Side | null = big ? beat.hit : beat.actKind === 'release' && beat.acting != null ? beat.acting : null;
+  const cam = camTarget == null ? null : { scale: big ? 1.16 : 1.1, dur: big ? 1.1 : 0.9, origin: `${camTarget === 0 ? '24%' : '76%'} 72%` };
+  const focus = (big && (beat.fx?.crit || beat.fx?.release)) || beat.actKind === 'release';
   return (
     <motion.div
       key={`stage-${beatKey}`}
-      animate={shake ? { x: [0, -shake, shake, -shake * 0.6, shake * 0.4, 0], y: [0, shake * 0.5, -shake * 0.5, shake * 0.3, 0, 0] } : { x: 0, y: 0 }}
-      transition={{ duration: 0.38 }}
+      animate={shake ? { x: [0, 0, -shake, shake, -shake * 0.6, shake * 0.4, 0], y: [0, 0, shake * 0.5, -shake * 0.5, shake * 0.3, 0, 0] } : { x: 0, y: 0 }}
+      transition={{ duration: 0.46, times: shake ? [0, 0.18, 0.34, 0.5, 0.66, 0.82, 1] : undefined }}
       style={{ ['--stage-h' as string]: 'clamp(8.5rem, 28vh, 23rem)', position: 'relative', width: '100%', height: 'var(--stage-h)', minHeight: '8.5rem', border: '4px solid var(--ink)', borderRadius: 18, overflow: 'hidden', boxShadow: '5px 6px 0 rgba(51,48,43,.18)', background: '#fffdf6' }}
     >
-      <Backdrop attrs={[chars[0].attribute, chars[1].attribute]} />
-      {beat.field && <FieldLayer kind={beat.field.kind} />}
-
-      {([0, 1] as Side[]).map((s) => (
-        <Fighter key={s} side={s} char={chars[s]} image={images[s]} beat={beat} />
-      ))}
+      {/* カメラ：大きい一撃では 相手に ズーム */}
+      <motion.div
+        key={`cam-${beatKey}`}
+        animate={cam ? { scale: [1, cam.scale, cam.scale, 1] } : { scale: 1 }}
+        transition={cam ? { duration: cam.dur, times: [0, 0.14, 0.62, 1], ease: 'easeOut' } : { duration: 0.3 }}
+        style={{ position: 'absolute', inset: 0, transformOrigin: cam ? cam.origin : '50% 60%' }}
+      >
+        <Backdrop attrs={[chars[0].attribute, chars[1].attribute]} />
+        {beat.field && <FieldLayer kind={beat.field.kind} />}
+        {beat.acting != null && (beat.actKind === 'attack' || beat.actKind === 'release') && <SpeedLines key={`sl-${beatKey}`} dir={beat.acting === 0 ? 1 : -1} />}
+        {([0, 1] as Side[]).map((s) => (
+          <Fighter key={s} side={s} char={chars[s]} image={images[s]} beat={beat} />
+        ))}
+      </motion.div>
+      {focus && <FocusLines key={`fo-${beatKey}`} />}
 
       {/* 画面フラッシュ（技の色） */}
       <AnimatePresence>
@@ -262,6 +276,57 @@ export function Stage({
       <AnimatePresence mode="wait">{beat.callout && <CalloutBand key={beat.callout.id} c={beat.callout} />}</AnimatePresence>
       <AnimatePresence>{beat.order && <OrderPanel key="order" o={beat.order} names={names} />}</AnimatePresence>
     </motion.div>
+  );
+}
+
+/** こうげきの スピード線（うしろから 前へ 流れる）。 */
+function SpeedLines({ dir }: { dir: number }) {
+  const lines = Array.from({ length: 11 }, (_, i) => i);
+  return (
+    <svg viewBox="0 0 800 400" preserveAspectRatio="none" width="100%" height="100%" style={{ position: 'absolute', inset: 0, zIndex: 1, pointerEvents: 'none' }}>
+      {lines.map((i) => {
+        const y = 60 + ((i * 97) % 280);
+        const len = 140 + ((i * 53) % 160);
+        return (
+          <motion.line
+            key={i}
+            y1={y}
+            y2={y}
+            stroke="#33302b"
+            strokeWidth={2 + (i % 3)}
+            strokeLinecap="round"
+            initial={{ x1: dir > 0 ? -len : 800 + len, x2: dir > 0 ? 0 : 800, opacity: 0.5 }}
+            animate={{ x1: dir > 0 ? 800 : -len * 2, x2: dir > 0 ? 800 + len : -len, opacity: [0.5, 0.45, 0] }}
+            transition={{ duration: 0.45, delay: 0.12 + (i % 4) * 0.03, ease: 'easeOut' }}
+          />
+        );
+      })}
+    </svg>
+  );
+}
+
+/** 集中線（まんがの「ドン！」の 線）。 */
+function FocusLines() {
+  const n = 36;
+  return (
+    <motion.svg
+      viewBox="-100 -50 200 100"
+      preserveAspectRatio="none"
+      width="100%"
+      height="100%"
+      initial={{ opacity: 0, scale: 1.15 }}
+      animate={{ opacity: [0, 0.85, 0.85, 0], scale: [1.15, 1, 1, 1.05] }}
+      transition={{ duration: 0.9, times: [0, 0.12, 0.6, 1] }}
+      style={{ position: 'absolute', inset: 0, zIndex: 9, pointerEvents: 'none' }}
+    >
+      {Array.from({ length: n }, (_, i) => {
+        const a = (i / n) * Math.PI * 2 + (i % 2) * 0.05;
+        const r0 = 52 + (i % 3) * 8;
+        const w = 0.012 + (i % 4) * 0.006;
+        const p = (ang: number, r: number) => `${Math.cos(ang) * r},${Math.sin(ang) * r * 0.55}`;
+        return <polygon key={i} points={`${p(a - w, 130)} ${p(a + w, 130)} ${p(a, r0)}`} fill="#33302b" />;
+      })}
+    </motion.svg>
   );
 }
 
@@ -308,6 +373,77 @@ function Backdrop({ attrs }: { attrs: [Character['attribute'], Character['attrib
   );
 }
 
+/**
+ * 描いた絵の うごき（のびちぢみ・ジャンプ・つぶれる）。
+ * こうげき：ためる→とびかかって のびる→ちゃくちで つぶれる ／ ひだん：一瞬とまって 白く光る（ヒットストップ）→ ぐにゃっと つぶれて ふっとぶ。
+ */
+function fighterPose(o: {
+  dir: number;
+  down: boolean;
+  hit: boolean;
+  acting: boolean;
+  actKind?: 'attack' | 'support' | 'charge' | 'release';
+  striking: boolean;
+  bigHit: boolean;
+  frozen: boolean;
+}) {
+  const { dir } = o;
+  const rest = { x: 0, y: 0, rotate: 0, scaleX: 1, scaleY: 1, opacity: 1, filter: o.frozen ? 'saturate(0.5) brightness(1.12)' : 'brightness(1)' };
+  if (o.down)
+    return {
+      animate: { x: -dir * 6 + '%', y: ['0%', '-12%', '22%', '18%', '22%'], rotate: dir * -80, scaleX: 1, scaleY: 1, opacity: 0.75, filter: 'grayscale(0.7)' },
+      transition: { duration: 0.9, times: [0, 0.25, 0.7, 0.85, 1] },
+    };
+  if (o.hit) {
+    const k = o.bigHit ? 1.5 : 1;
+    return {
+      animate: {
+        x: ['0%', '0%', `${-dir * 16 * k}%`, `${dir * 4}%`, '0%'],
+        y: ['0%', '0%', `${-4 * k}%`, '0%', '0%'],
+        rotate: [0, 0, -dir * 10 * k, dir * 4, 0],
+        scaleX: [1, 1, 1.22, 0.94, 1],
+        scaleY: [1, 1, 0.76, 1.06, 1],
+        opacity: 1,
+        filter: ['brightness(1)', 'brightness(3) saturate(0)', 'brightness(1.3)', 'brightness(1)', 'brightness(1)'],
+      },
+      // 最初の 0.1びょうは とまる＝ヒットストップ
+      transition: { duration: o.bigHit ? 0.75 : 0.6, times: [0, 0.16, 0.42, 0.72, 1] },
+    };
+  }
+  if (o.striking)
+    return {
+      animate: { x: [`${dir * 44}%`, `${dir * 44}%`, `${dir * 40}%`, '0%'], y: '0%', rotate: [dir * 4, dir * 4, 0, 0], scaleX: [1.12, 1.12, 0.94, 1], scaleY: [0.88, 0.88, 1.06, 1], opacity: 1, filter: 'brightness(1)' },
+      transition: { duration: 0.9, times: [0, 0.2, 0.45, 1] },
+    };
+  if (o.acting && o.actKind === 'support')
+    return {
+      animate: { x: '0%', y: ['0%', '3%', '-16%', '0%', '-5%', '0%'], rotate: 0, scaleX: [1, 1.1, 0.9, 1.08, 0.97, 1], scaleY: [1, 0.88, 1.12, 0.92, 1.03, 1], opacity: 1, filter: ['brightness(1)', 'brightness(1)', 'brightness(1.25)', 'brightness(1)', 'brightness(1)', 'brightness(1)'] },
+      transition: { duration: 0.75 },
+    };
+  if (o.acting && o.actKind === 'charge')
+    return {
+      animate: { x: ['0%', '-1%', '1%', '-1%', '1%', '0%'], y: '0%', rotate: 0, scaleX: [1, 1.08, 1.06, 1.08, 1.06, 1.05], scaleY: [1, 0.92, 0.95, 0.92, 0.95, 0.96], opacity: 1, filter: 'brightness(1.15)' },
+      transition: { duration: 1.2 },
+    };
+  if (o.acting) {
+    const big = o.actKind === 'release';
+    const reach = big ? 52 : 46;
+    return {
+      animate: {
+        x: ['0%', `${-dir * 8}%`, `${dir * (reach + 6)}%`, `${dir * reach}%`],
+        y: ['0%', '2%', big ? '-24%' : '-16%', '0%'],
+        rotate: [0, -dir * 8, dir * 12, dir * 4],
+        scaleX: [1, 1.14, 0.84, 1.12],
+        scaleY: [1, 0.84, 1.18, 0.88],
+        opacity: 1,
+        filter: 'brightness(1)',
+      },
+      transition: { duration: big ? 0.7 : 0.55, times: [0, 0.32, 0.72, 1] },
+    };
+  }
+  return { animate: rest, transition: { type: 'spring' as const, stiffness: 220, damping: 20 } };
+}
+
 function Fighter({ side, char, image, beat }: { side: Side; char: Character; image: string | null; beat: Beat }) {
   const dir = side === 0 ? 1 : -1;
   const hp = beat.hp[side];
@@ -320,6 +456,23 @@ function Fighter({ side, char, image, beat }: { side: Side; char: Character; ima
   const frozen = chips.some((c) => c.kind === 'freeze');
   const sleeping = chips.some((c) => c.kind === 'sleep');
   const badge = beat.first == null ? null : beat.first === side ? '1' : '2';
+  const paralyzed = chips.some((c) => c.kind === 'paralysis');
+  const striking = beat.striker === side && !acting;
+  const bigHit = !!beat.fx && beat.fx.target === side && (beat.fx.crit || beat.fx.release || beat.fx.size >= 1.25);
+  const pose = fighterPose({ dir, down, hit, acting, actKind: beat.actKind, striking, bigHit, frozen });
+  // 同じ うごきでも 場面ごとに やりなおす
+  const motionKey = down ? 'down' : hit || acting || striking ? `b${beat.floats[0]?.id ?? ''}-${beat.fx?.id ?? ''}-${beat.actKind ?? ''}-${hit}-${acting}` : 'rest';
+  const idle =
+    down || frozen
+      ? { animate: { scaleX: 1, scaleY: 1, rotate: 0, x: 0 }, transition: { duration: 0.3 } }
+      : sleeping
+        ? { animate: { scaleX: [1, 1.03, 1], scaleY: [1, 0.96, 1], rotate: side === 0 ? 7 : -7, x: 0 }, transition: { repeat: Infinity, duration: 3.4, ease: 'easeInOut' as const } }
+        : paralyzed
+          ? { animate: { x: [0, 2, -2, 1.5, 0, 0, 0], scaleX: 1, scaleY: 1, rotate: 0 }, transition: { repeat: Infinity, duration: 1.1 } }
+          : {
+              animate: { scaleX: [1, 0.975, 1], scaleY: [1, 1.04, 1], rotate: [0, side === 0 ? 1.4 : -1.4, 0], x: 0 },
+              transition: { repeat: Infinity, duration: 2.1 + side * 0.35, ease: 'easeInOut' as const },
+            };
 
   return (
     <div style={{ position: 'absolute', bottom: '7%', [side === 0 ? 'left' : 'right']: '4%', width: 'min(40%, calc(var(--stage-h) * 0.8))', aspectRatio: '1' }}>
@@ -327,21 +480,15 @@ function Fighter({ side, char, image, beat }: { side: Side; char: Character; ima
       <div style={{ position: 'absolute', left: '12%', right: '12%', bottom: '-4%', height: '9%', borderRadius: '50%', background: 'rgba(51,48,43,.28)', filter: 'blur(2px)' }} />
       <Aura chips={chips} side={side} />
       <motion.div
-        animate={
-          down
-            ? { x: 0, y: '22%', rotate: dir * -78, scale: 0.9, opacity: 0.75, filter: 'grayscale(0.7)' }
-            : hit
-              ? { x: [0, -dir * 18, dir * 8, -dir * 5, 0], y: 0, rotate: [0, -dir * 7, dir * 3, 0, 0], scale: [1, 0.94, 1.02, 1, 1], filter: ['brightness(1)', 'brightness(2.4) saturate(0.4)', 'brightness(1.1)', 'brightness(1)', 'brightness(1)'], opacity: 1 }
-              : acting
-                ? { x: `${dir * 46}%`, y: 0, rotate: dir * 5, scale: 1.1, opacity: 1, filter: 'brightness(1)' }
-                : { x: 0, y: 0, rotate: 0, scale: 1, opacity: 1, filter: frozen ? 'saturate(0.5) brightness(1.12)' : 'brightness(1)' }
-        }
-        transition={hit ? { duration: 0.42 } : acting ? { type: 'spring', stiffness: 380, damping: 18 } : { type: 'spring', stiffness: 220, damping: 20 }}
-        style={{ position: 'relative', width: '100%', height: '100%', zIndex: 2, transformOrigin: '50% 90%' }}
+        key={motionKey}
+        animate={pose.animate}
+        transition={pose.transition}
+        style={{ position: 'relative', width: '100%', height: '100%', zIndex: 2, transformOrigin: '50% 92%' }}
       >
+        {/* 待機：いきを するように のびちぢみ */}
         <motion.div
-          animate={sleeping || down ? { y: 0 } : { y: [0, -3, 0] }}
-          transition={{ repeat: Infinity, duration: 2.6 + side * 0.4, ease: 'easeInOut' }}
+          animate={idle.animate}
+          transition={idle.transition}
           style={{ width: '100%', height: '100%', transformOrigin: '50% 100%' }}
         >
           <CharacterSprite imageUrl={image} attribute={char.attribute} name={char.name} flip={side === 1} />

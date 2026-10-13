@@ -81,7 +81,7 @@ export function buildBeats(
 
   const add = (
     banner: string,
-    o: Partial<Pick<Beat, 'acting' | 'hit' | 'floats' | 'fx' | 'order' | 'shake' | 'flash' | 'impact' | 'ms' | 'win' | 'koseiAct'>> & { keepCallout?: boolean } = {},
+    o: Partial<Pick<Beat, 'acting' | 'actKind' | 'striker' | 'hit' | 'floats' | 'fx' | 'order' | 'shake' | 'flash' | 'impact' | 'ms' | 'win' | 'koseiAct'>> & { keepCallout?: boolean } = {},
   ) => {
     beats.push({
       hp: [...hp],
@@ -89,6 +89,8 @@ export function buildBeats(
       chips: [[...chips[0]], [...chips[1]]],
       banner,
       acting: o.acting ?? null,
+      actKind: o.actKind,
+      striker: o.striker,
       hit: o.hit ?? null,
       floats: o.floats ?? [],
       fx: o.fx ?? null,
@@ -178,19 +180,20 @@ export function buildBeats(
         if (ev.kind === 'charge') {
           add(`${names[side]} は ちからを ためている…！ 次の ターンに はなつよ`, {
             acting: side,
+            actKind: 'charge',
             fx: fxFor('charge', side, 1.2, { pal: PALETTES.kosei, motifs: ['chargeorb'] }),
             ms: 2000,
           });
         } else if (ev.release) {
-          add(`${names[side]} は ためた ちからを はなつ！`, { acting: side, impact: 'どかん！', flash: card?.art.pal.main ?? null, shake: 8, ms: 1500 });
+          add(`${names[side]} は ためた ちからを はなつ！`, { acting: side, actKind: 'release', impact: 'どかん！', flash: card?.art.pal.main ?? null, shake: 8, ms: 1500 });
         } else if (ev.kind === 'kosei') {
-          add(`${names[side]} こせい はつどう！`, { acting: side, koseiAct: { side, moveName: ev.moveName }, ms: 2600 });
+          add(`${names[side]} こせい はつどう！`, { acting: side, actKind: 'support', koseiAct: { side, moveName: ev.moveName }, ms: 2600 });
         } else if (ev.kind === 'blocked') {
           add(`${names[side]} は ${ev.moveName.replace(/[（）]/g, '')}`, { ms: 1300 });
         } else if (ev.kind === 'support') {
-          add(`${names[side]} の ほじょわざ「${ev.moveName}」`, { ms: 1100 });
+          add(`${names[side]} の ほじょわざ「${ev.moveName}」`, { acting: side, actKind: 'support', ms: 1100 });
         } else {
-          add(`${names[side]} の こうげき「${ev.moveName}」！`, { acting: side, ms: 1000 });
+          add(`${names[side]} の こうげき「${ev.moveName}」！`, { acting: side, actKind: 'attack', ms: 1000 });
         }
         break;
       }
@@ -210,6 +213,7 @@ export function buildBeats(
         const msg = ev.tag ? `${ev.tag}！ ${names[ev.side]} に ${ev.amount} ダメージ（のこり ${ev.hpAfter}）` : `${names[ev.side]} に ${ev.amount} ダメージ！（のこり ${ev.hpAfter}）`;
         add(msg, {
           hit: ev.side,
+          striker: attackerHits ? lastAct!.side : undefined,
           floats: [float],
           fx,
           shake: Math.min(14, 3 + ratio * 40) * (crit ? 1.3 : 1),
