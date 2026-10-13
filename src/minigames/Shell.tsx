@@ -4,6 +4,7 @@ import type { MinigameDef, MinigameOutcome, Player } from './types';
 import { KEY_LABELS } from './input';
 import { P_COLOR } from './Arena';
 import { sfx } from '../audio/sfx';
+import { KIND_META } from './Intro';
 
 /** スコアから 勝ち負けを決める（4点差未満は ひきわけ）。 */
 export function judge(scores: [number, number]): MinigameOutcome {
@@ -81,8 +82,8 @@ export function MinigameStage({
   return (
     <div style={{ width: '100%', maxWidth: '52rem', position: 'relative', display: 'grid', gap: '0.4rem' }}>
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', justifyContent: 'center', columnGap: '0.6rem', rowGap: '0.1rem', textAlign: 'center' }}>
-        <span style={{ fontFamily: 'var(--font-display)', fontSize: '1.35rem', whiteSpace: 'nowrap' }}>{def.name}</span>
-        <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--ink-soft)' }}>{def.howto}</span>
+        <span style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(1.8rem, 6vw, 2.6rem)', whiteSpace: 'nowrap', color: KIND_META[def.kind].color, WebkitTextStroke: '2px var(--ink)', paintOrder: 'stroke' }}>{def.name}</span>
+        <span style={{ fontSize: 'clamp(1rem, 3.4vw, 1.3rem)', fontWeight: 900, color: 'var(--ink)' }}>{def.howto}</span>
       </div>
 
       {stage === 'intro' ? (
