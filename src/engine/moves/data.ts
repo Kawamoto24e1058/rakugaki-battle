@@ -387,6 +387,11 @@ export function matchesPred(m: MoveDef, pred: HandPred): boolean {
   }
 }
 
+/** とくしゅな しくみの技（天気・バリア・タイマー・サイコロなど）。カードの にじいろ わくに つかう。 */
+export function isSpecialMove(m: MoveDef): boolean {
+  return !!(m.field || m.barrier || m.cost || m.delay || m.trap || m.bond || m.endure || m.copy || m.swap || m.dice || m.coin || m.allOrNothing != null || m.read || (m.hand && (m.hand.kind === 'ban' || m.hand.kind === 'only')));
+}
+
 export function hasPriority(m: MoveDef): boolean {
   return !!(m.first || m.guardPct || m.reflect || m.bond || m.endure || m.read || (m.buff && m.buff.stat === 'def'));
 }

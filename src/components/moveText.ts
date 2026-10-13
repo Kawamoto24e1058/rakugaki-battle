@@ -1,6 +1,6 @@
 import { STATUS_META } from '../engine/status';
 import { ATTRIBUTE_META } from '../engine/attributes';
-import { hasPriority, isRareMove, type Cond, type HandEffect, type MoveDef } from '../engine/moves';
+import { hasPriority, isRareMove, isSpecialMove, type Cond, type HandEffect, type MoveDef } from '../engine/moves';
 import { artFor, koseiArt, type ArtSpec } from './art/artSpec';
 import type { Kosei } from '../engine/personalities';
 import { FIELD_META } from '../engine';
@@ -228,6 +228,8 @@ export interface CardData {
   lines: string[];
   quick: boolean;
   rare: boolean;
+  /** とくしゅな しくみ（にじいろの わく）。 */
+  special: boolean;
   hits: number;
 }
 
@@ -247,6 +249,7 @@ export function moveCard(m: MoveDef): CardData {
     lines: moveDetailLines(m),
     quick: hasPriority(m),
     rare: isRareMove(m),
+    special: isSpecialMove(m),
     hits: m.hits ?? 1,
   };
 }
@@ -265,6 +268,7 @@ export function koseiCard(k: Kosei): CardData {
     lines: [`パッシブ：${k.passiveJp}`, `こせい技：${k.activeJp}`, 'かならず 先に うごく'],
     quick: true,
     rare: true,
+    special: false,
     hits: 1,
   };
 }

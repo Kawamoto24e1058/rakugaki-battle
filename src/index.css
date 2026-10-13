@@ -372,3 +372,157 @@ button {
 .gcard-fx-quick { background: #fff4c9; color: #6a4a00; }
 .gcard-fx-hand { color: #1a6a6a; }
 .gcard-fx-info { color: #6a655a; font-weight: 700; }
+
+/* ===========================================================
+   カード（新しい かた）：わくは レア度、絵は 大きく
+   =========================================================== */
+.gcard2 {
+  position: relative;
+  border-radius: 1em;
+  padding: 0.24em;
+  border: 0.14em solid var(--ink);
+  background: var(--card-color);
+  box-shadow: 0.25em 0.35em 0 rgba(51, 48, 43, 0.22);
+  user-select: none;
+  color: var(--ink);
+  box-sizing: border-box;
+}
+.gcard2.tier-rare {
+  background: linear-gradient(135deg, #fff3b0 0%, #f2b705 22%, #b57c00 45%, #ffe27a 60%, #f2b705 78%, #fff3b0 100%);
+}
+.gcard2.tier-special {
+  background: linear-gradient(135deg, #ff8a8a, #ffd36e 25%, #9be59b 45%, #8ac6ff 65%, #c7a4ff 85%, #ff8a8a);
+}
+.gcard2.tier-kosei {
+  background: linear-gradient(135deg, #c8baff, #7b5cf0 40%, #4527b0 60%, #c8baff);
+}
+.gc2-inner {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  border-radius: 0.78em;
+  overflow: hidden;
+  background: var(--card);
+  border: 0.12em solid var(--ink);
+}
+.gc2-art {
+  position: relative;
+  flex: none;
+  aspect-ratio: 200 / 170;
+  overflow: hidden;
+  border-bottom: 0.14em solid var(--ink);
+}
+.gc2-legacy {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--card-light) 45%, #fffdf5);
+}
+.gc2-legacy > svg {
+  width: 100%;
+}
+.gc2-power {
+  position: absolute;
+  top: 0.28em;
+  left: 0.28em;
+  width: 2.1em;
+  height: 2.1em;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #fffdf5;
+  border: 0.16em solid var(--ink);
+  font-family: var(--font-display);
+  font-size: 1.05em;
+  line-height: 1;
+  box-shadow: 0 0.12em 0 rgba(51, 48, 43, 0.3);
+  z-index: 3;
+}
+.gc2-hits {
+  position: absolute;
+  bottom: -0.55em;
+  right: -0.7em;
+  font-size: 0.62em;
+  padding: 0.05em 0.35em;
+  border-radius: 99px;
+  background: var(--ink);
+  color: #fff;
+}
+.gc2-tag {
+  position: absolute;
+  top: 0.32em;
+  right: 0.32em;
+  z-index: 3;
+  font-size: 0.64em;
+  font-weight: 800;
+  padding: 0.05em 0.55em;
+  border-radius: 99px;
+  background: var(--card-color);
+  color: var(--band-ink, #fff);
+  border: 0.14em solid var(--ink);
+  white-space: nowrap;
+}
+.gc2-name {
+  position: relative;
+  z-index: 4;
+  align-self: center;
+  margin-top: -0.85em;
+  max-width: 94%;
+  padding: 0.04em 0.55em 0.08em;
+  border-radius: 0.5em;
+  background: #fffdf5;
+  border: 0.15em solid var(--ink);
+  box-shadow: 0 0.16em 0 rgba(51, 48, 43, 0.25);
+  font-family: var(--font-display);
+  color: var(--card-dark);
+  line-height: 1.12;
+  text-align: center;
+  white-space: nowrap;
+  letter-spacing: -0.03em;
+  transform: rotate(-1.5deg);
+}
+.gc2-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  align-content: center;
+}
+.gc2-holo {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+  background: linear-gradient(115deg, transparent 32%, rgba(255, 255, 255, 0.7) 46%, rgba(255, 240, 170, 0.45) 52%, transparent 66%);
+  background-size: 300% 100%;
+  background-position: 120% 0;
+  mix-blend-mode: overlay;
+  opacity: 0.8;
+}
+.tier-special .gc2-holo {
+  background: linear-gradient(115deg, transparent 28%, rgba(255, 138, 138, 0.5) 38%, rgba(255, 211, 110, 0.5) 44%, rgba(155, 229, 155, 0.5) 50%, rgba(138, 198, 255, 0.5) 56%, rgba(199, 164, 255, 0.5) 62%, transparent 72%);
+  background-size: 300% 100%;
+}
+.gcard-anim .gc2-holo {
+  animation: holo-sweep 2.6s ease-in-out infinite;
+}
+@keyframes holo-sweep {
+  0% { background-position: 130% 0; }
+  60%, 100% { background-position: -40% 0; }
+}
+
+/* 描きおろしイラストの うごき（大きく出たときだけ） */
+.gcard-anim .ill-flicker { animation: ill-flicker 0.45s ease-in-out infinite alternate; }
+.gcard-anim .ill-twinkle { animation: ill-twinkle 1.1s ease-in-out infinite; }
+.gcard-anim .ill-float { animation: ill-float 1.4s ease-in-out infinite alternate; }
+.gcard-anim .ill-pulse { animation: ill-pulse 0.8s ease-in-out infinite alternate; transform-box: fill-box; transform-origin: center; }
+.gcard-anim .ill-flow { animation: ill-flow 0.55s linear infinite; }
+.gcard-anim .ill-shake { animation: ill-chomp 0.42s ease-in-out infinite alternate; }
+.gcard-anim .ill-spin { animation: ill-spin 0.9s ease-in-out infinite alternate; }
+@keyframes ill-flicker { from { transform: scale(1, 1) rotate(-4deg); } to { transform: scale(0.9, 1.12) rotate(4deg); } }
+@keyframes ill-twinkle { 0%, 100% { transform: scale(0.6) rotate(0deg); opacity: 0.6; } 50% { transform: scale(1.25) rotate(20deg); opacity: 1; } }
+@keyframes ill-float { from { transform: translateY(3px); } to { transform: translateY(-7px); } }
+@keyframes ill-pulse { from { transform: scale(0.93); } to { transform: scale(1.07); } }
+@keyframes ill-flow { to { stroke-dashoffset: -60; } }
+@keyframes ill-chomp { from { transform: scaleY(1.06); } to { transform: scaleY(0.9); } }
+@keyframes ill-spin { from { transform: rotate(-10deg); } to { transform: rotate(14deg); } }

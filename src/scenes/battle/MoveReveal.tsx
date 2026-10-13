@@ -332,7 +332,7 @@ function CenterReveal({ side, card, title, deck }: { side: Side; card: CardData;
             style={{ position: 'relative', transformStyle: 'preserve-3d' }}
           >
             <div style={{ backfaceVisibility: 'hidden' }}>
-              <GameCard card={card} size={BIG} style={{ boxShadow: `0 0 0 0.25em #fff, 0 0 2.6em ${card.color}` }} />
+              <GameCard card={card} size={BIG} animated style={{ boxShadow: `0 0 0 0.25em #fff, 0 0 2.6em ${card.color}` }} />
             </div>
             <div style={{ position: 'absolute', inset: 0, backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}>
               <CardBack size={BIG} style={{ borderColor: color }} />

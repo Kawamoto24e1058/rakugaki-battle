@@ -1,13 +1,14 @@
 import { useMemo, useState } from 'react';
 import { useGame } from '../store/gameStore';
-import { MOVES } from '../engine/moves';
+import { isSpecialMove, MOVES } from '../engine/moves';
 import { GameCard } from '../components/GameCard';
 import { moveCard } from '../components/moveText';
+import { ILLUST } from '../components/art/illust';
 
-type Filter = 'all' | 'attack' | 'support' | 'charge' | 'cond' | 'hand' | 'special' | 'fire' | 'water' | 'wood' | 'bolt' | 'dark';
+type Filter = 'illust' | 'all' | 'attack' | 'support' | 'charge' | 'cond' | 'hand' | 'special' | 'fire' | 'water' | 'wood' | 'bolt' | 'dark';
 
 const FILTERS: [Filter, string][] = [
-  ['all', 'ぜんぶ'], ['attack', 'こうげき'], ['support', 'ほじょ'], ['charge', 'ため技'], ['cond', 'コンボ・じょうけん'], ['hand', '手札いじり'], ['special', 'とくしゅ'],
+  ['illust', 'かきおろし'], ['all', 'ぜんぶ'], ['attack', 'こうげき'], ['support', 'ほじょ'], ['charge', 'ため技'], ['cond', 'コンボ・じょうけん'], ['hand', '手札いじり'], ['special', 'とくしゅ'],
   ['fire', 'ほのお'], ['water', 'みず'], ['wood', 'き'], ['bolt', 'かみなり'], ['dark', 'やみ'],
 ];
 
@@ -21,11 +22,12 @@ export function CardGalleryScene() {
     () =>
       Object.values(MOVES).filter((m) => {
         if (filter === 'all') return true;
+        if (filter === 'illust') return !!ILLUST[m.id];
         if (filter === 'attack' || filter === 'support') return m.category === filter;
         if (filter === 'charge') return !!m.charge;
         if (filter === 'cond') return !!m.when;
         if (filter === 'hand') return !!m.hand;
-        if (filter === 'special') return !!(m.field || m.barrier || m.cost || m.delay || m.trap || m.bond || m.endure || m.copy || m.swap || m.dice || m.coin || m.allOrNothing != null || m.read || (m.hand && (m.hand.kind === 'ban' || m.hand.kind === 'only')));
+        if (filter === 'special') return isSpecialMove(m);
         return m.attribute === filter;
       }),
     [filter],
@@ -53,7 +55,7 @@ export function CardGalleryScene() {
           const c = moveCard(m);
           return (
             <div key={m.id} onClick={() => setOpen(open === m.id ? null : m.id)} style={{ cursor: 'pointer' }}>
-              <GameCard card={c} size="min(42vw, 9.4rem)" selected={open === m.id} />
+              <GameCard card={c} size="min(42vw, 9.4rem)" selected={open === m.id} animated={open === m.id} />
             </div>
           );
         })}
