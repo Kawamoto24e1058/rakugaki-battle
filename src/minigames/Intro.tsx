@@ -95,9 +95,12 @@ export function MinigameIntro({ def, cpu, onDone }: { def: MinigameDef; cpu: boo
           animate={{ scale: [0.3, 1.12, 1], opacity: 1, rotate: [-6, 2, 0] }}
           exit={{ scale: 1.7, opacity: 0, transition: { duration: 0.35, ease: 'easeIn' } }}
           transition={{ duration: 0.5 }}
+          className={counting || step === 'go' ? 'mg-counting' : undefined}
           style={{
             position: 'relative',
             display: 'grid',
+            // はみ出す ものが あっても 列が ひろがらない ように
+            gridTemplateColumns: 'minmax(0, 1fr)',
             justifyItems: 'center',
             gap: 'clamp(.6rem, 2vh, 1.1rem)',
             background: '#fff',
@@ -120,9 +123,11 @@ export function MinigameIntro({ def, cpu, onDone }: { def: MinigameDef; cpu: boo
             transition={{ repeat: Infinity, duration: 0.9, delay: 0.5 }}
             style={{
               fontFamily: 'var(--font-display)',
-              fontSize: 'clamp(3.4rem, 15vw, 7rem)',
+              // 文字数に あわせて カードの はばに おさめる（まるい フォントは 1字 ≒ 1.08）
+              fontSize: `min(7rem, 15vw, calc(min(86vw, 40rem) / ${(def.command.length * 1.08).toFixed(2)}))`,
               color: kind.color,
               whiteSpace: 'nowrap',
+              maxWidth: '100%',
               lineHeight: 1.05,
               WebkitTextStroke: '4px var(--ink)',
               paintOrder: 'stroke',
@@ -161,6 +166,7 @@ export function MinigameIntro({ def, cpu, onDone }: { def: MinigameDef; cpu: boo
             {(counting || step === 'go') && (
               <motion.div
                 key={String(step)}
+                className="mg-count"
                 initial={{ scale: 2.4, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.6, opacity: 0 }}

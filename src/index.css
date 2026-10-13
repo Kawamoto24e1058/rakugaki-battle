@@ -625,3 +625,9 @@ button {
 @keyframes ill-flow { to { stroke-dashoffset: -60; } }
 @keyframes ill-chomp { from { transform: scaleY(1.06); } to { transform: scaleY(0.9); } }
 @keyframes ill-spin { from { transform: rotate(-10deg); } to { transform: rotate(14deg); } }
+
+/* ミニゲームの お題カード：3・2・1 の あいだは 中身を うすく して 数字を 見やすく */
+.mg-counting > :not(.mg-count) {
+  opacity: 0.22;
+  transition: opacity 0.2s;
+}
