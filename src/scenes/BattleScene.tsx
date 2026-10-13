@@ -19,7 +19,7 @@ import { buildRecap, TurnRecap, type RecapSide } from './battle/Recap';
 import { MoveReveal } from './battle/MoveReveal';
 import { STATUS_META } from '../engine/status';
 import { sfx } from '../audio/sfx';
-import { MINIGAMES, MinigameIntro, MinigameStage, pickMinigame, type MinigameOutcome } from '../minigames';
+import { MinigameIntro, MinigameStage, pickMinigame, type MinigameOutcome } from '../minigames';
 import type { Beat, Snap } from './battle/types';
 
 /** reveal＝このターンの技が きまる → mgIntro＝ミニゲームの しょうかい → minigame＝ミニゲーム → animating＝こうげきの演出 → over */
@@ -189,7 +189,7 @@ export function BattleScene() {
             onDone={() => setPhase('mgIntro')}
           />
         )}
-        {phase === 'mgIntro' && <MinigameIntro key={`mi-${turnKey}`} def={game} all={MINIGAMES} cpu={cpu} onDone={() => setPhase('minigame')} />}
+        {phase === 'mgIntro' && <MinigameIntro key={`mi-${turnKey}`} def={game} cpu={cpu} onDone={() => setPhase('minigame')} />}
       </AnimatePresence>
       {curBeat.win != null && <VictoryOverlay name={names[curBeat.win]} char={chars[curBeat.win]} image={images[curBeat.win]} />}
       {curBeat.koseiAct && (

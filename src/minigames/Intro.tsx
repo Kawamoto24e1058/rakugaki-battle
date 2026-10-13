@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { useEffect, useState } from 'react';
+import { motion } from 'framer-motion';
 import type { MinigameDef, MinigameKind } from './types';
 import { KEY_LABELS } from './input';
 import { P_COLOR } from './Arena';
@@ -12,71 +12,33 @@ export const KIND_META: Record<MinigameKind, { jp: string; color: string }> = {
   luck: { jp: 'うん', color: '#d99a00' },
 };
 
-type Step = 'band' | 'spin' | 'title';
+type Step = 'band' | 'title';
 
 /**
- * ミニゲームの はじまり：「ミニゲーム！」の帯 → ゲーム名が ルーレットで まわって きまる
- * → 大きな タイトルと 遊び方・つかう ボタン。全部 自動（タップで はやおくり）。
+ * ミニゲームの はじまり：「ミニゲーム！」の帯 → 大きな タイトルと 遊び方・つかう ボタン。
+ * 全部 自動（タップで はやおくり）。
  */
-export function MinigameIntro({
-  def,
-  all,
-  cpu,
-  onDone,
-}: {
-  def: MinigameDef;
-  /** ルーレットに ながす ゲーム一覧。 */
-  all: MinigameDef[];
-  cpu: boolean;
-  onDone: () => void;
-}) {
+export function MinigameIntro({ def, cpu, onDone }: { def: MinigameDef; cpu: boolean; onDone: () => void }) {
   const [step, setStep] = useState<Step>('band');
-  // ルーレットの ならび：ほかのゲームを ながして、さいごに きまった ゲーム
-  const reel = useMemo(() => {
-    const others = all.filter((g) => g.id !== def.id);
-    const seq: MinigameDef[] = [];
-    for (let i = 0; i < 14; i++) seq.push(others[(i * 5 + def.id.length) % others.length]);
-    seq.push(def);
-    return seq;
-  }, [all, def]);
-  const [pos, setPos] = useState(0);
 
   useEffect(() => {
     if (step === 'band') {
       sfx.whoosh();
-      const t = window.setTimeout(() => setStep('spin'), 1100);
+      const t = window.setTimeout(() => setStep('title'), 1000);
       return () => window.clearTimeout(t);
     }
-    if (step === 'title') {
-      sfx.reveal();
-      const t = window.setTimeout(onDone, 4200);
-      return () => window.clearTimeout(t);
-    }
-    // spin：だんだん ゆっくり
-    if (pos >= reel.length - 1) {
-      const t = window.setTimeout(() => setStep('title'), 450);
-      return () => window.clearTimeout(t);
-    }
-    const left = reel.length - 1 - pos;
-    const delay = left > 6 ? 70 : 70 + (7 - left) * 55;
-    const t = window.setTimeout(() => {
-      setPos((p) => p + 1);
-      sfx.tick(left <= 1 ? 1.4 : 1);
-    }, delay);
+    sfx.reveal();
+    const t = window.setTimeout(onDone, 4200);
     return () => window.clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, pos]);
+  }, [step]);
 
   const skip = () => {
-    if (step === 'band') setStep('spin');
-    else if (step === 'spin') {
-      setPos(reel.length - 1);
-      setStep('title');
-    } else onDone();
+    if (step === 'band') setStep('title');
+    else onDone();
   };
 
   const kind = KIND_META[def.kind];
-  const cur = reel[pos];
 
   return (
     <motion.div
@@ -117,45 +79,6 @@ export function MinigameIntro({
       >
         ミニゲーム！
       </motion.div>
-
-      {/* ルーレット */}
-      {step === 'spin' && (
-        <div style={{ display: 'grid', justifyItems: 'center', gap: '0.5rem' }}>
-          <div style={{ fontWeight: 900, fontSize: 'clamp(1.1rem, 4vw, 1.5rem)' }}>なにが でるかな？</div>
-          <div
-            style={{
-              width: 'min(92vw, 36rem)',
-              height: 'clamp(5.5rem, 16vw, 8rem)',
-              border: '4px solid var(--ink)',
-              borderRadius: 14,
-              background: '#fff',
-              display: 'grid',
-              placeItems: 'center',
-              overflow: 'hidden',
-              position: 'relative',
-              boxShadow: '4px 5px 0 rgba(0,0,0,.15)',
-            }}
-          >
-            <AnimatePresence mode="popLayout" initial={false}>
-              <motion.div
-                key={pos}
-                initial={{ y: '-100%' }}
-                animate={{ y: 0 }}
-                exit={{ y: '100%' }}
-                transition={{ duration: 0.06 }}
-                style={{
-                  fontFamily: 'var(--font-display)',
-                  fontSize: 'clamp(2.4rem, 10vw, 4.2rem)',
-                  color: KIND_META[cur.kind].color,
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {cur.name}
-              </motion.div>
-            </AnimatePresence>
-          </div>
-        </div>
-      )}
 
       {/* タイトル＋遊び方 */}
       {step === 'title' && (
