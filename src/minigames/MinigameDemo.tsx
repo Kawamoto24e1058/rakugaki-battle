@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { MINIGAMES, MinigameStage, type MinigameOutcome } from './index';
+import { MINIGAMES, MinigameIntro, MinigameStage, type MinigameOutcome } from './index';
 
 /** 開発用：?mg=ID（&vs で2人）で ミニゲームだけ遊べる。 */
 export function MinigameDemo() {
@@ -7,6 +7,7 @@ export function MinigameDemo() {
   const [idx, setIdx] = useState(() => Math.max(0, MINIGAMES.findIndex((g) => g.id === q.get('mg'))));
   const [round, setRound] = useState(0);
   const [last, setLast] = useState<MinigameOutcome | null>(null);
+  const [playing, setPlaying] = useState(-1);
   const vs = q.has('vs');
   return (
     <div className="scene" style={{ justifyContent: 'flex-start', gap: '0.6rem' }}>
@@ -17,7 +18,8 @@ export function MinigameDemo() {
           </button>
         ))}
       </div>
-      <MinigameStage key={`${idx}-${round}`} def={MINIGAMES[idx]} seed={1234 + round * 77} cpu={!vs} cpuSkill={0.6} names={['ポチころ', 'ドカドカおに']} onDone={(o) => { setLast(o); setRound((r) => r + 1); }} />
+      {playing !== round && <MinigameIntro key={`i-${idx}-${round}`} def={MINIGAMES[idx]} cpu={!vs} onDone={() => setPlaying(round)} />}
+      {playing === round && <MinigameStage key={`${idx}-${round}`} def={MINIGAMES[idx]} seed={1234 + round * 77} cpu={!vs} cpuSkill={0.6} names={['ポチころ', 'ドカドカおに']} onDone={(o) => { setLast(o); setRound((r) => r + 1); }} />}
       {last && <div style={{ fontSize: '0.8rem' }}>前回：{last.scores.map(Math.round).join(' - ')} / 勝ち {String(last.winner)} {last.perfect ? 'perfect' : ''}</div>}
     </div>
   );

@@ -9,19 +9,19 @@ export { MinigameStage, judge } from './Shell';
 export { MinigameIntro, KIND_META } from './Intro';
 
 export const MINIGAMES: MinigameDef[] = [
-  { id: 'mash', name: 'れんだ！', kind: 'body', howto: '3びょうで たくさん おそう', input: 'main', Component: Mash },
-  { id: 'timing', name: 'ぴったり ストップ', kind: 'body', howto: 'まんなかで とめよう', input: 'main', Component: Timing },
-  { id: 'reaction', name: 'よーい ドン！', kind: 'body', howto: '「ドン！」で すぐ おす（はやすぎは フライング）', input: 'main', Component: Reaction },
-  { id: 'rhythm', name: 'リズム ポン', kind: 'body', howto: 'まるが かさなったら おす', input: 'main', Component: Rhythm },
-  { id: 'quiz', name: 'はやおし クイズ', kind: 'head', howto: 'さきに せいかいした ほうが かち', input: 'choice', Component: makeChoiceGame(makeQuiz) },
-  { id: 'math', name: 'けいさん', kind: 'head', howto: 'こたえを えらぼう', input: 'choice', Component: makeChoiceGame(makeMath) },
-  { id: 'color', name: 'いろあて', kind: 'head', howto: 'いろの なまえを えらぼう', input: 'choice', Component: makeChoiceGame(makeColor) },
-  { id: 'memory', name: 'おぼえて！', kind: 'head', howto: 'さいしょに よく みて おぼえよう', input: 'choice', Component: makeChoiceGame(makeMemory) },
-  { id: 'odd', name: 'まちがいさがし', kind: 'find', howto: 'ひとつだけ ちがうのを さがそう', input: 'choice', Component: makeChoiceGame(makeOdd) },
-  { id: 'count', name: 'かぞえて！', kind: 'find', howto: 'いくつ あるかな', input: 'choice', Component: makeChoiceGame(makeCount) },
-  { id: 'shadow', name: 'かげあて', kind: 'find', howto: 'おなじ かたちを えらぼう', input: 'choice', Component: makeChoiceGame(makeSilhouette) },
-  { id: 'roulette', name: 'ルーレット', kind: 'luck', howto: 'おおきい かずで とめよう', input: 'main', Component: Roulette },
-  { id: 'lottery', name: 'くじびき', kind: 'luck', howto: 'はこを ひとつ えらぼう', input: 'choice', Component: Lottery },
+  { id: 'mash', command: 'れんだ！', name: 'れんだ！', kind: 'body', howto: '3びょうで たくさん おそう', input: 'main', Component: Mash },
+  { id: 'timing', command: 'とめろ！', name: 'ぴったり ストップ', kind: 'body', howto: 'まんなかで とめよう', input: 'main', Component: Timing },
+  { id: 'reaction', command: 'はやおし！', name: 'よーい ドン！', kind: 'body', howto: '「ドン！」で すぐ おす（はやすぎは フライング）', input: 'main', Component: Reaction },
+  { id: 'rhythm', command: 'あわせろ！', name: 'リズム ポン', kind: 'body', howto: 'まるが かさなったら おす', input: 'main', Component: Rhythm },
+  { id: 'quiz', command: 'こたえろ！', name: 'はやおし クイズ', kind: 'head', howto: 'さきに せいかいした ほうが かち', input: 'choice', Component: makeChoiceGame(makeQuiz) },
+  { id: 'math', command: 'けいさん！', name: 'けいさん', kind: 'head', howto: 'こたえを えらぼう', input: 'choice', Component: makeChoiceGame(makeMath) },
+  { id: 'color', command: 'いろを えらべ！', name: 'いろあて', kind: 'head', howto: 'いろの なまえを えらぼう', input: 'choice', Component: makeChoiceGame(makeColor) },
+  { id: 'memory', command: 'おぼえろ！', name: 'おぼえて！', kind: 'head', howto: 'さいしょに よく みて おぼえよう', input: 'choice', Component: makeChoiceGame(makeMemory) },
+  { id: 'odd', command: 'さがせ！', name: 'まちがいさがし', kind: 'find', howto: 'ひとつだけ ちがうのを さがそう', input: 'choice', Component: makeChoiceGame(makeOdd) },
+  { id: 'count', command: 'かぞえろ！', name: 'かぞえて！', kind: 'find', howto: 'いくつ あるかな', input: 'choice', Component: makeChoiceGame(makeCount) },
+  { id: 'shadow', command: 'かげを あてろ！', name: 'かげあて', kind: 'find', howto: 'おなじ かたちを えらぼう', input: 'choice', Component: makeChoiceGame(makeSilhouette) },
+  { id: 'roulette', command: 'とめろ！', name: 'ルーレット', kind: 'luck', howto: 'おおきい かずで とめよう', input: 'main', Component: Roulette },
+  { id: 'lottery', command: 'ひけ！', name: 'くじびき', kind: 'luck', howto: 'はこを ひとつ えらぼう', input: 'choice', Component: Lottery },
 ];
 
 /** そのターンのミニゲーム（同じものが 続きにくい）。 */

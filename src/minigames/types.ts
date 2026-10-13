@@ -21,6 +21,8 @@ export interface MinigameDef {
   id: string;
   name: string;
   kind: MinigameKind;
+  /** 大きく出す 命令の ひとこと（「れんだ！」「とめろ！」）。 */
+  command: string;
   /** 遊び方（ひとこと）。 */
   howto: string;
   /** 操作のヒント（'main'＝ボタン1つ、'choice'＝3つから選ぶ）。 */

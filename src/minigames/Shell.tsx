@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { MinigameDef, MinigameOutcome, Player } from './types';
-import { KEY_LABELS } from './input';
 import { P_COLOR } from './Arena';
 import { sfx } from '../audio/sfx';
 import { KIND_META } from './Intro';
@@ -16,7 +15,7 @@ export function judge(scores: [number, number]): MinigameOutcome {
   return { scores, winner, perfect: ws >= 80 && ws - ls >= 45 };
 }
 
-type Stage = 'intro' | 'play' | 'result';
+type Stage = 'play' | 'result';
 
 /**
  * ミニゲーム1回ぶんの ながれ：タイトルと遊び方 → 3・2・1 → ゲーム → 結果 → onDone。
@@ -36,22 +35,10 @@ export function MinigameStage({
   names: [string, string];
   onDone: (o: MinigameOutcome) => void;
 }) {
-  const [stage, setStage] = useState<Stage>('intro');
-  const [count, setCount] = useState(3);
+  // カウントダウンは MinigameIntro が やる（タイトルから そのまま ゲームへ）
+  const [stage, setStage] = useState<Stage>('play');
   const [outcome, setOutcome] = useState<MinigameOutcome | null>(null);
   const done = useRef(false);
-
-  // 3・2・1・スタート！
-  useEffect(() => {
-    if (stage !== 'intro') return;
-    if (count > 0) sfx.count();
-    else sfx.go();
-    const t = window.setTimeout(() => {
-      if (count <= 0) setStage('play');
-      else setCount((c) => c - 1);
-    }, count <= 0 ? 600 : 750);
-    return () => window.clearTimeout(t);
-  }, [stage, count]);
 
   useEffect(() => {
     if (stage === 'result' && outcome) {
@@ -82,33 +69,11 @@ export function MinigameStage({
   return (
     <div style={{ width: '100%', maxWidth: '52rem', position: 'relative', display: 'grid', gap: '0.4rem' }}>
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', justifyContent: 'center', columnGap: '0.6rem', rowGap: '0.1rem', textAlign: 'center' }}>
-        <span style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(1.8rem, 6vw, 2.6rem)', whiteSpace: 'nowrap', color: KIND_META[def.kind].color, WebkitTextStroke: '2px var(--ink)', paintOrder: 'stroke' }}>{def.name}</span>
+        <span style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(1.8rem, 6vw, 2.6rem)', whiteSpace: 'nowrap', color: KIND_META[def.kind].color, WebkitTextStroke: '2px var(--ink)', paintOrder: 'stroke' }}>{def.command}</span>
         <span style={{ fontSize: 'clamp(1rem, 3.4vw, 1.3rem)', fontWeight: 900, color: 'var(--ink)' }}>{def.howto}</span>
       </div>
 
-      {stage === 'intro' ? (
-        <div style={{ display: 'grid', placeItems: 'center', minHeight: '13rem', gap: '0.5rem' }}>
-          <AnimatePresence mode="popLayout">
-            <motion.div
-              key={count}
-              initial={{ scale: 0.3, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 1.6, opacity: 0 }}
-              style={{ fontFamily: 'var(--font-display)', fontSize: count <= 0 ? '3.2rem' : '5rem', color: count <= 0 ? 'var(--crayon-red)' : 'var(--ink)' }}
-            >
-              {count <= 0 ? 'スタート！' : count}
-            </motion.div>
-          </AnimatePresence>
-          <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--ink-soft)', textAlign: 'center' }}>
-            {def.input === 'main' ? 'ボタン' : 'こたえのボタン'}：
-            <span style={{ color: P_COLOR[0] }}> P1 {KEY_LABELS[0].join(' ')} </span>
-            {!cpu && <span style={{ color: P_COLOR[1] }}> ／ P2 {KEY_LABELS[1].join(' ')}</span>}
-            ・ タッチでも OK
-          </div>
-        </div>
-      ) : (
-        <Game seed={seed} cpu={cpu} cpuSkill={cpuSkill} names={names} onFinish={stage === 'play' ? finish : () => {}} />
-      )}
+      <Game seed={seed} cpu={cpu} cpuSkill={cpuSkill} names={names} onFinish={stage === 'play' ? finish : () => {}} />
 
       <AnimatePresence>
         {stage === 'result' && outcome && (
