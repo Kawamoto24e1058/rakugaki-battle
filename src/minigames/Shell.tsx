@@ -4,6 +4,7 @@ import type { MinigameDef, MinigameOutcome, Player } from './types';
 import { P_COLOR } from './Arena';
 import { sfx } from '../audio/sfx';
 import { KIND_META } from './Intro';
+import { MinigameCtx, type MgFighter } from './context';
 
 /** スコアから 勝ち負けを決める（4点差未満は ひきわけ）。 */
 export function judge(scores: [number, number]): MinigameOutcome {
@@ -26,6 +27,7 @@ export function MinigameStage({
   cpu,
   cpuSkill,
   names,
+  fighters,
   onDone,
 }: {
   def: MinigameDef;
@@ -33,6 +35,7 @@ export function MinigameStage({
   cpu: boolean;
   cpuSkill: number;
   names: [string, string];
+  fighters: [MgFighter, MgFighter];
   onDone: (o: MinigameOutcome) => void;
 }) {
   // カウントダウンは MinigameIntro が やる（タイトルから そのまま ゲームへ）
@@ -53,7 +56,7 @@ export function MinigameStage({
       if (done.current) return;
       done.current = true;
       onDone(outcome);
-    }, 1700);
+    }, 2300);
     return () => window.clearTimeout(t);
   }, [stage, outcome, onDone]);
 
@@ -73,14 +76,17 @@ export function MinigameStage({
         <span style={{ fontSize: 'clamp(1rem, 3.4vw, 1.3rem)', fontWeight: 900, color: 'var(--ink)' }}>{def.howto}</span>
       </div>
 
-      <Game seed={seed} cpu={cpu} cpuSkill={cpuSkill} names={names} onFinish={stage === 'play' ? finish : () => {}} />
+      <MinigameCtx.Provider value={{ fighters, outcome: stage === 'result' ? outcome : null }}>
+        <Game seed={seed} cpu={cpu} cpuSkill={cpuSkill} names={names} fighters={fighters} onFinish={stage === 'play' ? finish : () => {}} />
+      </MinigameCtx.Provider>
 
       <AnimatePresence>
         {stage === 'result' && outcome && (
           <motion.div
-            initial={{ opacity: 0, scale: 0.6 }}
-            animate={{ opacity: 1, scale: 1 }}
-            style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', pointerEvents: 'none', zIndex: 20 }}
+            initial={{ opacity: 0, scale: 0.6, y: -10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            transition={{ delay: 0.35 }}
+            style={{ position: 'absolute', left: 0, right: 0, top: '-0.4rem', display: 'grid', justifyItems: 'center', pointerEvents: 'none', zIndex: 20 }}
           >
             <div style={{ background: 'rgba(255,253,245,.96)', border: '4px solid var(--ink)', borderRadius: 16, padding: '0.6rem 1.4rem', textAlign: 'center', boxShadow: '5px 6px 0 rgba(0,0,0,.2)' }}>
               <div style={{ fontFamily: 'var(--font-display)', fontSize: '1.9rem', color: outcome.winner == null ? 'var(--ink)' : P_COLOR[outcome.winner] }}>

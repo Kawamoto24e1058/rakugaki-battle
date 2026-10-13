@@ -150,7 +150,7 @@ export function Timing({ seed, cpu, cpuSkill, names, onFinish }: GameProps) {
   const side = (p: Player) => {
     const x = stops[p] ?? pos(t);
     return (
-      <Half key={p} player={p} name={names[p]} cpu={p === 1 && cpu}>
+      <Half key={p} player={p} name={names[p]} cpu={p === 1 && cpu} mood={stops[p] == null ? null : score(stops[p]) >= 70 ? 'good' : score(stops[p]) < 35 ? 'bad' : null}>
         <div style={{ position: 'relative', width: '100%', height: '2.6rem', border: '3px solid var(--ink)', borderRadius: 10, background: '#fff', overflow: 'hidden' }}>
           <div style={{ position: 'absolute', left: '42%', width: '16%', top: 0, bottom: 0, background: '#cdeedb' }} />
           <div style={{ position: 'absolute', left: '48%', width: '4%', top: 0, bottom: 0, background: '#2fa862' }} />
@@ -218,7 +218,7 @@ export function Reaction({ seed, cpu, cpuSkill, names, onFinish }: GameProps) {
   void start;
 
   const side = (p: Player) => (
-    <Half key={p} player={p} name={names[p]} cpu={p === 1 && cpu}>
+    <Half key={p} player={p} name={names[p]} cpu={p === 1 && cpu} mood={view[p] == null ? null : view[p]! < 0 ? 'bad' : view[p]! < 380 ? 'good' : null}>
       <div style={{ fontFamily: 'var(--font-display)', fontSize: '1.4rem', minHeight: '2.2rem', color: view[p] === -1 ? 'var(--crayon-red)' : 'var(--ink)' }}>
         {view[p] == null ? '' : view[p]! < 0 ? 'フライング！' : `${Math.round(view[p]!)}ミリびょう`}
       </div>

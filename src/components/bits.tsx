@@ -154,13 +154,14 @@ export function CharacterSprite({
         background: meta.color,
         color: '#fff',
         fontFamily: 'var(--font-display)',
-        fontSize: '1.1rem',
         textAlign: 'center',
-        padding: '0.5rem',
+        overflow: 'hidden',
+        containerType: 'size',
         ...style,
       }}
     >
-      {name}
+      {/* 小さい アバターでも はみ出さないよう、わくの 大きさに あわせる */}
+      <span style={{ fontSize: 'clamp(0.4rem, 17cqmin, 1.1rem)', lineHeight: 1.1, padding: '8%', wordBreak: 'break-all' }}>{name}</span>
     </div>
   );
 }

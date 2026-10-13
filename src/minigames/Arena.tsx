@@ -1,6 +1,8 @@
-import type { CSSProperties, ReactNode } from 'react';
-import { motion } from 'framer-motion';
-import { KEY_LABELS } from './input';
+import { createContext, useContext, useState, type CSSProperties, type ReactNode } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { KEY_LABELS, usePlayerKeys } from './input';
+import { useMinigameCtx } from './context';
+import { CharacterSprite } from '../components/bits';
 import type { Player } from './types';
 
 export const P_COLOR: [string, string] = ['#e8503a', '#2f7dd1'];
@@ -16,35 +18,172 @@ export function Arena({ children, top }: { children: [ReactNode, ReactNode]; top
   );
 }
 
-/** かたがわ（1人ぶん）の わく。 */
-export function Half({ player, name, cpu, children, style }: { player: Player; name: string; cpu?: boolean; children: ReactNode; style?: CSSProperties }) {
+/** ボタンが おされたことを わく（アバター）に つたえる。 */
+const PulseCtx = createContext<() => void>(() => {});
+
+type Mood = 'good' | 'bad' | null;
+
+/**
+ * かたがわ（1人ぶん）の わく。
+ * 上に 描いた絵の アバター（おすと はねる）／せいかい・まちがいで ○×スタンプ／結果で「かち！」スタンプ。
+ */
+export function Half({
+  player,
+  name,
+  cpu,
+  children,
+  style,
+  mood = null,
+}: {
+  player: Player;
+  name: string;
+  cpu?: boolean;
+  children: ReactNode;
+  style?: CSSProperties;
+  /** せいかい（good）／まちがい（bad）。かわった しゅんかんに スタンプが出る。 */
+  mood?: Mood;
+}) {
+  const { fighters, outcome } = useMinigameCtx();
+  const f = fighters?.[player] ?? null;
+  const [pulse, setPulse] = useState(0);
+  const bump = () => setPulse((n) => n + 1);
+  usePlayerKeys((p) => {
+    if (p === player && !cpu) bump();
+  });
+  const result = outcome ? (outcome.winner == null ? 'draw' : outcome.winner === player ? 'win' : 'lose') : null;
+
   return (
-    <div
-      style={{
-        position: 'relative',
-        border: `3px solid ${P_COLOR[player]}`,
-        borderRadius: 14,
-        background: P_SOFT[player],
-        padding: '0.45rem',
-        display: 'grid',
-        gap: '0.35rem',
-        justifyItems: 'center',
-        alignContent: 'start',
-        minWidth: 0,
-        minHeight: '11rem',
-        ...style,
-      }}
-    >
-      <div style={{ fontWeight: 900, fontSize: '0.8rem', color: P_COLOR[player], justifySelf: player === 0 ? 'start' : 'end' }}>
-        {player === 0 ? 'P1' : cpu ? 'CPU' : 'P2'}：{name}
-      </div>
-      {children}
-    </div>
+    <PulseCtx.Provider value={bump}>
+      <motion.div
+        key={mood ?? 'none'}
+        animate={mood === 'bad' ? { x: [0, -10, 9, -6, 4, 0] } : mood === 'good' ? { scale: [1, 1.04, 1] } : {}}
+        transition={{ duration: 0.4 }}
+        style={{
+          position: 'relative',
+          border: `3px solid ${P_COLOR[player]}`,
+          borderRadius: 14,
+          background: P_SOFT[player],
+          padding: '0.45rem',
+          display: 'grid',
+          gap: '0.35rem',
+          justifyItems: 'center',
+          alignContent: 'start',
+          minWidth: 0,
+          minHeight: '11rem',
+          boxShadow: mood === 'good' ? `0 0 0 4px #2fa862, 0 0 18px #2fa86288` : result === 'win' ? `0 0 0 4px var(--crayon-yellow), 0 0 22px #f2b70599` : 'none',
+          opacity: result === 'lose' ? 0.8 : 1,
+          transition: 'box-shadow .2s, opacity .3s',
+          ...style,
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifySelf: player === 0 ? 'start' : 'end', flexDirection: player === 0 ? 'row' : 'row-reverse' }}>
+          {f && (
+            <div style={{ position: 'relative', width: '2.8rem', height: '2.8rem' }}>
+              {/* おした しゅんかんの わっか */}
+              <AnimatePresence>
+                {pulse > 0 && (
+                  <motion.div
+                    key={pulse}
+                    initial={{ scale: 0.6, opacity: 0.8 }}
+                    animate={{ scale: 1.9, opacity: 0 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.35 }}
+                    style={{ position: 'absolute', inset: 0, borderRadius: '50%', border: `3px solid ${P_COLOR[player]}`, pointerEvents: 'none' }}
+                  />
+                )}
+              </AnimatePresence>
+              <motion.div
+                key={`${pulse}-${result}`}
+                animate={
+                  result === 'win'
+                    ? { y: [0, -12, 0], rotate: [0, -6, 6, 0], scaleY: 1 }
+                    : result === 'lose'
+                      ? { y: 4, rotate: player === 0 ? -14 : 14, scaleY: 0.9 }
+                      : pulse > 0
+                        ? { scaleY: [1, 0.78, 1.14, 1], scaleX: [1, 1.16, 0.92, 1], y: [0, 2, -6, 0] }
+                        : { y: [0, -2, 0] }
+                }
+                transition={
+                  result === 'win'
+                    ? { repeat: Infinity, duration: 0.55 }
+                    : result === 'lose'
+                      ? { duration: 0.4 }
+                      : pulse > 0
+                        ? { duration: 0.28 }
+                        : { repeat: Infinity, duration: 1.8, ease: 'easeInOut' }
+                }
+                style={{ width: '100%', height: '100%', transformOrigin: '50% 100%', filter: result === 'lose' ? 'grayscale(0.6)' : undefined }}
+              >
+                <CharacterSprite imageUrl={f.image} attribute={f.attribute} name={f.name} flip={player === 1} />
+              </motion.div>
+            </div>
+          )}
+          <div style={{ fontWeight: 900, fontSize: '0.85rem', color: P_COLOR[player] }}>
+            {player === 0 ? 'P1' : cpu ? 'CPU' : 'P2'}：{name}
+          </div>
+        </div>
+        {children}
+
+        {/* ○×スタンプ */}
+        <AnimatePresence>
+          {mood && !result && (
+            <motion.div
+              key={mood}
+              initial={{ scale: 2.4, opacity: 0, rotate: -20 }}
+              animate={{ scale: 1, opacity: [0, 1, 1, 0], rotate: 0 }}
+              transition={{ duration: 1.1, times: [0, 0.15, 0.7, 1] }}
+              style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', pointerEvents: 'none', zIndex: 5 }}
+            >
+              <svg viewBox="-50 -50 100 100" width="58%" style={{ maxWidth: '9rem', overflow: 'visible' }}>
+                {mood === 'good' ? (
+                  <circle r={36} fill="none" stroke="#2fa862" strokeWidth={14} />
+                ) : (
+                  <g stroke="#e8503a" strokeWidth={14} strokeLinecap="round">
+                    <line x1={-30} y1={-30} x2={30} y2={30} />
+                    <line x1={30} y1={-30} x2={-30} y2={30} />
+                  </g>
+                )}
+              </svg>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* 結果スタンプ */}
+        <AnimatePresence>
+          {result && (
+            <motion.div
+              initial={{ scale: 3, opacity: 0, rotate: player === 0 ? -24 : 24 }}
+              animate={{ scale: 1, opacity: 1, rotate: player === 0 ? -8 : 8 }}
+              transition={{ type: 'spring', stiffness: 380, damping: 16 }}
+              style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', pointerEvents: 'none', zIndex: 6 }}
+            >
+              <div
+                style={{
+                  fontFamily: 'var(--font-display)',
+                  fontSize: 'clamp(2.2rem, 8vw, 3.6rem)',
+                  color: result === 'win' ? '#fff' : result === 'draw' ? '#fff' : '#ddd8cc',
+                  WebkitTextStroke: `7px ${result === 'win' ? P_COLOR[player] : result === 'draw' ? 'var(--ink)' : '#77716a'}`,
+                  paintOrder: 'stroke',
+                  border: `5px solid ${result === 'win' ? P_COLOR[player] : '#77716a'}`,
+                  borderRadius: 16,
+                  padding: '0 0.4em',
+                  background: 'rgba(255,253,245,.85)',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {result === 'win' ? 'かち！' : result === 'lose' ? 'まけ…' : 'ひきわけ'}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </motion.div>
+    </PulseCtx.Provider>
   );
 }
 
 /** 大きな押しボタン（タッチ）。キーボードでは A/S/D・J/K/L のどれでも押せる。 */
 export function BigButton({ player, label, onPress, disabled, cpu }: { player: Player; label: ReactNode; onPress: () => void; disabled?: boolean; cpu?: boolean }) {
+  const pulse = useContext(PulseCtx);
   return (
     <motion.button
       className="crayon-btn"
@@ -52,7 +191,10 @@ export function BigButton({ player, label, onPress, disabled, cpu }: { player: P
       whileTap={{ scale: 0.93 }}
       onPointerDown={(e) => {
         e.preventDefault();
-        if (!disabled && !cpu) onPress();
+        if (!disabled && !cpu) {
+          onPress();
+          pulse();
+        }
       }}
       style={{
         width: '100%',
@@ -91,6 +233,7 @@ export function ChoiceButtons({
   correct: number | null;
   cpu?: boolean;
 }) {
+  const pulse = useContext(PulseCtx);
   return (
     <div style={{ display: 'grid', gridTemplateColumns: `repeat(${options.length}, 1fr)`, gap: '0.35rem', width: '100%' }}>
       {options.map((o, i) => {
@@ -105,7 +248,10 @@ export function ChoiceButtons({
             whileTap={{ scale: 0.94 }}
             onPointerDown={(e) => {
               e.preventDefault();
-              if (!disabled && !cpu) onPick(i);
+              if (!disabled && !cpu) {
+                onPick(i);
+                pulse();
+              }
             }}
             style={{ minHeight: '4.2rem', padding: '0.2rem', background: bg, display: 'grid', placeItems: 'center', gap: 2, touchAction: 'manipulation', userSelect: 'none', borderColor: isPicked ? P_COLOR[player] : undefined }}
           >

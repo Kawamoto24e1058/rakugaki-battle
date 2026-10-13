@@ -19,7 +19,7 @@ import { buildRecap, TurnRecap, type RecapSide } from './battle/Recap';
 import { MoveReveal } from './battle/MoveReveal';
 import { STATUS_META } from '../engine/status';
 import { sfx } from '../audio/sfx';
-import { MinigameIntro, MinigameStage, pickMinigame, type MinigameOutcome } from '../minigames';
+import { MinigameIntro, MinigameStage, pickMinigame, type MgFighter, type MinigameOutcome } from '../minigames';
 import type { Beat, Snap } from './battle/types';
 
 /** reveal＝このターンの技が きまる → mgIntro＝ミニゲームの しょうかい → minigame＝ミニゲーム → animating＝こうげきの演出 → over */
@@ -247,7 +247,7 @@ export function BattleScene() {
           {recap && <TurnRecap recap={recap} names={names} />}
         </div>
       ) : (
-        <MinigameStage key={`mg-${turnKey}`} def={game} seed={(state.seed ^ Math.imul(state.turn, 0x9e37)) >>> 0} cpu={cpu} cpuSkill={cpuSkill} names={names} onDone={onMinigameDone} />
+        <MinigameStage key={`mg-${turnKey}`} def={game} seed={(state.seed ^ Math.imul(state.turn, 0x9e37)) >>> 0} cpu={cpu} cpuSkill={cpuSkill} names={names} fighters={[0, 1].map((i) => ({ name: names[i], attribute: chars[i].attribute, image: images[i] })) as [MgFighter, MgFighter]} onDone={onMinigameDone} />
       )}
       <button
         className="crayon-btn"

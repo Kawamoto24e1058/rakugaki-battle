@@ -1,4 +1,6 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { makeCpuRoster } from '../data/cpuRoster';
+import type { MgFighter } from './context';
 import { MINIGAMES, MinigameIntro, MinigameStage, type MinigameOutcome } from './index';
 
 /** 開発用：?mg=ID（&vs で2人）で ミニゲームだけ遊べる。 */
@@ -9,6 +11,10 @@ export function MinigameDemo() {
   const [last, setLast] = useState<MinigameOutcome | null>(null);
   const [playing, setPlaying] = useState(-1);
   const vs = q.has('vs');
+  const fighters = useMemo<[MgFighter, MgFighter]>(() => {
+    const r = makeCpuRoster();
+    return [r[0], r[3]].map((c) => ({ name: c.name, attribute: c.attribute, image: null })) as [MgFighter, MgFighter];
+  }, []);
   return (
     <div className="scene" style={{ justifyContent: 'flex-start', gap: '0.6rem' }}>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'center' }}>
@@ -19,7 +25,7 @@ export function MinigameDemo() {
         ))}
       </div>
       {playing !== round && <MinigameIntro key={`i-${idx}-${round}`} def={MINIGAMES[idx]} cpu={!vs} onDone={() => setPlaying(round)} />}
-      {playing === round && <MinigameStage key={`${idx}-${round}`} def={MINIGAMES[idx]} seed={1234 + round * 77} cpu={!vs} cpuSkill={0.6} names={['ポチころ', 'ドカドカおに']} onDone={(o) => { setLast(o); setRound((r) => r + 1); }} />}
+      {playing === round && <MinigameStage key={`${idx}-${round}`} def={MINIGAMES[idx]} seed={1234 + round * 77} cpu={!vs} cpuSkill={0.6} names={[fighters[0].name, fighters[1].name]} fighters={fighters} onDone={(o) => { setLast(o); setRound((r) => r + 1); }} />}
       {last && <div style={{ fontSize: '0.8rem' }}>前回：{last.scores.map(Math.round).join(' - ')} / 勝ち {String(last.winner)} {last.perfect ? 'perfect' : ''}</div>}
     </div>
   );

@@ -1,4 +1,5 @@
 import type { ComponentType } from 'react';
+import type { MgFighter } from './context';
 
 export type Player = 0 | 1;
 
@@ -11,6 +12,8 @@ export interface GameProps {
   cpuSkill: number;
   /** 左右の名前（表示用）。 */
   names: [string, string];
+  /** 左右の キャラ（描いた絵）。絵を つかう ゲームと アバター用。 */
+  fighters: [MgFighter, MgFighter];
   /** 0〜100 のスコアを ふたり分 かえす。 */
   onFinish: (scores: [number, number]) => void;
 }

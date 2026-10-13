@@ -4,11 +4,12 @@ import { mulberry32 } from '../../engine/rng';
 import { Arena, ChoiceButtons, COLORS, Half, Shape, SHAPE_JP, type ShapeKind } from '../Arena';
 import { usePlayerKeys } from '../input';
 import type { GameProps, Player } from '../types';
+import type { MgFighter } from '../context';
 import { TimeBar } from './body';
 
 const now = () => performance.now();
 const LIMIT = 6500;
-type Rng = () => number;
+export type Rng = () => number;
 
 /** 3択の問題。prompt は 上に大きく、options は それぞれの ボタンに。 */
 export interface Question {
@@ -19,7 +20,7 @@ export interface Question {
   study?: { node: ReactNode; ms: number };
 }
 
-const shuffle = <T,>(a: T[], rng: Rng): T[] => {
+export const shuffle = <T,>(a: T[], rng: Rng): T[] => {
   const b = [...a];
   for (let i = b.length - 1; i > 0; i--) {
     const j = Math.floor(rng() * (i + 1));
@@ -27,7 +28,7 @@ const shuffle = <T,>(a: T[], rng: Rng): T[] => {
   }
   return b;
 };
-const pickN = <T,>(a: T[], n: number, rng: Rng) => shuffle(a, rng).slice(0, n);
+export const pickN = <T,>(a: T[], n: number, rng: Rng) => shuffle(a, rng).slice(0, n);
 
 // ---------------------------------------------------------------- 問題づくり
 const QUIZ: [string, string, string, string][] = [
@@ -173,9 +174,10 @@ export function makeSilhouette(rng: Rng): Question {
  * はやおし3択：おなじ問題を ふたりが同時に とく。さきに 正解した方が 勝ち。
  * まちがえると その問題は もう答えられない。
  */
-export function makeChoiceGame(make: (rng: Rng) => Question) {
-  return function ChoiceGame({ seed, cpu, cpuSkill, names, onFinish }: GameProps) {
-    const q = useMemo(() => make(mulberry32(seed ^ 0x2a)), [seed]);
+export function makeChoiceGame(make: (rng: Rng, fighters: [MgFighter, MgFighter]) => Question) {
+  return function ChoiceGame({ seed, cpu, cpuSkill, names, fighters, onFinish }: GameProps) {
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const q = useMemo(() => make(mulberry32(seed ^ 0x2a), fighters), [seed]);
     const studyMs = q.study?.ms ?? 0;
     const start = useRef(now());
     const [studying, setStudying] = useState(studyMs > 0);
@@ -237,7 +239,14 @@ export function makeChoiceGame(make: (rng: Rng) => Question) {
     }, [cpu, cpuSkill, seed]);
 
     const side = (p: Player) => (
-      <Half key={p} player={p} name={names[p]} cpu={p === 1 && cpu} style={{ minHeight: '8rem' }}>
+      <Half
+        key={p}
+        player={p}
+        name={names[p]}
+        cpu={p === 1 && cpu}
+        style={{ minHeight: '8rem' }}
+        mood={view[p] == null ? null : view[p] === q.answer ? 'good' : reveal ? 'bad' : null}
+      >
         <div style={{ fontWeight: 800, minHeight: '1.3em' }}>
           {view[p] == null ? (studying ? 'よく みて！' : 'えらんでね') : reveal || view[p] === q.answer ? (view[p] === q.answer ? 'せいかい！' : 'ざんねん') : 'こたえた'}
         </div>
