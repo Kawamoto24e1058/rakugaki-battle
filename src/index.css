@@ -631,3 +631,129 @@ button {
   opacity: 0.22;
   transition: opacity 0.2s;
 }
+
+/* ===========================================================
+   カード（Slay the Spire ふう）：名前・いりょく・絵・説明 の 4つだけ
+   =========================================================== */
+.gc3 {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.22em;
+  padding: 0.34em 0.34em 0.4em;
+  border-radius: 0.75em;
+  border: 0.14em solid var(--ink);
+  background: linear-gradient(170deg, color-mix(in srgb, var(--card-color) 80%, #fff), var(--card-color) 45%, var(--card-dark));
+  box-shadow: inset 0 0 0 0.1em rgba(255, 255, 255, 0.35), 0.25em 0.35em 0 rgba(51, 48, 43, 0.22);
+  color: var(--ink);
+  box-sizing: border-box;
+  user-select: none;
+}
+/* ① 名前の 帯：色＝レア度 */
+.gc3-banner {
+  flex: none;
+  height: 1.55em;
+  margin: 0 0.1em;
+  display: grid;
+  place-items: center;
+  border-radius: 0.4em;
+  border: 0.13em solid var(--ink);
+  background: #fffdf5;
+  box-shadow: 0 0.12em 0 rgba(51, 48, 43, 0.25);
+  font-family: var(--font-display);
+  white-space: nowrap;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  overflow: hidden;
+}
+.tier-rare .gc3-banner { background: linear-gradient(180deg, #fff6c2, #f6cd45 55%, #e0a90c); }
+.tier-special .gc3-banner { background: linear-gradient(90deg, #ffd0d0, #fff0b8, #d4f5d4, #d2e9ff, #e8dcff); }
+.tier-kosei .gc3-banner { background: linear-gradient(180deg, #c8baff, #7b5cf0); color: #fff; -webkit-text-stroke: 0.06em var(--ink); paint-order: stroke; }
+.has-orb .gc3-banner { margin-left: 1.55em; }
+/* ② いりょく：左上の まる */
+.gc3-orb {
+  position: absolute;
+  top: -0.3em;
+  left: -0.3em;
+  z-index: 5;
+  width: 1.95em;
+  height: 1.95em;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 0.12em solid var(--ink);
+  background: radial-gradient(circle at 35% 30%, #fff 0 12%, var(--card-light) 30%, var(--card-color) 65%, var(--card-dark));
+  font-family: var(--font-display);
+  font-size: 1.2em;
+  line-height: 1;
+  color: #fff;
+  -webkit-text-stroke: 0.12em var(--ink);
+  paint-order: stroke;
+  box-shadow: 0 0.1em 0 rgba(51, 48, 43, 0.35);
+}
+/* ③ 絵：わくの 形＝種類 */
+.gc3-artframe {
+  flex: none;
+  aspect-ratio: 200 / 148;
+  padding: 0.14em;
+  background: var(--ink);
+  border-radius: 0.4em;
+  box-sizing: border-box;
+}
+.gc3-art {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-radius: 0.3em;
+  background: #fffdf5;
+}
+/* こうげき：下が とがる */
+.shape-atk .gc3-artframe,
+.shape-atk .gc3-art {
+  border-radius: 0;
+  clip-path: polygon(0 0, 100% 0, 100% 82%, 50% 100%, 0 82%);
+}
+/* こせい：上が まるい */
+.shape-kosei .gc3-artframe,
+.shape-kosei .gc3-art {
+  border-radius: 50% 50% 0.35em 0.35em / 32% 32% 0.35em 0.35em;
+}
+.gc3-legacy {
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--card-light) 40%, #fffdf5);
+}
+.gc3-legacy > svg {
+  width: 100%;
+  height: 100%;
+}
+.gc3-type {
+  position: relative;
+  z-index: 2;
+  align-self: center;
+  margin-top: -0.75em;
+  padding: 0.04em 0.7em;
+  border-radius: 99px;
+  border: 0.1em solid var(--ink);
+  background: #fffdf5;
+  font-size: 0.6em;
+  font-weight: 900;
+  white-space: nowrap;
+}
+/* ④ 説明：ひとこと */
+.gc3-text {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  padding: 0.2em 0.45em;
+  border-radius: 0.4em;
+  background: #fffdf5;
+  border: 0.1em solid rgba(51, 48, 43, 0.35);
+  text-align: center;
+  font-size: 0.74em;
+  font-weight: 700;
+  line-height: 1.22;
+  overflow: hidden;
+}
