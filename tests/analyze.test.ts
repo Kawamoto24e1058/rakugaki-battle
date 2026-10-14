@@ -1,3 +1,4 @@
+import { POWER_BUDGET, SUB_BUDGET } from '../src/engine/analyze/toCharacter';
 import { describe, expect, it } from 'vitest';
 import { analyzeImageData, extractFeatures, featuresToCharacter } from '../src/engine/analyze';
 import { rectImage } from './helpers';
@@ -17,7 +18,7 @@ describe('特徴抽出とキャラ生成', () => {
     expect(analyzeImageData(rectImage(200, 200, 120, 120, [130, 128, 132])).character.attribute).toBe('dark');
   });
 
-  it('メイン3ステータスの合計は種族値スケール（79〜101）内', () => {
+  it('つよさの 合計（こうげき＋ぼうぎょ＋すばやさ＋HP×0.5）と きゅうしょ＋こんじょう は みんな おなじ', () => {
     for (let seed = 0; seed < 60; seed++) {
       const img = rectImage(200, 200, 50 + (seed % 50), 50 + ((seed * 7) % 60), [
         (seed * 53) % 256,
@@ -26,8 +27,8 @@ describe('特徴抽出とキャラ生成', () => {
       ]);
       const { character } = analyzeImageData(img);
       const { hp, atk, def, spd, luck, heart } = character.baseStats;
-      expect(atk + def + spd).toBeGreaterThanOrEqual(79);
-      expect(atk + def + spd).toBeLessThanOrEqual(101);
+      expect(Math.abs(atk + def + spd + hp / 2 - POWER_BUDGET)).toBeLessThanOrEqual(1);
+      expect(luck + heart).toBe(SUB_BUDGET);
       expect(Math.min(atk, def, spd)).toBeGreaterThanOrEqual(13);
       expect(Math.max(atk, def, spd)).toBeLessThanOrEqual(52);
       expect(hp).toBeGreaterThanOrEqual(50);

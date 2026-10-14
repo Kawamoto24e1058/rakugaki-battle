@@ -940,7 +940,8 @@ function dealDamage(
   }
 
   if (move.execute && target.hp / target.maxHp < 0.4) dmg *= move.execute;
-  if (!move.pierce) dmg *= 40 / (40 + effStat(target, 'def'));
+  // ぼうぎょ：たかいほど へるが、まもりきりで おわらない ように ゆるやかに
+  if (!move.pierce) dmg *= 52 / (52 + effStat(target, 'def'));
   // 状態異常による被ダメ倍率（のろい＋・ガード−・ぼうぎょ↑↓ …）。ガードは貫通でも効くが、
   // 力で読み勝ちした「ぶち抜き」は軽減だけを無視する（増える側＝ぼうぎょ↓は効く）。
   for (const s of target.statuses) {

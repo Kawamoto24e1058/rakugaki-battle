@@ -26,7 +26,10 @@ const mix = (a: number, b: number, t: number) => a * (1 - t) + b * t;
 const LOOK_WEIGHT = 0.75;
 
 // メイン3ステータス（こうげき・ぼうぎょ・すばやさ）の合計は「種族値」で 79〜101 に振れる。
-const MAIN_BASE = 90;
+/** つよさの 合計（こうげき＋ぼうぎょ＋すばやさ＋HP×0.5）。みんな おなじ。 */
+export const POWER_BUDGET = 130;
+/** きゅうしょ＋こんじょう の 合計。 */
+export const SUB_BUDGET = 40;
 const MAIN_MIN = 13;
 const MAIN_MAX = 52;
 const HP_MIN = 50;
@@ -35,10 +38,69 @@ const SUB_MIN = 5;
 const SUB_MAX = 34;
 
 /** 平均(30)からの差を強調して、絵の個性をハッキリ出す。合計は total に正規化。 */
-function sharpenTriple(a: number, b: number, c: number, total: number): [number, number, number] {
-  const push = (v: number) => 30 + (v - 30) * 2.0;
-  return normalizeMain(push(a), push(b), push(c), total);
+/**
+ * 希望（weights）に そって total を くばる。それぞれ [min,max] に おさめ、あふれた ぶんは ほかへ。
+ * 合計は かならず total（整数）。
+ */
+function allocate(weights: number[], total: number, bounds: [number, number][]): number[] {
+  const w = weights.map((v) => Math.max(0.0001, v));
+  const at = (k: number) => w.map((v, i) => Math.min(bounds[i][1], Math.max(bounds[i][0], v * k)));
+  const sumAt = (k: number) => at(k).reduce((a, b) => a + b, 0);
+  // 合計が total に なる 倍率 k を 二分探索（上限・下限で とまった ぶんは ほかへ 自然に まわる）
+  let lo = 0;
+  let hi = 1;
+  while (sumAt(hi) < total && hi < 1e6) hi *= 2;
+  for (let it = 0; it < 60; it++) {
+    const mid = (lo + hi) / 2;
+    if (sumAt(mid) < total) lo = mid;
+    else hi = mid;
+  }
+  const raw = at(hi);
+  const out = raw.map((v) => Math.round(v));
+  // 四捨五入の ずれを なおす（はみ出さない ものから 1ずつ）
+  let diff = total - out.reduce((a, b) => a + b, 0);
+  const order = raw.map((v, i) => [v - Math.round(v), i] as const).sort((x, y) => (diff > 0 ? y[0] - x[0] : x[0] - y[0])).map(([, i]) => i);
+  for (let k = 0; diff !== 0 && k < 200; k++) {
+    const i = order[k % w.length];
+    const step = diff > 0 ? 1 : -1;
+    if (out[i] + step >= bounds[i][0] && out[i] + step <= bounds[i][1]) {
+      out[i] += step;
+      diff -= step;
+    }
+  }
+  return out;
 }
+
+type QuirkId = 'heavy' | 'tiny' | 'reckless' | 'fragile' | 'mellow';
+const QUIRK_MULT: Record<QuirkId, Partial<Record<'atk' | 'def' | 'spd' | 'hp' | 'luck' | 'heart', number>>> = {
+  heavy: { spd: 0.4, def: 1.45, hp: 1.1 },
+  tiny: { hp: 0.55, spd: 1.6 },
+  reckless: { def: 0.45, atk: 1.5 },
+  fragile: { def: 0.4, hp: 0.9, luck: 2.2, atk: 1.15 },
+  mellow: { spd: 0.45, hp: 1.35, heart: 1.6 },
+};
+
+/** 絵が とくに 特徴的なときだけ とくせいを ひとつ つける（ふつうの 絵には つかない）。 */
+function pickQuirk(
+  f: FeatureVector,
+  personality: Character['personality'],
+  look?: { power: number; tough: number; speed: number; hp: number },
+): NonNullable<Character['quirk']> | null {
+  const speedLook = look?.speed ?? clamp01(1 - f.aspect);
+  const big = f.coverage > 0.3 || (look?.hp ?? 0) > 0.75;
+  if (big && speedLook < 0.32)
+    return { id: 'heavy', name: 'おもい からだ', plus: 'ぼうぎょ ↑', minus: 'すばやさ ↓↓', why: 'どっしり 大きくて おもそう' };
+  if (f.coverage < 0.07)
+    return { id: 'tiny', name: 'ちいさな からだ', plus: 'すばやさ ↑↑', minus: 'HP ↓', why: 'ちいさく 描いてある' };
+  if (f.spikiness > 0.68 && personality === 'aggressive')
+    return { id: 'reckless', name: 'むこうみず', plus: 'こうげき ↑↑', minus: 'ぼうぎょ ↓↓', why: 'トゲトゲで あらっぽい' };
+  if (f.fillDensity < 0.18 && (look?.tough ?? 0.5) < 0.35)
+    return { id: 'fragile', name: 'ガラスの からだ', plus: 'きゅうしょ ↑↑', minus: 'ぼうぎょ ↓↓', why: '線が ほそくて すけている' };
+  if (personality === 'calm' && f.spikiness < 0.15 && f.symmetry > 0.82 && speedLook < 0.45)
+    return { id: 'mellow', name: 'のんびりや', plus: 'HP ↑・こんじょう ↑', minus: 'すばやさ ↓↓', why: 'まあるくて おっとり' };
+  return null;
+}
+
 /** 0..1 のサブステータス値を、真ん中(0.5)から遠ざけてメリハリを出す。 */
 function sharpen01(v: number): number {
   return clamp01((v - 0.5) * 1.5 + 0.5);
@@ -83,31 +145,6 @@ function attributeReason(f: FeatureVector, attr: Attribute): string {
   return byAttr[attr] ?? `${jp}っぽい色`;
 }
 
-function normalizeMain(a: number, b: number, c: number, total: number): [number, number, number] {
-  let x = Math.max(1, a);
-  let y = Math.max(1, b);
-  let z = Math.max(1, c);
-  const scale = total / (x + y + z);
-  x = Math.round(x * scale);
-  y = Math.round(y * scale);
-  z = total - x - y;
-  const clamp = (n: number) => Math.max(MAIN_MIN, Math.min(MAIN_MAX, n));
-  x = clamp(x);
-  y = clamp(y);
-  z = clamp(z);
-  let diff = total - (x + y + z);
-  let guard = 0;
-  while (diff !== 0 && guard++ < 40) {
-    const step = diff > 0 ? 1 : -1;
-    if (x + step >= MAIN_MIN && x + step <= MAIN_MAX) { x += step; diff -= step; continue; }
-    if (y + step >= MAIN_MIN && y + step <= MAIN_MAX) { y += step; diff -= step; continue; }
-    if (z + step >= MAIN_MIN && z + step <= MAIN_MAX) { z += step; diff -= step; continue; }
-    break;
-  }
-  return [x, y, z];
-}
-
-const scaleTo = (v01: number, min: number, max: number) => Math.round(min + clamp01(v01) * (max - min));
 
 /**
  * 「どれだけ描き込んであるか」を 0..1 で。塗り量・すきま・色数・ディテール・目。
@@ -158,42 +195,55 @@ export function featuresToCharacter(
   const personality: Character['personality'] =
     f.saturation * 0.6 + f.value * 0.4 > 0.62 ? 'aggressive' : 'calm';
 
-  // 種族値スケール：描き込み量 55% ＋ 乱数 45% → 0.88〜1.12（理不尽にならない範囲で個性を出す）
+  // 描き込み量（リビールの 説明だけに つかう。つよさの 合計には 影響させない＝どの 絵でも 公平）
   const bst01 = clamp01(detailLevel(f) * 0.55 + rng() * 0.45);
-  const bstScale = 0.88 + bst01 * 0.24;
 
-  // こうげき・ぼうぎょ・すばやさ（絵の特徴を強めに反映）
+  // こうげき・ぼうぎょ・すばやさ・HP の「配分の 希望」（絵の特徴を強めに反映）
   const look = overrides.statLook;
   let atkScore = 12 + f.spikiness * 46 + (weapon === 'sword' ? 6 : 0);
-  let defScore = 12 + f.symmetry * 28 + f.fillDensity * 20 + (weapon === 'shield' ? 6 : 0);
+  let defScore = 12 + f.symmetry * 22 + f.fillDensity * 10 + (weapon === 'shield' ? 8 : 0);
   let spdScore = 10 + clamp01(1 - f.aspect) * 36 + (1 - f.coverage) * 18 + (weapon === 'wing' ? 10 : 0);
   if (look) {
-    // AI が「見た印象」を 6割、形からの計算を 4割
+    // AI が「見た印象」を 7.5割、形からの計算を 2.5割
     atkScore = mix(atkScore, 12 + clamp01(look.power) * 48, LOOK_WEIGHT);
     defScore = mix(defScore, 12 + clamp01(look.tough) * 48, LOOK_WEIGHT);
     spdScore = mix(spdScore, 10 + clamp01(look.speed) * 44, LOOK_WEIGHT);
   }
-  const mainTotal = Math.round(MAIN_BASE * bstScale);
-  const [atk, def, spd] = sharpenTriple(atkScore, defScore, spdScore, mainTotal);
+  const hpBias = look ? mix(sharpen01(f.coverage / 0.35), clamp01(look.hp), LOOK_WEIGHT) : sharpen01(f.coverage / 0.35);
+  let hpScore = 22 + hpBias * 30; // HP は ×2 で 実数に なる（つよさの 計算では HP は 半分の おもさ）
+  let luckScore = 0.25 + sharpen01(clamp01((f.colorCount - 1) / 4) * 0.6 + f.saturation * 0.4);
+  let heartScore = 0.25 + sharpen01(Math.min(1, f.eyeSpots / 2) * 0.55 + (personality === 'calm' ? 0.32 : 0.03) + f.symmetry * 0.15);
 
-  const hpBias = look
-    ? mix(sharpen01(f.coverage / 0.35), clamp01(look.hp), LOOK_WEIGHT)
-    : sharpen01(f.coverage / 0.35);
-  const hpRaw = 52 + hpBias * 58;
-  const hp = Math.max(HP_MIN, Math.min(HP_MAX, Math.round(hpRaw * bstScale)));
+  // とくせい：とくべつな 苦手（と その ぶんの 得意）。合計は あとで そろえるので つよさは かわらない
+  const quirk = pickQuirk(f, personality, look);
+  if (quirk) {
+    const m = QUIRK_MULT[quirk.id as QuirkId];
+    atkScore *= m.atk ?? 1;
+    defScore *= m.def ?? 1;
+    spdScore *= m.spd ?? 1;
+    hpScore *= m.hp ?? 1;
+    luckScore *= m.luck ?? 1;
+    heartScore *= m.heart ?? 1;
+  }
 
-  const luck = scaleTo(
-    sharpen01(clamp01((f.colorCount - 1) / 4) * 0.6 + f.saturation * 0.4) * bstScale,
-    SUB_MIN,
-    SUB_MAX,
+  // つよさの 合計（こうげき＋ぼうぎょ＋すばやさ＋HP×0.5）は みんな おなじ。配分だけ 絵で かわる
+  const push = (v: number, mid: number) => Math.max(1, mid + (v - mid) * 2.0);
+  const [atk, def, spd, hpHalf] = allocate(
+    [push(atkScore, 30), push(defScore, 30), push(spdScore, 30), push(hpScore, 40)],
+    POWER_BUDGET,
+    [
+      [MAIN_MIN, MAIN_MAX],
+      [MAIN_MIN, MAIN_MAX],
+      [MAIN_MIN, MAIN_MAX],
+      [HP_MIN / 2, HP_MAX / 2],
+    ],
   );
-  const heart = scaleTo(
-    sharpen01(
-      Math.min(1, f.eyeSpots / 2) * 0.55 + (personality === 'calm' ? 0.32 : 0.03) + f.symmetry * 0.15,
-    ) * bstScale,
-    SUB_MIN,
-    SUB_MAX,
-  );
+  const hp = hpHalf * 2;
+  // きゅうしょ＋こんじょう も 合計は おなじ
+  const [luck, heart] = allocate([luckScore, heartScore], SUB_BUDGET, [
+    [SUB_MIN, SUB_MAX],
+    [SUB_MIN, SUB_MAX],
+  ]);
 
   const baseStats: Stats = { hp, atk, def, spd, luck, heart };
   const tags = activeTags({ features: f, weapon, personality });
@@ -217,6 +267,7 @@ export function featuresToCharacter(
     moveReasons: moveSet.map((m) => m.reason),
     koseiId,
     koseiTitle: koseiName,
+    ...(quirk ? { quirk } : {}),
     analysis,
     seed: seed >>> 0,
     wins: 0,
@@ -267,9 +318,9 @@ function buildReasons(
   });
   r.push({
     key: 'power',
-    label: 'ぜんたいの つよさ（種族値）',
+    label: 'ぜんたいの つよさ',
     detected: bst01 > 0.66 ? 'しっかり描き込んである' : bst01 > 0.34 ? 'ふつうの描き込み' : 'あっさりした線',
-    effect: bst01 > 0.66 ? '種族値 高め（強い）' : bst01 > 0.34 ? '種族値 ふつう' : '種族値 ひかえめ',
+    effect: 'つよさの ごうけいは みんな おなじ（くばりかたが ちがう）',
   });
   r.push({
     key: 'arche',

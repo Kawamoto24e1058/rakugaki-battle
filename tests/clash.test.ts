@@ -295,7 +295,14 @@ describe('手札バトル', () => {
   // ---------- 新しい仕組み ----------
 
   it('ため技：選んだターンは ダメージが出ず、つぎのターンに かならず はなつ（えらべない）', () => {
-    const mk = () => createClashState(drawn([210, 40, 30]), drawn([30, 90, 210]), 31);
+    // かわされにくい ステータスに して、乱数で ダメージが ぶれないように
+    const mk = () => {
+      const a = drawn([210, 40, 30]);
+      const b = drawn([30, 90, 210]);
+      a.baseStats = { ...a.baseStats, atk: 40, spd: 45 };
+      b.baseStats = { ...b.baseStats, spd: 13, def: 25 };
+      return createClashState(a, b, 31);
+    };
     let st = resolveClashTurn(mk(), ['ch_megapunch', 'c_scratch']);
     // 1ターン目：ダメージなし、ため中
     expect(st.log.some((e) => e.t === 'damage' && e.side === 1)).toBe(false);
@@ -419,7 +426,7 @@ describe('手札バトル', () => {
   it('場の効果：あまごいで みず技が強く ほのお技が弱くなり、4ターンで消える', () => {
     const run = (rain: boolean, move: string) => {
       let total = 0;
-      for (let seed = 1; seed <= 30; seed++) {
+      for (let seed = 1; seed <= 120; seed++) {
         let st = mk(seed);
         if (rain) st = resolveClashTurn(st, ['f_rain', 'c_scratch']);
         const n = st.log.length;
@@ -429,7 +436,7 @@ describe('手札バトル', () => {
       return total;
     };
     expect(run(true, 'w_gun')).toBeGreaterThan(run(false, 'w_gun') * 1.2);
-    expect(run(true, 'f_spark')).toBeLessThan(run(false, 'f_spark') * 0.97);
+    expect(run(true, 'f_spark')).toBeLessThan(run(false, 'f_spark') * 0.93);
     let st = resolveClashTurn(mk(3), ['f_rain', 'c_scratch']);
     expect(st.field?.kind).toBe('rain');
     for (let i = 0; i < 4; i++) st = resolveClashTurn(st, ['c_scratch', 'c_scratch']);

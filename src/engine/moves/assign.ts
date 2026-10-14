@@ -239,7 +239,7 @@ export function assignMoveSet(input: AssignInput): MoveSlot[] {
     const list = cands
       .filter((m) => !has(m) && allowed(m))
       .filter((m) => !(m.charge && picked.some((p) => p.charge)))
-      .filter((m) => !(isRareMove(m) && picked.filter((p) => isRareMove(p)).length >= 2))
+      .filter((m) => !(isRareMove(m) && picked.filter((p) => isRareMove(p)).length >= 1))
       // まもり・かいふくだけの技は かずを しぼる（ずっと まもって おわらない を ふせぐ）
       .filter((m) => !(isStall(m) && stallFull()))
       .filter((m) => {

@@ -194,7 +194,7 @@ export const MOVES: Record<MoveId, MoveDef> = Object.fromEntries(
       atk('f_blaze', 'もえさかる', 26, 'まえのターンに ほのお技を つかうと 1.5ばい。', { attribute: 'fire', when: PREV('fire'), whenMult: 1.5 }),
       atk('f_burnout', 'やきつくす', 24, 'あいての HPが 4わり いかだと 1.5ばい。50% で やけど。', { attribute: 'fire', execute: 1.5, status: { kind: 'burn', chance: 0.5 } }),
       atk('ch_inferno', 'ごうかのたま', 56, 'ためて つぎのターンに 90% で やけど。', { attribute: 'fire', charge: true, status: { kind: 'burn', chance: 0.9 } }),
-      atk('fire_sig', 'フレアバスター', 36, 'ぼうぎょ無視。かならず やけど。', { attribute: 'fire', pierce: true, riskShift: 6, status: { kind: 'burn', chance: 1 } }),
+      atk('fire_sig', 'フレアバスター', 32, 'ぼうぎょ無視。60% で やけど。', { attribute: 'fire', pierce: true, riskShift: 6, status: { kind: 'burn', chance: 0.6 } }),
       sup('f_stoke', 'ひをおこす', '3ターン、こうげきが 5わり あがる。つぎの技は こうげきになる。', { attribute: 'fire', buff: { stat: 'atk', turns: 3 }, hand: { kind: 'guarantee', pred: 'attack', n: 1 } }),
       sup('fire_dry', 'ねっぷう', 'こおりや どくを ふきとばして かいふく。', { attribute: 'fire', cures: 'one', heal: 14 }),
 

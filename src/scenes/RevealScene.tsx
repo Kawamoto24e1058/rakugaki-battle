@@ -143,6 +143,29 @@ export function RevealScene() {
             <div style={{ fontSize: '0.78rem' }}>
               {WEAPON_JP[character.weapon]} ・ {character.personality === 'aggressive' ? '好戦的' : '穏やか'}
             </div>
+            {character.quirk && (
+              <div
+                style={{
+                  marginTop: 4,
+                  display: 'inline-grid',
+                  gap: 2,
+                  padding: '0.3em 0.7em',
+                  border: '2.5px solid var(--ink)',
+                  borderRadius: 10,
+                  background: '#fff4c9',
+                  fontSize: '0.8rem',
+                  fontWeight: 800,
+                }}
+              >
+                <span>
+                  とくせい：<span style={{ fontFamily: 'var(--font-display)', fontSize: '1rem' }}>{character.quirk.name}</span>
+                </span>
+                <span>
+                  <span style={{ color: '#1b7a47' }}>{character.quirk.plus}</span>／<span style={{ color: '#c2361c' }}>{character.quirk.minus}</span>
+                  <span style={{ color: 'var(--ink-soft)', fontWeight: 700 }}>（{character.quirk.why}）</span>
+                </span>
+              </div>
+            )}
           </div>
         </div>
 

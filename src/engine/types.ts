@@ -75,6 +75,8 @@ export interface Character {
   moveIds: string[];
   /** それぞれの技が「なぜ この技なのか」（moveIds と同じ順。古いセーブには ない）。 */
   moveReasons?: string[];
+  /** とくせい（とくべつな 得意・苦手。つよさの 合計は かわらない）。ない キャラも いる。 */
+  quirk?: { id: string; name: string; plus: string; minus: string; why: string };
   /** こせい（パッシブ＋専用アクティブ）のID。絵の特徴で決まる。 */
   koseiId: string;
   /** こせい名の前につく二つ名（例「あばれん坊の」）。表示上の個性を増やす。 */
