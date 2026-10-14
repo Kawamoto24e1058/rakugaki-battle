@@ -3,7 +3,7 @@ import { useGame } from '../store/gameStore';
 import { isSpecialMove, MOVES } from '../engine/moves';
 import { GameCard } from '../components/GameCard';
 import { moveCard } from '../components/moveText';
-import { ILLUST } from '../components/art/illust';
+import { ALL_ILLUST as ILLUST } from '../components/art/allIllust';
 
 type Filter = 'illust' | 'all' | 'attack' | 'support' | 'charge' | 'cond' | 'hand' | 'special' | 'fire' | 'water' | 'wood' | 'bolt' | 'dark';
 

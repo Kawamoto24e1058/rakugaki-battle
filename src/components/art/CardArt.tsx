@@ -54,6 +54,29 @@ export function CrayonDefs() {
             <stop offset="1" stopColor={p.main} stopOpacity="0" />
           </radialGradient>
         ))}
+        {/* たま（左上が ひかる 球） */}
+        {Object.entries(PALETTES).map(([k, p]) => (
+          <radialGradient key={k} id={`rb-${k}`} cx="0.36" cy="0.3" r="0.78">
+            <stop offset="0" stopColor="#ffffff" />
+            <stop offset="0.14" stopColor={p.light} />
+            <stop offset="0.55" stopColor={p.main} />
+            <stop offset="1" stopColor={p.dark} />
+          </radialGradient>
+        ))}
+        {/* カードの 背景（まんなかが あかるく、ふちが こい） */}
+        {Object.entries(PALETTES).map(([k, p]) => (
+          <radialGradient key={k} id={`bgr-${k}`} cx="0.5" cy="0.45" r="0.85">
+            <stop offset="0" stopColor="#fffdf5" />
+            <stop offset="0.45" stopColor={p.bg2} />
+            <stop offset="1" stopColor={p.dark} />
+          </radialGradient>
+        ))}
+        <radialGradient id="fireCore">
+          <stop offset="0" stopColor="#fff" />
+          <stop offset="0.35" stopColor="#fff2a8" />
+          <stop offset="0.75" stopColor="#ffb347" />
+          <stop offset="1" stopColor="#ef5a2a" />
+        </radialGradient>
         <radialGradient id="gr-white">
           <stop offset="0" stopColor="#fff" stopOpacity="0.95" />
           <stop offset="1" stopColor="#fff" stopOpacity="0" />

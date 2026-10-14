@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { GameCard } from '../GameCard';
 import { moveCard } from '../moveText';
 import { getMove } from '../../engine/moves';
-import { ILLUST } from './illust';
+import { ALL_ILLUST as ILLUST } from './allIllust';
 
 /** 開発用：?cardlab で 描きおろしカードを 大きく ならべて 見る（うごきつき）。 */
 const COMPARE = ['c_tackle', 'f_spark', 'water_sig'];

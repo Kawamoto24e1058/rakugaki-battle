@@ -15,7 +15,7 @@ const PAPER = '#fffdf5';
 const ink = (w = 3) => ({ stroke: INK, strokeWidth: w, strokeLinejoin: 'round' as const, strokeLinecap: 'round' as const });
 
 /** パレット → グラデーションの id。 */
-const keyOf = (p: Pal) => (Object.entries(PALETTES).find(([, v]) => v === p)?.[0] ?? 'atk') as keyof typeof PALETTES;
+export const keyOf = (p: Pal) => (Object.entries(PALETTES).find(([, v]) => v === p)?.[0] ?? 'atk') as keyof typeof PALETTES;
 export const gv = (p: Pal | keyof typeof PALETTES) => `url(#gv-${typeof p === 'string' ? p : keyOf(p)})`;
 export const gr = (p: Pal | keyof typeof PALETTES) => `url(#gr-${typeof p === 'string' ? p : keyOf(p)})`;
 

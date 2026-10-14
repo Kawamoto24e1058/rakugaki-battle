@@ -1,7 +1,8 @@
 import type { CSSProperties } from 'react';
 import type { CardData } from './moveText';
 import { CardArt } from './art/CardArt';
-import { ArtBg, ILLUST, type BgKind } from './art/illust';
+import { ArtBg, type BgKind } from './art/illust';
+import { ALL_ILLUST as ILLUST } from './art/allIllust';
 import { CardText } from './CardText';
 import { ATTRIBUTE_META } from '../engine/attributes';
 
