@@ -56,7 +56,7 @@ function centerSquareResize(img: ImageData, size: number): ImageData {
  * L字マーク」に変えたことで、対処すべきは各コーナー周辺のインクだけになった
  * ので、コーナー周辺だけを丸く消す方式に戻した＝辺の途中に描いた絵は一切削らない。
  */
-export function scanDrawing(img: ImageData, opts: { outSize?: number } = {}): ScanResult {
+export function scanDrawing(img: ImageData, opts: { outSize?: number; fill?: boolean } = {}): ScanResult {
   const outSize = opts.outSize ?? 640;
   const corners = detectCornerMarkers(img);
 
@@ -85,7 +85,7 @@ export function scanDrawing(img: ImageData, opts: { outSize?: number } = {}): Sc
   // （わく際まで 描いた 絵を けずらないため）。
   const subject = cornersFound ? removed : isolateSubject(removed);
   // 線で かこまれた 内がわ（白い からだ）は すけないよう 白で うめる
-  const output = fillEnclosed(subject);
+  const output = opts.fill === false ? subject : fillEnclosed(subject);
   return { output, cornersFound };
 }
 

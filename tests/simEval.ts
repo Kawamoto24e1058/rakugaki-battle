@@ -27,7 +27,7 @@ export function evaluate(seed: number, o: SimOpts = {}): EvalResult {
     markerErr = worst;
   }
   const out = 320;
-  const scan = scanDrawing(sim.photo, { outSize: out });
+  const scan = scanDrawing(sim.photo, { outSize: out, fill: false });
   const { box } = TPL;
   let tp = 0;
   let predN = 0;
