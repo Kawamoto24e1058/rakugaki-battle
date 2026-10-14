@@ -51,3 +51,25 @@ describe('切り抜き：絵の本体だけ のこす', () => {
     expect(alphaAt(out, 100, 100)).toBe(255);
   });
 });
+
+import { fillEnclosed } from '../src/engine/scan/subject';
+
+describe('切り抜き：線で かこまれた 内がわを 白で うめる', () => {
+  const ring = (cx: number, cy: number, r: number, t: number) => (x: number, y: number) => {
+    const d = Math.hypot(x - cx, y - cy);
+    return d <= r && d >= r - t;
+  };
+  it('とじた りんかくの 中は 白で うまり、外がわには 白い ふちが でない', () => {
+    const out = fillEnclosed(canvas(200, 200, [ring(100, 100, 50, 4)]));
+    expect(alphaAt(out, 100, 100)).toBe(255);
+    expect(out.data[(100 * 200 + 100) * 4]).toBeGreaterThan(240);
+    expect(alphaAt(out, 100, 44)).toBe(0); // 線の すぐ外
+    expect(alphaAt(out, 10, 10)).toBe(0);
+  });
+  it('ひらいた 形（大きな すきま）は うめない', () => {
+    // C の字（右がわが 大きく ひらいている）
+    const c = (x: number, y: number) => ring(100, 100, 50, 4)(x, y) && x < 130;
+    const out = fillEnclosed(canvas(200, 200, [c]));
+    expect(alphaAt(out, 100, 100)).toBe(0);
+  });
+});

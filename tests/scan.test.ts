@@ -224,7 +224,7 @@ describe('scanDrawing: 一連の処理', () => {
     expect(output.width).toBe(80);
   });
 
-  it('回帰：わっか（閉じた輪）の内側の地の紙もちゃんと透明になる', () => {
+  it('わっか（閉じた輪）の内側は 白で うまり、外は 透明（白い からだが すけない）', () => {
     const cx = SIZE / 2;
     const cy = SIZE / 2;
     const img = photo((x, y) => {
@@ -243,7 +243,10 @@ describe('scanDrawing: 一連の処理', () => {
       }
     }
     expect(ringFound).toBe(true); // 輪の線は残る
-    expect(alphaAt(100, 100)).toBeLessThan(40); // 輪の内側（中心）は透明
+    expect(alphaAt(100, 100)).toBe(255); // 輪の内側（中心）は 白で うまる
+    expect(alphaAt(100, 20)).toBeLessThan(40); // 輪の外は 透明
+    const i = (100 * output.width + 100) * 4;
+    expect(output.data[i]).toBeGreaterThan(240); // うめた 色は 白
   });
 
   it('回帰：マーカーの黒インクは角だけ消える（辺の途中には影響しない）', () => {

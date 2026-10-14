@@ -136,7 +136,9 @@ export function CharacterSprite({
           height: '100%',
           objectFit: 'contain',
           transform: flip ? 'scaleX(-1)' : undefined,
-          filter: 'drop-shadow(3px 4px 0 rgba(51,48,43,0.22))',
+          // ステッカーふう：白い ふち（4方向）＋ かげ。切り抜きの ガタつきも かくれる
+          filter:
+            'drop-shadow(2px 0 0 #fff) drop-shadow(-2px 0 0 #fff) drop-shadow(0 2px 0 #fff) drop-shadow(0 -2px 0 #fff) drop-shadow(0 0 0.5px rgba(51,48,43,0.5)) drop-shadow(3px 4px 0 rgba(51,48,43,0.22))',
           ...style,
         }}
       />

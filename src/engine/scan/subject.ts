@@ -83,8 +83,12 @@ export function isolateSubject(img: ImageData, opts: { fit?: boolean } = {}): Im
     if (c.ink === 0) return false;
     const near = c.x1 >= m.x0 - padX && c.x0 <= m.x1 + padX && c.y1 >= m.y0 - padY && c.y0 <= m.y1 + padY;
     if (near && !c.border) return true;
-    // 本体と おなじくらい 大きく、ふちに さわらない もの（2ひき 描いた とき など）
-    return !c.border && c.ink >= m.ink * 0.25;
+    // 本体と おなじくらい 大きく、まんなか あたりに ある もの（2ひき 描いた とき など）。
+    // すみっこの けしゴム・テープなどは のこさない
+    const ccx = c.sx / c.ink / w;
+    const ccy = c.sy / c.ink / h;
+    const central = ccx > 0.15 && ccx < 0.85 && ccy > 0.15 && ccy < 0.85;
+    return !c.border && central && c.ink >= m.ink * 0.5;
   });
 
   const out = new Uint8ClampedArray(data);
@@ -142,7 +146,7 @@ function fitToFrame(img: ImageData, x0: number, y0: number, x1: number, y1: numb
 }
 
 /** 2値画像を 半径 r だけ ふくらませる（たて・よこ 別々に）。 */
-function dilate(src: Uint8Array, w: number, h: number, r: number): Uint8Array {
+export function dilate(src: Uint8Array, w: number, h: number, r: number): Uint8Array {
   const tmp = new Uint8Array(w * h);
   for (let y = 0; y < h; y++) {
     let run = -1e9;
@@ -170,4 +174,59 @@ function dilate(src: Uint8Array, w: number, h: number, r: number): Uint8Array {
     }
   }
   return out;
+}
+
+/**
+ * 線で かこまれた 内がわ（白い からだ など）を 白で うめる。
+ * 背景を 消すと 白い キャラが「線だけ」の すけた 絵に なるので、外から つながっていない すきまは からだの 中とみなす。
+ *  1. 線を すこし ふくらませて 小さな すきまを とじる
+ *  2. 画像の ふちから 透明な ところを たどれる 範囲＝そと
+ *  3. そとを ふくらませた ぶん もどして（線の 外がわに 白い ふちが でないように）、のこりの 透明を 白で うめる
+ */
+export function fillEnclosed(img: ImageData, fill: [number, number, number] = [255, 253, 248]): ImageData {
+  const { width: w, height: h, data } = img;
+  const n = w * h;
+  const r = Math.max(2, Math.round(Math.min(w, h) * 0.006));
+  const solid = new Uint8Array(n);
+  // えんぴつの うすい 線でも かべに なるよう、うすめの 線も「線」として あつかう
+  for (let p = 0; p < n; p++) if (data[p * 4 + 3] > 24) solid[p] = 1;
+  const wall = dilate(solid, w, h, r);
+  const outside = new Uint8Array(n);
+  const stack = new Int32Array(n);
+  let sp = 0;
+  const push = (p: number) => {
+    if (!wall[p] && !outside[p]) {
+      outside[p] = 1;
+      stack[sp++] = p;
+    }
+  };
+  for (let x = 0; x < w; x++) {
+    push(x);
+    push((h - 1) * w + x);
+  }
+  for (let y = 0; y < h; y++) {
+    push(y * w);
+    push(y * w + w - 1);
+  }
+  while (sp > 0) {
+    const p = stack[--sp];
+    const x = p % w;
+    if (x > 0) push(p - 1);
+    if (x < w - 1) push(p + 1);
+    if (p >= w) push(p - w);
+    if (p < n - w) push(p + w);
+  }
+  const out2 = dilate(outside, w, h, r + 1);
+  const out = new Uint8ClampedArray(data);
+  for (let p = 0; p < n; p++) {
+    if (out2[p]) continue;
+    const i = p * 4;
+    const a = out[i + 3] / 255;
+    if (a >= 0.999) continue;
+    out[i] = Math.round(out[i] * a + fill[0] * (1 - a));
+    out[i + 1] = Math.round(out[i + 1] * a + fill[1] * (1 - a));
+    out[i + 2] = Math.round(out[i + 2] * a + fill[2] * (1 - a));
+    out[i + 3] = 255;
+  }
+  return { data: out, width: w, height: h, colorSpace: 'srgb' } as ImageData;
 }

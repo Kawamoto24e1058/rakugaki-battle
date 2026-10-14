@@ -1,7 +1,7 @@
 import { computeHomography, warpPerspective, type Point } from './warp';
 import { detectCornerMarkers, type CornerMarkers } from './markers';
 import { estimatePaperColor, removeBackground } from './bgRemove';
-import { isolateSubject } from './subject';
+import { fillEnclosed, isolateSubject } from './subject';
 
 export type { Point, CornerMarkers };
 export { detectCornerMarkers, computeHomography, warpPerspective, estimatePaperColor, removeBackground, isolateSubject };
@@ -44,6 +44,7 @@ function centerSquareResize(img: ImageData, size: number): ImageData {
  *  2. 紙の背景を透明化
  *  3. マーカー＋角のL字目印のインクが角にわずかに残ることがあるので、角だけ丸く消す
  *  4. マーカーが ないときは 絵の本体だけを のこし（ペン・けしゴム・紙の はし を 消す）、わくいっぱいに 拡大する
+ *  5. 線で かこまれた 内がわは 白で うめる（白い キャラが 線だけの すけた 絵に ならない）
  * を行う。マーカーが見つからなくても背景透明化だけは行い、常に有効な画像を返す。
  * 影への強さ（局所的な明るさで判定する）は markers.ts / bgRemove.ts 側で
  * それぞれ担っている（実際の画素値はここでは一切書き換えない）。
@@ -82,7 +83,9 @@ export function scanDrawing(img: ImageData, opts: { outSize?: number } = {}): Sc
   // 用紙なしで とったとき（マーカーなし）は、まわりの ペン・けしゴム・紙の はし・つくえ が うつりこむので
   // 絵の 本体だけ のこして わくいっぱいに する。用紙のときは わくの 中だけなので そのまま
   // （わく際まで 描いた 絵を けずらないため）。
-  const output = cornersFound ? removed : isolateSubject(removed);
+  const subject = cornersFound ? removed : isolateSubject(removed);
+  // 線で かこまれた 内がわ（白い からだ）は すけないよう 白で うめる
+  const output = fillEnclosed(subject);
   return { output, cornersFound };
 }
 
