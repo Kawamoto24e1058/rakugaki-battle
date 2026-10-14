@@ -134,8 +134,8 @@ const TEMPLATES: KTemplate[] = [
     passive: { kind: 'critUp', add: 0.11 }, active: (st) => ({ kind: 'smash', power: 42, status: st }),
     activeName: 'スナイプ', activeJp: (st) => `威力大。急所＋${jpStatus(st)}`, limit: CD(3) },
   { key: 'quick', role: 'いちばん速い子', tagline: 'だれよりも 速い', shape: 'tall',
-    passive: { kind: 'firstMove' }, active: () => ({ kind: 'barrage', hits: 3, power: 18 }),
-    activeName: 'だっしゅ連撃', activeJp: () => '3回れんぞく攻撃・先手', limit: CD(3) },
+    passive: { kind: 'firstMove' }, active: () => ({ kind: 'barrage', hits: 3, power: 13 }),
+    activeName: 'だっしゅ連撃', activeJp: () => '3回れんぞく攻撃・先に うごく', limit: CD(3) },
   { key: 'reach', role: 'のびる子', tagline: 'とおくまで とどく', shape: 'tall',
     passive: { kind: 'venom', add: 0.2 }, active: (st) => ({ kind: 'stormStatus', power: 34, status: st }),
     activeName: 'からめとり', activeJp: (st) => `威力大。ほぼ確実に ${jpStatus(st)}（長め）`, limit: CD(3) },
@@ -221,5 +221,6 @@ export function koseiOrDefault(id: string | undefined, attribute: Attribute): Ko
 }
 
 export function limitJp(l: KoseiLimit): string {
-  return l.kind === 'cooldown' ? `クールダウン ${l.turns}` : `1バトル ${l.n}回`;
+  // 子ども向けに：「クールダウン3」→「つかったら 3ターン おやすみ」
+  return l.kind === 'cooldown' ? `つかったら ${l.turns}ターン おやすみ` : `1かいの バトルで ${l.n}かい まで`;
 }

@@ -22,15 +22,15 @@ export type Side = 0 | 1;
 export type ClashChoice = string;
 
 const SUDDEN_DEATH_TURN = 14;
-const PER_HIT_CAP_PCT = 0.42;
+const PER_HIT_CAP_PCT = 0.34;
 /** ため技の1発の上限。 */
 const CHARGE_CAP_PCT = 0.62;
 /** 全体の火力。試合が「時間切れ（サドンデス）」でなく選択で決着するように調整。 */
-const DMG_SCALE = 1.5;
+const DMG_SCALE = 1.2;
 
 /**
  * こうげき技が すくない キャラは、そのぶん こうげきが つよい（ほじょ型でも 決着が つくように）。
- * こうげき技 3つ以上＝×1／2つ＝×1.2／1つ＝×1.45。
+ * こうげき技 3つ以上＝×1／2つ＝×1.1／1つ＝×1.25。
  */
 export function focusMult(moveIds: readonly string[]): number {
   const attacks = moveIds.filter((id) => {
@@ -40,7 +40,7 @@ export function focusMult(moveIds: readonly string[]): number {
       return false;
     }
   }).length;
-  return attacks >= 3 ? 1 : attacks === 2 ? 1.2 : 1.45;
+  return attacks >= 3 ? 1 : attacks === 2 ? 1.1 : 1.25;
 }
 /** 回復の底上げ。 */
 const HEAL_SCALE = 1.5;

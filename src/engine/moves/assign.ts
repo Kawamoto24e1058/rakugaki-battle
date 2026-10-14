@@ -122,22 +122,20 @@ function activeRules(input: AssignInput): ActiveRule[] {
 }
 
 /** 技の「この絵に合っている度」と いちばん効いた理由。 */
-function fitOf(m: MoveDef, rules: ActiveRule[]): { score: number; reason: string | null } {
+function fitOf(m: MoveDef, rules: ActiveRule[]): { score: number; reason: string | null; reasons: string[] } {
   const traits = traitsOf(m);
   let score = 0;
-  let best = 0;
-  let reason: string | null = null;
+  const scored: [string, number][] = [];
   for (const r of rules) {
     let s = 0;
     for (const t of traits) s += r.traits[t] ?? 0;
     s *= r.w;
     score += s;
-    if (s > best) {
-      best = s;
-      reason = r.reason;
-    }
+    if (s > 0) scored.push([r.reason, s]);
   }
-  return { score, reason };
+  // 効いた 順の 理由（おなじ 理由が かさならないよう、2ばんめ以降も つかう）
+  const reasons = scored.sort((a, b) => b[1] - a[1]).map(([r]) => r);
+  return { score, reason: reasons[0] ?? null, reasons };
 }
 
 /**
@@ -252,11 +250,13 @@ export function assignMoveSet(input: AssignInput): MoveSlot[] {
       .map((m) => {
         const f = fitOf(m, rules);
         // 絵に合うほど 出やすい（合わない技も すこしは 出る＝あそび）
-        return { v: { m, reason: f.reason }, w: (0.35 + f.score * f.score * 0.04) * (isRareMove(m) ? 0.55 : 1) };
+        return { v: { m, reasons: f.reasons }, w: (0.35 + f.score * f.score * 0.04) * (isRareMove(m) ? 0.55 : 1) };
       });
     const got = pickWeighted(list, rng);
     if (!got) return;
-    add(got.m, got.reason ?? synergyReason(got.m, picked) ?? fallbackReason);
+    const used = new Set(slots.map((x) => x.reason));
+    const fresh = got.reasons.find((r) => !used.has(r));
+    add(got.m, fresh ?? synergyReason(got.m, picked) ?? got.reasons[0] ?? fallbackReason);
     // コンボの あいぼうが まだ いなければ、つぎの枠で いっしょに入れる
     const need = partnerNeed(got.m);
     if (need && !picked.some(need) && picked.length < MOVES_PER_CHARACTER) {

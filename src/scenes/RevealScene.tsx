@@ -193,7 +193,8 @@ export function RevealScene() {
           style={{ fontSize: '0.78rem', color: 'var(--ink-soft)', textAlign: 'center', width: '100%' }}
         >
           <div style={{ fontWeight: 800, color: 'var(--ink)', marginBottom: 4 }}>この子の わざ（まいターン この中から 1つが でるよ）</div>
-          <div style={{ display: 'flex', gap: '0.45rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+          {/* 4まいを 1れつに（はばに あわせて カードが ちぢむ） */}
+          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${character.moveIds.length}, minmax(0, 1fr))`, gap: '0.4rem', width: '100%', maxWidth: '32rem', margin: '0 auto' }}>
             {character.moveIds.map((id, i) => {
               let card;
               try {
@@ -208,9 +209,9 @@ export function RevealScene() {
                   initial={{ opacity: 0, y: 14, rotate: -4 }}
                   animate={{ opacity: 1, y: 0, rotate: 0 }}
                   transition={{ delay: 0.25 + STAT_ORDER.length * 0.16 + 0.45 + i * 0.22, type: 'spring', stiffness: 260, damping: 18 }}
-                  style={{ display: 'grid', justifyItems: 'center', gap: 4, width: 'min(21vw, 6.8rem)' }}
+                  style={{ display: 'grid', justifyItems: 'center', alignContent: 'start', gap: 4, minWidth: 0, containerType: 'inline-size' }}
                 >
-                  <GameCard card={card} size="min(21vw, 6.8rem)" />
+                  <GameCard card={card} size="100cqw" />
                   {why && (
                     <div
                       style={{

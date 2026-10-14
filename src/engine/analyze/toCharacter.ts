@@ -53,6 +53,8 @@ function sharpen01(v: number): number {
 function pickAttribute(f: FeatureVector): Attribute {
   if (f.value < 0.32) return 'dark';
   if (f.saturation < 0.16) return 'dark';
+  // ピンク〜あか むらさき（ほっぺ・リボンなど）は「やみ」より「ほのお」に 見える
+  if (f.dominantHue >= 318 || f.dominantHue < 20) return 'fire';
   let best: Attribute = 'fire';
   let bestDist = Infinity;
   for (const meta of Object.values(ATTRIBUTE_META)) {
@@ -72,7 +74,7 @@ function attributeReason(f: FeatureVector, attr: Attribute): string {
   if (f.saturation < 0.16) return 'えんぴつ・グレーの線';
   const jp = ATTRIBUTE_META[attr].jp;
   const byAttr: Record<Attribute, string> = {
-    fire: 'あかい色が多い',
+    fire: 'あか・ピンクの色が多い',
     water: 'あおい色が多い',
     wood: 'みどりが多い',
     bolt: 'きいろ・オレンジが多い',

@@ -1,9 +1,10 @@
 import { computeHomography, warpPerspective, type Point } from './warp';
 import { detectCornerMarkers, type CornerMarkers } from './markers';
 import { estimatePaperColor, removeBackground } from './bgRemove';
+import { isolateSubject } from './subject';
 
 export type { Point, CornerMarkers };
-export { detectCornerMarkers, computeHomography, warpPerspective, estimatePaperColor, removeBackground };
+export { detectCornerMarkers, computeHomography, warpPerspective, estimatePaperColor, removeBackground, isolateSubject };
 export { estimateIlluminationField, boxBlur2D } from './illum';
 
 export interface ScanResult {
@@ -42,6 +43,7 @@ function centerSquareResize(img: ImageData, size: number): ImageData {
  *  1. 四隅マーカーが見つかれば台形補正して まっすぐな正方形に
  *  2. 紙の背景を透明化
  *  3. マーカー＋角のL字目印のインクが角にわずかに残ることがあるので、角だけ丸く消す
+ *  4. マーカーが ないときは 絵の本体だけを のこし（ペン・けしゴム・紙の はし を 消す）、わくいっぱいに 拡大する
  * を行う。マーカーが見つからなくても背景透明化だけは行い、常に有効な画像を返す。
  * 影への強さ（局所的な明るさで判定する）は markers.ts / bgRemove.ts 側で
  * それぞれ担っている（実際の画素値はここでは一切書き換えない）。
@@ -75,8 +77,12 @@ export function scanDrawing(img: ImageData, opts: { outSize?: number } = {}): Sc
   }
 
   const paper = estimatePaperColor(working);
-  const output = removeBackground(working, paper);
-  if (cornersFound) clearCornerSpecks(output);
+  const removed = removeBackground(working, paper);
+  if (cornersFound) clearCornerSpecks(removed);
+  // 用紙なしで とったとき（マーカーなし）は、まわりの ペン・けしゴム・紙の はし・つくえ が うつりこむので
+  // 絵の 本体だけ のこして わくいっぱいに する。用紙のときは わくの 中だけなので そのまま
+  // （わく際まで 描いた 絵を けずらないため）。
+  const output = cornersFound ? removed : isolateSubject(removed);
   return { output, cornersFound };
 }
 
