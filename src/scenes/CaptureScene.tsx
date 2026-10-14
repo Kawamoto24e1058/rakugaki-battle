@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
+import { guideSquare, useLiveScan } from './capture/liveScan';
+import { sfx } from '../audio/sfx';
 import QRCode from 'qrcode';
 import { useGame } from '../store/gameStore';
 import {
@@ -108,6 +110,13 @@ export function CaptureScene() {
   const [qrUrl, setQrUrl] = useState<string | null>(null);
   const [phoneError, setPhoneError] = useState<string | null>(null);
 
+  const [flash, setFlash] = useState(0);
+  const live = useLiveScan(videoRef, stage === 'camera' && !phoneCode && !cameraError && !busy, () => {
+    sfx.confirm();
+    setFlash((n) => n + 1);
+    grabFromVideo();
+  });
+
   const playerLabel = mode === 'versus' ? (pending ? 'ふたりめ' : 'ひとりめ') : 'あなた';
   const isLocalhost = typeof window !== 'undefined' && /^(localhost|127\.0\.0\.1)$/.test(window.location.hostname);
 
@@ -209,9 +218,7 @@ export function CaptureScene() {
     const video = videoRef.current;
     if (!video || !video.videoWidth) return;
     // ガイド枠（中央の正方形 90%）だけを切り出す。用紙の四隅マーカーまで入るよう広め。
-    const side = Math.min(video.videoWidth, video.videoHeight) * 0.9;
-    const sx = (video.videoWidth - side) / 2;
-    const sy = (video.videoHeight - side) / 2;
+    const { sx, sy, side } = guideSquare(video);
     const canvas = document.createElement('canvas');
     canvas.width = 1000;
     canvas.height = 1000;
@@ -313,18 +320,72 @@ export function CaptureScene() {
                 {cameraError}
               </div>
             )}
-            <div
-              style={{
-                position: 'absolute',
-                inset: '6%',
-                border: '4px dashed var(--crayon-red)',
-                borderRadius: 12,
-                pointerEvents: 'none',
-              }}
-            />
+            {/* ガイド：まだ 見つからない あいだは 赤い 点線、見つかったら 四すみを 緑で つなぐ */}
+            {!live.corners && (
+              <div style={{ position: 'absolute', inset: '6%', border: '4px dashed var(--crayon-red)', borderRadius: 12, pointerEvents: 'none' }} />
+            )}
+            {live.corners && (
+              <svg viewBox="0 0 100 100" preserveAspectRatio="none" style={{ position: 'absolute', inset: '5%', width: '90%', height: '90%', pointerEvents: 'none' }}>
+                <polygon
+                  points={live.corners.map((c) => `${c.x * 100},${c.y * 100}`).join(' ')}
+                  fill="rgba(47,168,98,.18)"
+                  stroke="#2fa862"
+                  strokeWidth={1.6}
+                  strokeLinejoin="round"
+                />
+                {live.corners.map((c, i) => (
+                  <circle key={i} cx={c.x * 100} cy={c.y * 100} r={2.4} fill="#2fa862" stroke="#fff" strokeWidth={0.8} />
+                ))}
+              </svg>
+            )}
+            {/* じどうシャッターまでの わ */}
+            {live.steady > 0 && (
+              <svg viewBox="0 0 40 40" style={{ position: 'absolute', right: 10, top: 10, width: 54, height: 54, pointerEvents: 'none' }}>
+                <circle cx={20} cy={20} r={16} fill="rgba(255,255,255,.85)" stroke="#ddd" strokeWidth={4} />
+                <circle cx={20} cy={20} r={16} fill="none" stroke="#2fa862" strokeWidth={4} strokeDasharray={`${live.steady * 100.5} 100.5`} transform="rotate(-90 20 20)" strokeLinecap="round" />
+              </svg>
+            )}
+            {/* さつえいの フラッシュ */}
+            {flash > 0 && (
+              <motion.div key={flash} initial={{ opacity: 0.9 }} animate={{ opacity: 0 }} transition={{ duration: 0.5 }} style={{ position: 'absolute', inset: 0, background: '#fff', pointerEvents: 'none' }} />
+            )}
+            {/* いまの ようす */}
+            {!cameraError && (
+              <div
+                style={{
+                  position: 'absolute',
+                  left: 0,
+                  right: 0,
+                  bottom: 8,
+                  margin: '0 auto',
+                  width: 'fit-content',
+                  maxWidth: '92%',
+                  padding: '0.2em 0.8em',
+                  borderRadius: 99,
+                  border: '2.5px solid var(--ink)',
+                  background: live.corners ? '#d8f5e3' : live.quality !== 'ok' ? '#ffe2d6' : '#fffdf5',
+                  fontWeight: 900,
+                  fontSize: '0.85rem',
+                  textAlign: 'center',
+                  pointerEvents: 'none',
+                }}
+              >
+                {live.quality === 'dark'
+                  ? 'くらいよ。あかるい ところで とってね'
+                  : live.quality === 'glare'
+                    ? 'ひかりが はんしゃしているよ。すこし ななめに してね'
+                    : live.quality === 'blur'
+                      ? 'ぼやけているよ。うごかさないでね'
+                      : live.corners
+                        ? live.steady > 0.5
+                          ? 'そのまま…！ じどうで とるよ'
+                          : 'みつけた！ うごかさないでね'
+                        : 'ようしの 4つの かどを わくに いれてね'}
+              </div>
+            )}
           </div>
           <p style={{ fontSize: '0.8rem', color: 'var(--ink-soft)', textAlign: 'center', maxWidth: '24rem' }}>
-            したがきようし の 四すみの くろい ■ が 4つとも わくの なかに はいるように とると、きれいに きりぬけるよ
+            したがきようし の 四すみの くろい ■ が 4つとも わくに はいると 緑の わくが でて、じどうで とるよ（ボタンでも とれるよ）
           </p>
           <div style={{ display: 'flex', gap: '0.8rem', flexWrap: 'wrap', justifyContent: 'center' }}>
             <button className="crayon-btn" onClick={grabFromVideo} disabled={!!cameraError}>
