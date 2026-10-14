@@ -34,7 +34,7 @@ function Glyph({ motif, pal, x, y, s }: { motif: string; pal: Pal; x: number; y:
   if (!Draw) return null;
   return (
     <g transform={`translate(${x} ${y}) scale(${s})`}>
-      <g filter="url(#crayon)">{Draw(pal)}</g>
+      {Draw(pal)}
     </g>
   );
 }
@@ -327,7 +327,7 @@ export function SceneArt({ move }: { move: MoveDef }) {
       <ellipse cx={80} cy={46} rx={66} ry={46} fill="url(#maglow)" />
       <ellipse cx={80} cy={64} rx={36} ry={4} fill="rgba(51,48,43,.12)" />
       <g filter="url(#masoft)">
-        <g filter="url(#crayon)">
+        <g>
           {toks.map((tok, i) => {
             const [name, rest] = tok.split(':');
             const Draw = MOTIFS[name];

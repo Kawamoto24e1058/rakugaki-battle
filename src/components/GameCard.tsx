@@ -85,9 +85,7 @@ export function GameCard({
           {ill ? (
             <svg viewBox="0 0 200 160" preserveAspectRatio="xMidYMid slice" width="100%" height="100%" style={{ display: 'block' }}>
               <ArtBg kind={kind} pal={pal} />
-              <g filter="url(#crayon)">{ill(pal)}</g>
-              {/* クレヨンの ざらざら */}
-              <rect width={200} height={160} filter="url(#crayon-grain)" opacity={0.18} />
+              {ill(pal)}
             </svg>
           ) : (
             <div className="gc2-legacy">{card.move ? <SceneArt move={card.move} /> : <CardArt art={card.art} />}</div>

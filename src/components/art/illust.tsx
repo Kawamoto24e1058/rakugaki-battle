@@ -2,8 +2,9 @@ import type { ReactElement, ReactNode } from 'react';
 import { PALETTES, type Pal } from './palette';
 
 /**
- * カードの 描きおろしイラスト（クレヨン風 SVG・トレカっぽい 迫力）。viewBox は 200×160。
- *  ・ぬり：グラデーション（gv-*）＋ 右下の かげ（ななめ線）＋ 左上の ハイライト ＝ 立体感
+ * カードの 描きおろしイラスト（すっきりした 線と ぬりの SVG・トレカっぽい 迫力）。viewBox は 200×160。
+ *  ・ぬり：グラデーション（gv-*）＋ 右下の かげ（2トーン）＋ 左上の ハイライト ＝ 立体感
+ *  ・クレヨンの ガタガタ（#crayon）や ざらざらは つかわない（カードが ゆがんで 見えるため）
  *  ・構図：主役を 大きく・ななめに、手前と おくを つくる、ひかり（glow）と 集中線で 迫力
  * 動かしたい部分には ill-* の class（.gcard-anim の中でだけ CSS で 動く）。
  */
@@ -25,7 +26,7 @@ export const E = (cx: number, cy: number, rx: number, ry: number) => `M${cx - rx
  * 立体ぬり：かげ色の 上に ずらした 本体色を かさね（右下に かげが のこる）、かげには ななめ線、
  * 左上に ハイライト、さいごに 線。id は カードの中で 一意に。
  */
-function Vol({ id, d, fill, shade, off = [-5, -6], hi, w = 3.2, hatch = true }: { id: string; d: string; fill: string; shade: string; off?: [number, number]; hi?: ReactNode; w?: number; hatch?: boolean }) {
+function Vol({ id, d, fill, shade, off = [-5, -6], hi, w = 3.2, hatch = false }: { id: string; d: string; fill: string; shade: string; off?: [number, number]; hi?: ReactNode; w?: number; hatch?: boolean }) {
   return (
     <g>
       <defs>
@@ -290,7 +291,7 @@ const Ground = ({ y = 132, color }: { y?: number; color: string }) => (
 );
 
 /** りったいの さいころ（うえ・ひだり・みぎ の 3めん）。 */
-function Die({ id, x, y, s = 1, rot = 0, faces, top, left, right, pip = INK }: { id: string; x: number; y: number; s?: number; rot?: number; faces: [number, number, number]; top: string; left: string; right: string; pip?: string }) {
+function Die({ x, y, s = 1, rot = 0, faces, top, left, right, pip = INK }: { x: number; y: number; s?: number; rot?: number; faces: [number, number, number]; top: string; left: string; right: string; pip?: string }) {
   // めんの なかの 位置（u：よこ 0〜1、v：たて 0〜1）
   const L = (u: number, v: number) => [-34 + 34 * u, -18 + 18 * u + 38 * v] as const;
   const R = (u: number, v: number) => [34 * u, -18 * u + 38 * v] as const;
@@ -312,13 +313,7 @@ function Die({ id, x, y, s = 1, rot = 0, faces, top, left, right, pip = INK }: {
     <g transform={`translate(${x} ${y}) rotate(${rot}) scale(${s})`}>
       <path d="M-34,-18 L0,-36 L34,-18 L0,0Z" fill={top} {...ink(3.2)} />
       <path d="M-34,-18 L0,0 L0,38 L-34,20Z" fill={left} {...ink(3.2)} />
-      <defs>
-        <clipPath id={`${id}-r`}>
-          <path d="M34,-18 L0,0 L0,38 L34,20Z" />
-        </clipPath>
-      </defs>
       <path d="M34,-18 L0,0 L0,38 L34,20Z" fill={right} {...ink(3.2)} />
-      <rect x={0} y={-36} width={40} height={80} fill="url(#hatch)" clipPath={`url(#${id}-r)`} />
       {dots(faces[0], T, 6, 3.4, -28, faces[0] === 1 ? '#e8503a' : pip)}
       {dots(faces[1], L, 3.2, 4.4, 28, pip)}
       {dots(faces[2], R, 3.2, 4.4, -28, pip)}
@@ -665,10 +660,10 @@ export const ILLUST: Record<string, Illust> = {
       <path d="M112,70 Q132,44 150,82" fill="none" {...ink(2.6)} strokeDasharray="6 7" />
       <Shadow x={70} y={140} rx={34} ry={6} />
       <g className="ill-spin" style={{ transformOrigin: '68px 96px', transformBox: 'view-box' }}>
-        <Die id="dc1" x={68} y={96} s={1.05} rot={-10} faces={[1, 5, 3]} top="#ffffff" left="#ece6da" right="#cfc6b6" />
+        <Die x={68} y={96} s={1.05} rot={-10} faces={[1, 5, 3]} top="#ffffff" left="#ece6da" right="#cfc6b6" />
       </g>
       <Shadow x={158} y={140} rx={22} ry={4} o={0.15} />
-      <Die id="dc2" x={156} y={108} s={0.66} rot={18} faces={[2, 4, 6]} top="#fff6c2" left="#ffd36e" right="#e0a90c" />
+      <Die x={156} y={108} s={0.66} rot={18} faces={[2, 4, 6]} top="#fff6c2" left="#ffd36e" right="#e0a90c" />
       <Burst x={118} y={110} r={16} p={PALETTES.bolt} points={10} cls="ill-pulse" />
       <Sparkle x={34} y={40} r={10} fill="#ffd36e" />
       <Sparkle x={118} y={30} r={8} fill="#9be59b" delay={0.4} />

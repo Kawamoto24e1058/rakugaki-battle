@@ -106,7 +106,7 @@ export function CardArt({ art }: { art: ArtSpec }) {
         </linearGradient>
       </defs>
       <rect width="160" height="100" fill={`url(#bg${id})`} />
-      <g filter="url(#crayon)">
+      <g>
         {art.motifs.map((tok, i) => {
           const m = parse(tok, i, art.motifs.length);
           const Draw = MOTIFS[m.name];
