@@ -43,6 +43,30 @@ describe('切り抜き：絵の本体だけ のこす', () => {
     expect(alphaAt(out, 145, 100)).toBe(255);
   });
 
+  it('絵を かこむ ほそい わく線と、写真の はしの 影・つくえ は 絵と つながっていても 消す（実写で おきた）', () => {
+    const ring = (cx: number, cy: number, r: number, t: number) => (x: number, y: number) => {
+      const d = Math.hypot(x - cx, y - cy);
+      return d <= r && d >= r - t;
+    };
+    const img = canvas(300, 300, [
+      circle(150, 150, 50), // からだ（ぬりつぶし）
+      rect(195, 145, 274, 155), // 剣：からだから わく線まで とどいて つながっている
+      rect(149, 198, 150, 240), // ぼうの 足（ほそい 線）
+      ring(150, 150, 126, 2), // 絵を かこむ ほそい わく線
+      rect(0, 0, 22, 299), // 左はしの 影（ふちに さわる）
+      rect(288, 0, 299, 299), // 右はしの つくえ
+    ]);
+    const out = isolateSubject(img, { fit: false });
+    expect(alphaAt(out, 150, 150)).toBe(255); // からだ
+    expect(alphaAt(out, 240, 150)).toBe(255); // 剣
+    expect(alphaAt(out, 149, 235)).toBe(255); // ぼうの 足
+    expect(alphaAt(out, 150, 25)).toBe(0); // わく線（上）
+    expect(alphaAt(out, 25, 150)).toBe(0); // わく線（左）
+    expect(alphaAt(out, 150, 275)).toBe(0); // わく線（下）
+    expect(alphaAt(out, 10, 150)).toBe(0); // 影
+    expect(alphaAt(out, 295, 150)).toBe(0); // つくえ
+  });
+
   it('小さく 描いた 絵は わくいっぱいに 拡大される', () => {
     const img = canvas(200, 200, [circle(100, 100, 20)]);
     const out = isolateSubject(img);
