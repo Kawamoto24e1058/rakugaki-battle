@@ -34,12 +34,15 @@ export function GameCard({
   size,
   selected = false,
   animated = false,
+  artImage,
   style,
 }: {
   card: CardData;
   size: string;
   selected?: boolean;
   animated?: boolean;
+  /** 絵を 画像で さしかえる（見くらべ用）。 */
+  artImage?: string;
   style?: CSSProperties;
 }) {
   const tier = tierOf(card);
@@ -72,7 +75,9 @@ export function GameCard({
       {/* ③ 絵（わくの 形で 種類） */}
       <div className="gc3-artframe">
         <div className="gc3-art">
-          {ill ? (
+          {artImage ? (
+            <img src={artImage} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+          ) : ill ? (
             <svg viewBox="0 0 200 160" preserveAspectRatio="xMidYMid slice" width="100%" height="100%" style={{ display: 'block' }}>
               <ArtBg kind={bgOf(card, tier)} pal={pal} />
               {ill(pal)}

@@ -281,6 +281,14 @@ export function Foe({ id, x, y, s = 1, hurt = true, rot = 0 }: { id: string; x: 
   );
 }
 
+/** くも（ふちどり＋かげ）。 */
+const Cloud = ({ x, y, s = 1 }: { x: number; y: number; s?: number }) => (
+  <g transform={`translate(${x} ${y}) scale(${s})`}>
+    <path d="M-30,8 C-36,8 -38,-4 -28,-6 C-28,-18 -10,-20 -6,-12 C0,-24 22,-22 22,-8 C34,-10 38,8 26,8Z" fill={PAPER} stroke="#9fb7c9" strokeWidth={2} strokeLinejoin="round" />
+    <path d="M-24,6 C-10,10 10,10 24,6" fill="none" stroke="#d6e4ee" strokeWidth={3} strokeLinecap="round" />
+  </g>
+);
+
 /** ちめん（おくゆき）。 */
 const Ground = ({ y = 132, color }: { y?: number; color: string }) => (
   <g>
@@ -386,35 +394,75 @@ export function ArtBg({ kind, pal }: { kind: BgKind; pal: Pal }) {
 // ------------------------------------------------------------------ 描きおろし（見本 8まい）
 
 export const ILLUST: Record<string, Illust> = {
-  // たいあたり：手前から ななめに つっこむ。あいては おくへ ふっとぶ
+  // たいあたり：草原。ざんぞうを のこして つっこみ、あいては ふっとぶ
   c_tackle: (p) => (
     <g>
-      <Ground y={128} color={p.bg2} />
-      <Radial cx={132} cy={82} n={26} r0={18} r1={170} o={0.16} />
+      <defs>
+        <linearGradient id="tk-sky" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#7cc8ff" />
+          <stop offset="0.75" stopColor="#e8f6ff" />
+        </linearGradient>
+      </defs>
+      <rect width={200} height={160} fill="url(#tk-sky)" />
+      <circle cx={26} cy={18} r={38} fill="#fff6c2" opacity={0.75} filter="url(#soft)" />
+      <Cloud x={150} y={26} s={0.9} />
+      <Cloud x={70} y={16} s={0.6} />
+      <path d="M0,96 Q34,74 70,90 T140,82 T200,88 L200,160 L0,160Z" fill="#bfe6a6" />
+      <path d="M0,110 Q50,96 100,108 T200,104 L200,160 L0,160Z" fill="#93d27c" />
+      <path d="M0,124 Q100,114 200,124 L200,160 L0,160Z" fill="#ead8aa" {...ink(2.4)} />
+      {[20, 58, 96, 140, 178].map((x, i) => (
+        <path key={i} d={`M${x},${126 - (i % 2) * 2} l3,-7 l2,6 l3,-8 l2,9`} fill="none" stroke="#5fa04a" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+      ))}
+      <Radial cx={124} cy={84} n={26} r0={22} r1={170} color={PAPER} o={0.45} />
+      {/* ふっとぶ あいて */}
       <Shadow x={162} y={134} rx={18} ry={4} o={0.14} />
-      <Foe id="tk" x={160} y={92} s={0.74} rot={30} />
-      <path d="M126,92 C138,88 146,90 150,94" fill="none" {...ink(2.4)} strokeDasharray="5 6" opacity={0.6} />
-      <Burst x={124} y={82} r={30} p={p} cls="ill-pulse" />
+      <path d="M128,90 C140,84 148,84 154,88" fill="none" {...ink(2.4)} strokeDasharray="5 6" opacity={0.6} />
+      <Foe id="tk" x={160} y={90} s={0.74} rot={30} />
+      {[
+        [148, 60],
+        [172, 64],
+        [160, 54],
+      ].map(([x, y], i) => (
+        <Sparkle key={i} x={x} y={y} r={4} fill="#ffe27a" delay={i * 0.2} />
+      ))}
+      <g filter="url(#glow)">
+        <Burst x={124} y={82} r={32} p={p} cls="ill-pulse" />
+      </g>
       {[
         [104, 44, 5, 20],
-        [186, 120, 6, -10],
-        [146, 124, 4, 40],
-        [124, 30, 4, 0],
+        [186, 116, 6, -10],
+        [146, 122, 4, 40],
+        [126, 30, 4, 0],
+        [96, 112, 3.5, 60],
       ].map(([x, y, r, a], i) => (
-        <rect key={i} x={x - r} y={y - r} width={r * 2} height={r * 1.6} rx={1.5} transform={`rotate(${a} ${x} ${y})`} fill="#c9b79a" {...ink(2)} />
+        <g key={i} transform={`rotate(${a} ${x} ${y})`}>
+          <rect x={x - r} y={y - r * 0.8} width={r * 2} height={r * 1.6} rx={1.5} fill="#c9b79a" {...ink(1.8)} />
+          <rect x={x - r} y={y - r * 0.8} width={r} height={r * 0.6} fill="#e8dcc4" />
+        </g>
       ))}
-      <Shadow x={70} y={140} rx={36} ry={7} />
-      <Speed x={2} y={66} len={46} n={6} gap={10} w={3.4} />
-      <Buddy id="tk" x={76} y={98} s={1.25} p={p} pose="dash" rot={-16} stretch={1.12} />
+      {/* ざんぞう */}
+      <g opacity={0.16}>
+        <Buddy id="tk-a1" x={40} y={106} s={1.2} p={p} pose="dash" rot={-16} stretch={1.1} />
+      </g>
+      <g opacity={0.3}>
+        <Buddy id="tk-a2" x={58} y={102} s={1.22} p={p} pose="dash" rot={-16} stretch={1.1} />
+      </g>
+      <Shadow x={72} y={140} rx={36} ry={7} />
+      <Speed x={0} y={70} len={40} n={6} gap={10} w={3.4} o={0.55} />
+      <Buddy id="tk" x={78} y={98} s={1.25} p={p} pose="dash" rot={-16} stretch={1.12} />
+      {/* てまえの つちけむり（ぼかし＋くっきり） */}
+      <circle cx={18} cy={150} r={16} fill={PAPER} opacity={0.8} filter="url(#soft)" />
       {[
-        [30, 136, 12],
-        [14, 128, 8],
-        [48, 146, 9],
-        [6, 146, 7],
+        [34, 138, 11],
+        [16, 130, 8],
+        [50, 148, 9],
       ].map(([x, y, r], i) => (
-        <circle key={i} cx={x} cy={y} r={r} fill={PAPER} {...ink(2.2)} />
+        <g key={i}>
+          <circle cx={x} cy={y} r={r} fill={PAPER} {...ink(2)} />
+          <circle cx={x + r * 0.3} cy={y + r * 0.3} r={r * 0.55} fill="#e8e1d2" />
+        </g>
       ))}
-      <Sfx x={62} y={34} text="ドン！" size={28} fill={p.light} rot={-12} />
+      <Sfx x={60} y={34} text="ドン！" size={30} fill="#ffe27a" rot={-12} />
     </g>
   ),
 
@@ -457,67 +505,136 @@ export const ILLUST: Record<string, Illust> = {
     </g>
   ),
 
-  // ひのこ：ほのおの子が 火のこを ふきつける
+  // ひのこ：ゆうやけの 火山。ほのおの子が 火のこを ふきつける
   f_spark: (p) => (
     <g>
-      <Ground y={126} color={p.bg2} />
-      <Glow x={150} y={78} r={52} p={p} />
-      <Shadow x={160} y={134} rx={22} ry={5} o={0.16} />
-      <Foe id="fs" x={162} y={102} s={0.82} rot={8} />
-      <Flame x={168} y={80} s={0.55} p={p} delay={0.3} />
-      <path d="M78,84 C100,70 124,72 146,84" fill="none" stroke={p.light} strokeWidth={10} opacity={0.5} strokeLinecap="round" />
+      <defs>
+        <linearGradient id="fs-sky" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#ff8a4c" />
+          <stop offset="0.6" stopColor="#ffd59a" />
+        </linearGradient>
+      </defs>
+      <rect width={200} height={160} fill="url(#fs-sky)" />
+      {/* とおくの 火山 */}
+      <path d="M96,96 L128,46 L140,52 L152,44 L186,96Z" fill="#a8583a" opacity={0.55} />
+      <ellipse cx={142} cy={44} rx={18} ry={8} fill="#ffe27a" opacity={0.8} filter="url(#soft)" />
+      <path d="M134,40 q4,-12 10,-4 q6,-10 10,2" fill="none" stroke="#7a3a24" strokeWidth={3} opacity={0.4} />
+      {/* ゆらゆら（かげろう） */}
+      {[60, 74].map((y, i) => (
+        <path key={i} d={`M10,${y} q10,-4 20,0 t20,0 t20,0`} fill="none" stroke={PAPER} strokeWidth={2} opacity={0.4} />
+      ))}
+      {/* いわの じめん＋ようがんの ひび */}
+      <path d="M0,118 Q60,106 110,116 T200,112 L200,160 L0,160Z" fill="#6e3b2a" {...ink(2.4)} />
+      <path d="M0,130 Q70,122 130,132 T200,128 L200,160 L0,160Z" fill="#54291d" />
+      <path d="M30,140 l14,-6 l10,8 l16,-4 M120,146 l12,-8 l14,6 l10,-5" fill="none" stroke="#ffb347" strokeWidth={3} strokeLinecap="round" filter="url(#glow)" />
+      <Glow x={150} y={84} r={50} p={p} />
+      {/* あいて（こげて けむり） */}
+      <Shadow x={160} y={128} rx={22} ry={5} o={0.22} />
+      <Foe id="fs" x={162} y={98} s={0.82} rot={8} />
       {[
-        [96, 76, 0.62, 0, 70],
-        [118, 66, 0.8, 0.15, 80],
-        [140, 82, 0.66, 0.3, 95],
-        [108, 98, 0.5, 0.45, 60],
-        [130, 104, 0.42, 0.1, 100],
+        [176, 62, 6],
+        [184, 50, 4.5],
+        [170, 52, 3.5],
+      ].map(([x, y, r], i) => (
+        <circle key={i} className="ill-float" style={{ animationDelay: `${i * 0.3}s` }} cx={x} cy={y} r={r} fill="#9a9488" opacity={0.75} />
+      ))}
+      <Flame x={168} y={78} s={0.5} p={p} delay={0.3} />
+      {/* ふきだす 火のこ：ひかる すじ ＋ ほのお */}
+      <path d="M76,82 C100,66 126,68 148,82" fill="none" stroke={p.light} strokeWidth={14} opacity={0.55} strokeLinecap="round" filter="url(#glow)" />
+      <path d="M78,82 C100,70 124,72 146,82" fill="none" stroke={PAPER} strokeWidth={4} opacity={0.8} strokeLinecap="round" />
+      {[
+        [96, 74, 0.62, 0, 70],
+        [118, 64, 0.8, 0.15, 80],
+        [140, 80, 0.66, 0.3, 95],
+        [106, 96, 0.5, 0.45, 60],
+        [130, 100, 0.42, 0.1, 100],
       ].map(([x, y, s, d, r], i) => (
         <Flame key={i} x={x} y={y} s={s} p={p} delay={d} rot={r} />
       ))}
+      {/* まう ひのこ（てまえは ぼかし） */}
       {[
-        [86, 64],
-        [128, 50],
-        [150, 60],
-        [102, 116],
-        [146, 112],
+        [86, 58],
+        [128, 46],
+        [152, 58],
+        [100, 116],
+        [146, 108],
+        [60, 40],
       ].map(([x, y], i) => (
-        <circle key={i} className="ill-twinkle" style={{ animationDelay: `${i * 0.2}s`, transformOrigin: `${x}px ${y}px`, transformBox: 'view-box' }} cx={x} cy={y} r={3.2} fill={p.light} {...ink(1.6)} />
+        <circle key={i} className="ill-twinkle" style={{ animationDelay: `${i * 0.2}s`, transformOrigin: `${x}px ${y}px`, transformBox: 'view-box' }} cx={x} cy={y} r={3} fill="#ffe27a" {...ink(1.4)} />
       ))}
-      <Shadow x={50} y={136} rx={30} ry={6} />
-      <Buddy id="fs" x={48} y={98} s={1.08} p={p} elem="fire" face="puff" rot={-6} />
-      <Sfx x={58} y={28} text="ボッ" size={24} fill={p.light} rot={-14} />
+      <circle cx={186} cy={140} r={9} fill="#ffb347" opacity={0.7} filter="url(#soft)" />
+      <circle cx={10} cy={20} r={7} fill="#ffe27a" opacity={0.7} filter="url(#soft)" />
+      {/* じぶん */}
+      <Shadow x={50} y={132} rx={30} ry={6} o={0.28} />
+      <Buddy id="fs" x={48} y={96} s={1.08} p={p} elem="fire" face="puff" rot={-6} />
+      <Sfx x={56} y={30} text="ボッ" size={26} fill="#ffe27a" rot={-14} />
     </g>
   ),
 
-  // アクアカノン：大ほうりゅうが まっすぐ つらぬく
+  // アクアカノン：うみべ。大ほうりゅうが まっすぐ つらぬく
   water_sig: (p) => (
     <g>
-      <path d="M0,126 C30,108 50,140 80,122 C110,104 130,138 160,120 C180,108 196,118 200,114 L200,160 L0,160Z" fill={p.main} opacity={0.35} />
-      <Radial cx={176} cy={96} n={22} r0={16} r1={180} color={PAPER} o={0.4} />
+      <defs>
+        <linearGradient id="wa-sky" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#8fd8ff" />
+          <stop offset="1" stopColor="#e9f8ff" />
+        </linearGradient>
+        <linearGradient id="wa-sea" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#5aa9f0" />
+          <stop offset="1" stopColor="#1c4fb0" />
+        </linearGradient>
+      </defs>
+      <rect width={200} height={160} fill="url(#wa-sky)" />
+      <Cloud x={40} y={22} s={0.7} />
+      <Cloud x={120} y={14} s={0.5} />
+      {/* うみ */}
+      <path d="M0,70 L200,66 L200,160 L0,160Z" fill="url(#wa-sea)" />
+      <path d="M0,70 L200,66" stroke={PAPER} strokeWidth={2} opacity={0.7} />
+      {[84, 100, 116].map((y, i) => (
+        <path key={i} d={`M${-10 + i * 12},${y} q10,-4 20,0 t20,0 M${90 + i * 8},${y + 6} q10,-4 20,0 t20,0`} fill="none" stroke={PAPER} strokeWidth={2} opacity={0.45} />
+      ))}
+      {/* おくの 大なみ */}
+      <path d="M150,70 C150,40 190,30 200,46 L200,70Z" fill="#7cc4ff" {...ink(2.2)} />
+      <path d="M160,52 C168,42 182,40 190,46" fill="none" stroke={PAPER} strokeWidth={3} strokeLinecap="round" />
+      <Radial cx={176} cy={96} n={22} r0={16} r1={180} color={PAPER} o={0.35} />
+      {/* ビーム（ひかる ふち＋しろい しん） */}
       <g filter="url(#glow)">
         <path d="M54,88 C100,80 150,76 204,70 L204,124 C150,118 100,116 54,110Z" fill={gv(p)} {...ink(3.4)} />
       </g>
-      <path className="ill-flow" d="M60,94 C104,86 150,82 204,80" fill="none" stroke={p.light} strokeWidth={7} strokeDasharray="20 12" strokeLinecap="round" />
-      <path className="ill-flow" d="M62,104 C108,102 152,102 204,104" fill="none" stroke={PAPER} strokeWidth={4} strokeDasharray="12 14" strokeLinecap="round" style={{ animationDelay: '0.2s' }} />
+      <path d="M58,99 C104,94 150,92 204,92" fill="none" stroke={PAPER} strokeWidth={7} strokeLinecap="round" opacity={0.9} />
+      <path className="ill-flow" d="M60,92 C104,84 150,80 204,78" fill="none" stroke={p.light} strokeWidth={5} strokeDasharray="20 12" strokeLinecap="round" />
+      <path className="ill-flow" d="M62,106 C108,106 152,108 204,112" fill="none" stroke={p.light} strokeWidth={4} strokeDasharray="12 14" strokeLinecap="round" style={{ animationDelay: '0.2s' }} />
       {[96, 130].map((x, i) => (
         <ellipse key={i} cx={x} cy={99 - i * 2} rx={8} ry={24} fill="none" stroke={PAPER} strokeWidth={3.4} opacity={0.95} />
       ))}
-      <g transform="translate(176 96) rotate(-90) scale(0.9)">
+      {/* あわ */}
+      {[
+        [80, 124, 3],
+        [110, 74, 2.6],
+        [150, 126, 3.4],
+        [140, 72, 2.2],
+      ].map(([x, y, r], i) => (
+        <circle key={i} className="ill-float" style={{ animationDelay: `${i * 0.25}s` }} cx={x} cy={y} r={r} fill="none" stroke={PAPER} strokeWidth={1.6} />
+      ))}
+      {/* しぶきの おうかん */}
+      <g transform="translate(176 96) rotate(-90) scale(0.95)">
         <path d="M-22,14 L-28,-10 L-14,4 L-10,-24 L0,0 L8,-28 L12,2 L26,-14 L22,14Z" fill={p.light} {...ink(2.8)} />
         <ellipse cx={0} cy={14} rx={24} ry={7} fill={PAPER} {...ink(2.4)} />
       </g>
       {[
         [112, 40, 5],
-        [92, 24, 4],
+        [92, 26, 4],
         [188, 140, 6],
         [160, 146, 4],
         [132, 56, 3.6],
       ].map(([x, y, r], i) => (
         <Drop key={i} x={x} y={y} r={r} p={p} delay={i * 0.22} />
       ))}
-      <Shadow x={34} y={138} rx={28} ry={6} />
-      <Buddy id="wa" x={34} y={102} s={1.02} p={p} elem="water" face="puff" rot={-4} />
+      {/* じぶん（いわの 上） */}
+      <path d="M2,138 Q4,118 34,116 Q66,116 68,138 Q66,150 34,152 Q4,150 2,138Z" fill="#8e8a80" {...ink(2.6)} />
+      <path d="M10,128 Q24,120 40,122" fill="none" stroke="#c9c4b8" strokeWidth={3} strokeLinecap="round" />
+      <Buddy id="wa" x={34} y={92} s={1.02} p={p} elem="water" face="puff" rot={-4} />
+      <circle cx={194} cy={20} r={10} fill={PAPER} opacity={0.6} filter="url(#soft)" />
       <Sfx x={104} y={146} text="ドバァッ" size={22} fill={p.light} rot={-4} />
     </g>
   ),
