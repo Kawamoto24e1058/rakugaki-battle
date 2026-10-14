@@ -68,6 +68,8 @@ function mockFeatures(req: AnalyzeRequest): Record<string, unknown> {
     eyeCount: Math.floor(r(4) * 4),
     temperament: r(2) < 1 ? 'aggressive' : 'calm',
     bodyType: '(mock) ふつうの体つき',
+    motif: 'うさぎ',
+    motifTags: ['animal', 'cute', 'fluffy', 'long_legs'],
     powerLook: r(10),
     powerReason: '(mock) するどい ところが ある',
     toughnessLook: r(10),

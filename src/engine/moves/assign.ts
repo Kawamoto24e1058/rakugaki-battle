@@ -20,6 +20,9 @@ export interface AssignInput {
   tags?: string[];
   weapon?: Weapon;
   stats?: Stats;
+  /** AI が 見た「何の絵か」（理由の 文に つかう）と 特徴タグ。 */
+  motif?: string;
+  motifTags?: string[];
 }
 
 // ------------------------------------------------------------------
@@ -94,6 +97,42 @@ const STAT_RULES: Record<'atk' | 'def' | 'spd' | 'hp' | 'luck', Rule> = {
   luck: { reason: 'きゅうしょを よく 見ている から', traits: { eye: 2, luck: 1 } },
 };
 
+/** 「何の絵か」タグ → 好きな 技の 性質。理由は「〇〇 だから」（〇〇＝タグの ことば か AI の motif）。 */
+const MOTIF_RULES: Record<string, { word: string; traits: Partial<Record<Trait, number>> }> = {
+  claws: { word: 'するどい ツメが ある', traits: { claw: 5 } },
+  fangs: { word: 'キバが ある', traits: { bite: 5 } },
+  horns: { word: 'つのが ある', traits: { heavy: 2, blow: 2, recoil: 1 } },
+  wings: { word: 'つばさが ある', traits: { wind: 5, quick: 3 } },
+  tail: { word: 'しっぽが ある', traits: { blow: 2, multi: 2 } },
+  shell: { word: 'こうらが ある', traits: { guard: 5, reflect: 2 } },
+  armor: { word: 'よろいを きている', traits: { guard: 4, reflect: 3 } },
+  weapon: { word: 'ぶきを もっている', traits: { slash: 5 } },
+  big_mouth: { word: '大きな 口が ある', traits: { bite: 4 } },
+  many_eyes: { word: '目が たくさん ある', traits: { eye: 5, debuff: 2 } },
+  long_legs: { word: 'あしが ながい', traits: { quick: 4 } },
+  cute: { word: 'かわいい', traits: { heal: 4, guard: 1, sneaky: 1 } },
+  fluffy: { word: 'ふわふわ', traits: { heal: 3, guard: 2 } },
+  scary: { word: 'こわそう', traits: { status: 3, debuff: 3 } },
+  cool: { word: 'かっこいい', traits: { quick: 2, slash: 2 } },
+  hard: { word: 'かたそう', traits: { guard: 4 } },
+  fast: { word: 'はやそう', traits: { quick: 4, multi: 2 } },
+  magic: { word: 'まほうが つかえそう', traits: { magic: 4, field: 3, status: 1 } },
+  dragon: { word: 'ドラゴン', traits: { bite: 3, heavy: 3 } },
+  dinosaur: { word: 'きょうりゅう', traits: { bite: 4, heavy: 2 } },
+  robot: { word: 'ロボット', traits: { guard: 3, magic: 2, heavy: 1 } },
+  vehicle: { word: 'のりもの', traits: { quick: 3, heavy: 2 } },
+  plant: { word: 'しょくぶつ', traits: { heal: 2, status: 3 } },
+  food: { word: 'たべもの', traits: { heal: 5 } },
+  ghost: { word: 'おばけ', traits: { sneaky: 3, status: 2, debuff: 2 } },
+  slime: { word: 'スライム', traits: { guard: 2, heal: 3 } },
+  bug: { word: 'むし', traits: { multi: 3, status: 2 } },
+  bird: { word: 'とり', traits: { wind: 4, quick: 2 } },
+  fish: { word: 'さかな', traits: { quick: 2, multi: 1 } },
+  human: { word: 'ひと', traits: { slash: 2, guard: 1 } },
+  monster: { word: 'モンスター', traits: { heavy: 2, claw: 2 } },
+};
+const KIND_TAGS = new Set(['dragon', 'dinosaur', 'robot', 'vehicle', 'plant', 'food', 'ghost', 'slime', 'bug', 'bird', 'fish', 'human', 'monster', 'animal']);
+
 const ATTR_WORD: Record<Attribute, string> = { fire: 'ほのお', water: 'みず', wood: 'くさき', bolt: 'かみなり', dark: 'やみ' };
 
 interface ActiveRule extends Rule {
@@ -108,6 +147,14 @@ function activeRules(input: AssignInput): ActiveRule[] {
     // 上位のタグほど強く効く
     if (r) out.push({ ...r, w: Math.max(0.5, 1.2 - i * 0.12) });
   });
+  // AI が 見た「何の絵か」：いちばん つよく 効かせる（絵に いちばん 合う 技に なる）
+  for (const t of input.motifTags ?? []) {
+    const r = MOTIF_RULES[t];
+    if (!r) continue;
+    // 種類（ドラゴン 等）は AI の ことば（「あかい ドラゴン」）で、部位・ふんいきは タグの ことばで 理由を 書く
+    const word = KIND_TAGS.has(t) && input.motif ? input.motif : r.word;
+    out.push({ reason: `${word} だから`, traits: r.traits, w: 1.5 });
+  }
   if (input.weapon) out.push({ ...WEAPON_RULES[input.weapon], w: 0.9 });
   if (input.stats) {
     const s = input.stats;

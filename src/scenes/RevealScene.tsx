@@ -140,6 +140,11 @@ export function RevealScene() {
                 {attrReason.detected} → {attrReason.effect}
               </div>
             )}
+            {character.motif && (
+              <div style={{ fontSize: '0.9rem', fontWeight: 800 }}>
+                この え は：<span style={{ fontFamily: 'var(--font-display)', fontSize: '1.05rem' }}>{character.motif}</span>
+              </div>
+            )}
             <div style={{ fontSize: '0.78rem' }}>
               {WEAPON_JP[character.weapon]} ・ {character.personality === 'aggressive' ? '好戦的' : '穏やか'}
             </div>

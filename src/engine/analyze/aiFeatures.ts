@@ -43,6 +43,10 @@ export interface AiFeatures {
   temperament: 'aggressive' | 'calm';
   /** 体つきの一言（「戦車のようにゴツい」など）。 */
   bodyType: string;
+  /** 何の絵か（「うさぎ」「ドラゴン」など）。 */
+  motif: string;
+  /** 特徴タグ（AI_MOTIF_TAGS の中から）。 */
+  motifTags: string[];
 
   // ---- 「この生き物はどう見えるか」＝ステータスの印象（各 0..1）。AI が絵の具体物を見て付ける ----
   /** つよそう（するどい・武器・攻撃的なポーズ）。→ こうげき */
@@ -112,6 +116,8 @@ export function aiFeaturesToCharacter(ai: AiFeatures, seed: number): Character {
       speed: clamp(ai.speedLook, 0, 1),
       hp: clamp(ai.hpLook, 0, 1),
     },
+    motif: ai.motif || undefined,
+    motifTags: ai.motifTags,
     statReasons: {
       power: r(ai.powerReason),
       tough: r(ai.toughnessReason),
@@ -149,6 +155,8 @@ export function coerceAiFeatures(raw: unknown): AiFeatures | null {
     eyeCount: clampInt(num('eyeCount', 2), 0, 6),
     temperament: o.temperament === 'aggressive' ? 'aggressive' : 'calm',
     bodyType: typeof o.bodyType === 'string' ? o.bodyType.slice(0, 60) : '',
+    motif: typeof o.motif === 'string' ? o.motif.trim().slice(0, 12) : '',
+    motifTags: Array.isArray(o.motifTags) ? (o.motifTags as unknown[]).filter((t): t is string => typeof t === 'string' && MOTIF_TAGS.has(t)).slice(0, 8) : [],
     powerLook: clamp(num('powerLook'), 0, 1),
     powerReason: typeof o.powerReason === 'string' ? o.powerReason.slice(0, 80) : '',
     toughnessLook: clamp(num('toughnessLook'), 0, 1),
@@ -162,5 +170,11 @@ export function coerceAiFeatures(raw: unknown): AiFeatures | null {
     revealNotes: notes,
   };
 }
+
+const MOTIF_TAGS = new Set([
+  'animal', 'bird', 'fish', 'bug', 'dragon', 'dinosaur', 'robot', 'vehicle', 'plant', 'food', 'ghost', 'human', 'monster', 'slime', 'object',
+  'claws', 'fangs', 'horns', 'wings', 'tail', 'shell', 'armor', 'weapon', 'big_mouth', 'many_eyes', 'long_legs',
+  'cute', 'scary', 'cool', 'fluffy', 'hard', 'fast', 'magic',
+]);
 
 // tool スキーマ / システムプロンプトは server/aiContract.ts（サーバー専用）。

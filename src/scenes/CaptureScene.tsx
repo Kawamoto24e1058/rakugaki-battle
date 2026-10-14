@@ -41,6 +41,18 @@ async function analyzeWithAI(
 ): Promise<{ result: AnalyzeResult; via: 'ai' | 'local' }> {
   const { imageData, base64, mediaType } = prepareImage(img);
   const seed = hashBytes(imageData.data);
+  // おなじ 絵（おなじ 画像）は まえの AI の 答えを つかう＝とりなおしても 能力が かわらない
+  const cacheKey = `rakugaki.ai.v1.${seed}`;
+  try {
+    const cached = localStorage.getItem(cacheKey);
+    const ai = cached ? coerceAiFeatures(JSON.parse(cached)) : null;
+    if (ai && overrides.attribute == null && overrides.weapon == null) {
+      const character = aiFeaturesToCharacter(ai, seed);
+      return { result: { character, features: aiToFeatureVector(ai), seed }, via: 'ai' };
+    }
+  } catch {
+    /* ストレージが つかえなくても 続ける */
+  }
   try {
     const resp = await fetch('/api/analyze', {
       method: 'POST',
@@ -54,6 +66,11 @@ async function analyzeWithAI(
     const j = (await resp.json()) as { ok?: boolean; ai?: unknown };
     const ai = j.ok ? coerceAiFeatures(j.ai) : null;
     if (ai) {
+      try {
+        localStorage.setItem(cacheKey, JSON.stringify(j.ai));
+      } catch {
+        /* いっぱいなら 保存しない */
+      }
       const character = aiFeaturesToCharacter(ai, seed);
       return { result: { character, features: aiToFeatureVector(ai), seed }, via: 'ai' };
     }

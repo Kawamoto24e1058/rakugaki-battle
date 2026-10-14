@@ -6,12 +6,19 @@
 
 export const AI_ATTRIBUTES = ['fire', 'water', 'wood', 'bolt', 'dark'] as const;
 export const AI_WEAPONS = ['sword', 'wand', 'shield', 'wing', 'none'] as const;
+/** 「何の絵か」の 特徴タグ（この中からだけ えらばせる）。技・こせいの 割りふりに つかう。 */
+export const AI_MOTIF_TAGS = [
+  'animal', 'bird', 'fish', 'bug', 'dragon', 'dinosaur', 'robot', 'vehicle', 'plant', 'food', 'ghost', 'human', 'monster', 'slime', 'object',
+  'claws', 'fangs', 'horns', 'wings', 'tail', 'shell', 'armor', 'weapon', 'big_mouth', 'many_eyes', 'long_legs',
+  'cute', 'scary', 'cool', 'fluffy', 'hard', 'fast', 'magic',
+] as const;
 
 const ALL_FIELDS = [
   'attribute', 'attributeReason', 'weapon', 'aspectRatio', 'coverage', 'spikiness',
   'symmetry', 'fillDensity', 'saturation', 'brightness', 'colorCount', 'eyeCount',
   'temperament',
   'bodyType',
+  'motif', 'motifTags',
   'powerLook', 'powerReason',
   'toughnessLook', 'toughnessReason',
   'speedLook', 'speedReason',
@@ -30,6 +37,8 @@ export const AI_JSON_INSTRUCTION = `出力は次のキーだけを持つ JSON �
 - eyeCount: integer 0〜6
 - temperament: "aggressive" | "calm"
 - bodyType: string（体つきを一言で。例「戦車のようにゴツい」「小さくて身軽」「大きなスライム」）
+- motif: string（何の絵か。ひらがな・カタカナで 2〜8字。例「うさぎ」「ドラゴン」「ロボット」「おばけ」「ねこ」。わからなければ「ふしぎな いきもの」）
+- motifTags: string[]（次の中から 当てはまるもの 2〜6個：${AI_MOTIF_TAGS.join(', ')}）
 - powerLook, toughnessLook, speedLook, hpLook: number 0〜1（見た目の印象。4つが同値・全部0.5にならないよう、強い所は0.75+/弱い所は0.35-）
 - powerReason, toughnessReason, speedReason, hpReason: string（その数値にした理由。絵の中の"具体物"を挙げた子ども向けの一言。例「するどいツメがある → こうげき つよい」）
 - name: string（カタカナ中心 4〜7字・毎回ユニーク）
@@ -59,6 +68,8 @@ export const GEMINI_RESPONSE_SCHEMA = {
     eyeCount: { type: 'INTEGER', description: '0〜6。はっきり描かれた目の数' },
     temperament: { type: 'STRING', enum: ['aggressive', 'calm'], description: '見た目の性格' },
     bodyType: { type: 'STRING', description: 'この生き物の体つきを一言で（例：「戦車のようにゴツい」「小さくて身軽」「大きくてやわらかい」）' },
+    motif: { type: 'STRING', description: '何の絵か。ひらがな・カタカナ 2〜8字（例「うさぎ」「ドラゴン」「ロボット」「おばけ」）。わからなければ「ふしぎな いきもの」' },
+    motifTags: { type: 'ARRAY', items: { type: 'STRING', enum: AI_MOTIF_TAGS as unknown as string[] }, description: '当てはまる 特徴を 2〜6個（種類・体の部位・ふんいき）' },
     powerLook: { type: 'NUMBER', description: '0〜1。こうげき の見た目。するどいツメ・牙・角・武器・大きな口・怒り顔・攻撃ポーズ・トゲ ほど高い。武器なし/やさしい姿は低い' },
     powerReason: REASON_PROP('こうげき'),
     toughnessLook: { type: 'NUMBER', description: '0〜1。ぼうぎょ の見た目。鎧・甲羅・盾・分厚い体・硬い殻・岩や鉄の質感・どっしり四角い体 ほど高い。ヒョロヒョロは低い' },
@@ -109,6 +120,11 @@ export const AI_SYSTEM_PROMPT = `あなたは子ども向け「お絵かきバ�
 - トゲトゲのモンスター：こうげき0.85 すばやさ0.5 ぼうぎょ0.45 たいりょく0.6
 - 岩ゴーレム：ぼうぎょ0.9 たいりょく0.8 こうげき0.6 すばやさ0.15
 bodyType には体つきの一言（「戦車のようにゴツい」など）を書く。
+
+■ 何の絵か（motif / motifTags）
+- motif には 子どもが 言いそうな ことばで「何を 描いたか」を 書く（うさぎ・ドラゴン・ロボット・おにぎり・くるま 等）。
+- motifTags は 種類（animal/bird/dragon/robot…）・体の部位（claws/fangs/wings/shell/armor…）・ふんいき（cute/scary/cool/magic…）を 見えるとおり 2〜6個。
+  これで 技（ツメ→ひっかく、つばさ→かぜ・先制、こうら→まもる、かわいい→いやす 等）が 決まる。
 
 ■ その他
 - attribute：紙のメインカラーと雰囲気。赤〜橙=fire、青=water、緑=wood、黄=bolt、紫・暗い色・えんぴつ/グレー・真っ黒=dark。

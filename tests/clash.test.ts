@@ -591,3 +591,25 @@ describe('手札バトル', () => {
     }
   });
 });
+
+describe('技の割り振り：AI が 見た「何の絵か」', () => {
+  it('つばさの タグが あると かぜ・先制の 技が 入りやすく、理由に その ことばが 出る', () => {
+    let hit = 0;
+    let reasonHit = 0;
+    for (let seed = 1; seed <= 40; seed++) {
+      const set = assignMoveSet({ seed, attribute: 'water', personality: 'calm', motif: 'あおい とり', motifTags: ['bird', 'wings'] });
+      if (set.some((s) => getMove(s.id).first || getMove(s.id).tags?.includes('wind'))) hit++;
+      if (set.some((s) => s.reason.includes('つばさ') || s.reason.includes('あおい とり'))) reasonHit++;
+    }
+    expect(hit).toBeGreaterThan(28);
+    expect(reasonHit).toBeGreaterThan(28);
+  });
+  it('こうらの タグが あると まもりの 技が 入りやすい', () => {
+    let hit = 0;
+    for (let seed = 1; seed <= 40; seed++) {
+      const set = assignMoveSet({ seed, attribute: 'wood', personality: 'calm', motifTags: ['shell', 'hard'] });
+      if (set.some((s) => { const m = getMove(s.id); return !!(m.guardPct || m.barrier || m.reflect || (m.buff && m.buff.stat === 'def')); })) hit++;
+    }
+    expect(hit).toBeGreaterThan(30);
+  });
+});

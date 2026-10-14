@@ -19,6 +19,9 @@ export interface AnalysisOverrides {
   statLook?: { power: number; tough: number; speed: number; hp: number };
   /** AI が付けた各ステータスの理由（絵の具体物つき・リビール表示用）。 */
   statReasons?: { power?: string; tough?: string; speed?: string; hp?: string };
+  /** AI が 見た「何の絵か」と 特徴タグ（技の 割りふりに つかう）。 */
+  motif?: string;
+  motifTags?: string[];
 }
 
 const mix = (a: number, b: number, t: number) => a * (1 - t) + b * t;
@@ -253,7 +256,7 @@ export function featuresToCharacter(
 
   const analysis = buildReasons(f, attribute, weapon, personality, baseStats, bst01, tags, kosei, overrides.statReasons);
   const name = overrides.name ?? overrides.flavor?.name ?? makeName(rng, attribute);
-  const moveSet = assignMoveSet({ seed: seed >>> 0, attribute, personality, tags, weapon, stats: baseStats });
+  const moveSet = assignMoveSet({ seed: seed >>> 0, attribute, personality, tags, weapon, stats: baseStats, motif: overrides.motif, motifTags: overrides.motifTags });
 
   return {
     id: `c_${(seed >>> 0).toString(36)}_${Date.now().toString(36)}`,
@@ -268,6 +271,7 @@ export function featuresToCharacter(
     koseiId,
     koseiTitle: koseiName,
     ...(quirk ? { quirk } : {}),
+    ...(overrides.motif ? { motif: overrides.motif } : {}),
     analysis,
     seed: seed >>> 0,
     wins: 0,
