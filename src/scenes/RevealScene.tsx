@@ -7,6 +7,8 @@ import type { Stats } from '../engine/types';
 import { getMove } from '../engine/moves';
 import { GameCard } from '../components/GameCard';
 import { moveCard } from '../components/moveText';
+import { STYLE_META } from '../engine/analyze/style';
+import { moveRole } from '../engine/moves/assign';
 
 const WEAPON_JP: Record<string, string> = { sword: 'ツメ・剣', wand: '杖', shield: '盾', wing: '翼' };
 
@@ -33,6 +35,7 @@ export function RevealScene() {
   const player = useGame((s) => s.player);
   const confirmReveal = useGame((s) => s.confirmReveal);
   const renamePlayer = useGame((s) => s.renamePlayer);
+  const chooseMove = useGame((s) => s.chooseMove);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
 
@@ -42,6 +45,9 @@ export function RevealScene() {
   const reasonOf = (key: string) => reasons.find((r) => r.key === key);
   const kosei = getKosei(character.koseiId);
   const attrReason = reasonOf('color');
+  const choices = character.moveChoices ?? [];
+  const picked = !!player.movePicked;
+  const needPick = choices.length > 0 && !picked;
 
   return (
     <div className="scene" style={{ justifyContent: 'flex-start', paddingTop: 'clamp(1rem,4vh,2rem)' }}>
@@ -125,16 +131,37 @@ export function RevealScene() {
           <div style={{ display: 'grid', gap: '0.35rem', minWidth: 0 }}>
             <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', flexWrap: 'wrap' }}>
               <AttributeBadge attribute={character.attribute} />
-              <span
-                style={{
-                  fontFamily: 'var(--font-display)', fontSize: '0.85rem',
-                  border: '2px solid var(--border)', borderRadius: 999, padding: '0.05rem 0.6rem',
-                  background: 'var(--crayon-yellow)',
-                }}
-              >
-                {archetypeLabel(character.baseStats)}
-              </span>
+              {character.style ? (
+                <motion.span
+                  initial={{ scale: 0, rotate: -12 }}
+                  animate={{ scale: [0, 1.25, 1], rotate: [-12, 4, 0] }}
+                  transition={{ delay: 0.15, duration: 0.5 }}
+                  style={{
+                    fontFamily: 'var(--font-display)', fontSize: '1.15rem', color: '#fff',
+                    border: '3px solid var(--ink)', borderRadius: 999, padding: '0.05rem 0.8rem',
+                    background: STYLE_META[character.style].color, boxShadow: '2px 3px 0 rgba(0,0,0,.2)',
+                  }}
+                >
+                  {STYLE_META[character.style].jp}
+                </motion.span>
+              ) : (
+                <span
+                  style={{
+                    fontFamily: 'var(--font-display)', fontSize: '0.85rem',
+                    border: '2px solid var(--border)', borderRadius: 999, padding: '0.05rem 0.6rem',
+                    background: 'var(--crayon-yellow)',
+                  }}
+                >
+                  {archetypeLabel(character.baseStats)}
+                </span>
+              )}
             </div>
+            {character.style && (
+              <div style={{ fontSize: '0.82rem', fontWeight: 800 }}>
+                {STYLE_META[character.style].desc}
+                {reasonOf('style')?.detected && <span style={{ color: 'var(--ink-soft)', fontWeight: 700 }}>（{reasonOf('style')!.detected}）</span>}
+              </div>
+            )}
             {attrReason && (
               <div style={{ fontSize: '0.76rem', color: 'var(--ink-soft)' }}>
                 {attrReason.detected} → {attrReason.effect}
@@ -221,46 +248,63 @@ export function RevealScene() {
           style={{ fontSize: '0.78rem', color: 'var(--ink-soft)', textAlign: 'center', width: '100%' }}
         >
           <div style={{ fontWeight: 800, color: 'var(--ink)', marginBottom: 4 }}>この子の わざ（まいターン この中から 1つが でるよ）</div>
-          {/* 4まいを 1れつに（はばに あわせて カードが ちぢむ） */}
-          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${character.moveIds.length}, minmax(0, 1fr))`, gap: '0.4rem', width: '100%', maxWidth: '32rem', margin: '0 auto' }}>
-            {character.moveIds.map((id, i) => {
-              let card;
-              try {
-                card = moveCard(getMove(id));
-              } catch {
-                return null;
-              }
-              const why = character.moveReasons?.[i];
-              return (
-                <motion.div
-                  key={id}
-                  initial={{ opacity: 0, y: 14, rotate: -4 }}
-                  animate={{ opacity: 1, y: 0, rotate: 0 }}
-                  transition={{ delay: 0.25 + STAT_ORDER.length * 0.16 + 0.45 + i * 0.22, type: 'spring', stiffness: 260, damping: 18 }}
-                  style={{ display: 'grid', justifyItems: 'center', alignContent: 'start', gap: 4, minWidth: 0, containerType: 'inline-size' }}
-                >
-                  <GameCard card={card} size="100cqw" />
-                  {why && (
-                    <div
-                      style={{
-                        fontSize: '0.7rem',
-                        fontWeight: 800,
-                        color: 'var(--ink)',
-                        background: '#fff8d6',
-                        border: '2px solid var(--ink)',
-                        borderRadius: 8,
-                        padding: '2px 5px',
-                        lineHeight: 1.3,
-                        width: '100%',
-                      }}
-                    >
-                      {why}
-                    </div>
-                  )}
-                </motion.div>
-              );
-            })}
+          {/* きまった わざ（えらぶ ときは 3まい、えらばない キャラは 4まい） */}
+          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${choices.length > 0 ? 4 : character.moveIds.length}, minmax(0, 1fr))`, gap: '0.4rem', width: '100%', maxWidth: '32rem', margin: '0 auto' }}>
+            {(choices.length > 0 ? character.moveIds.slice(0, 3) : character.moveIds).map((id, i) => (
+              <MoveTile key={id} id={id} why={character.moveReasons?.[i]} delay={0.25 + STAT_ORDER.length * 0.16 + 0.45 + i * 0.22} />
+            ))}
+            {choices.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.25 + STAT_ORDER.length * 0.16 + 0.45 + 3 * 0.22 }}
+                style={{ display: 'grid', placeItems: 'center', aspectRatio: '5 / 7', border: '3px dashed var(--ink)', borderRadius: 10, background: picked ? 'transparent' : '#fff8d6', containerType: 'inline-size' }}
+              >
+                {picked ? (
+                  <GameCard card={moveCard(getMove(character.moveIds[3]))} size="100cqw" />
+                ) : (
+                  <span style={{ fontFamily: 'var(--font-display)', fontSize: '2.2rem', color: 'var(--ink-soft)' }}>？</span>
+                )}
+              </motion.div>
+            )}
           </div>
+
+          {/* 4つめは 子どもが えらぶ（おなじ 強さで 役わりが ちがう 3まい） */}
+          {choices.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.25 + STAT_ORDER.length * 0.16 + 1.3 }}
+              style={{ marginTop: '0.8rem', border: '3px solid var(--ink)', borderRadius: 14, background: picked ? '#f3f8ef' : '#fff1ec', padding: '0.6rem', display: 'grid', gap: '0.4rem' }}
+            >
+              <div style={{ fontFamily: 'var(--font-display)', fontSize: '1.25rem', color: 'var(--ink)' }}>4つめの わざを えらぼう！</div>
+              <div style={{ fontSize: '0.78rem', fontWeight: 800 }}>どれも おなじ つよさ。すきな たたかいかたを えらんでね</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '0.5rem', width: '100%', maxWidth: '26rem', margin: '0 auto' }}>
+                {choices.map((c) => {
+                  const on = picked && character.moveIds[3] === c.id;
+                  let role = '';
+                  try {
+                    role = moveRole(getMove(c.id));
+                  } catch {
+                    role = '';
+                  }
+                  return (
+                    <motion.button
+                      key={c.id}
+                      whileHover={{ y: -4 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => chooseMove(c.id)}
+                      style={{ all: 'unset', cursor: 'pointer', display: 'grid', justifyItems: 'center', gap: 4, minWidth: 0, containerType: 'inline-size', opacity: picked && !on ? 0.55 : 1 }}
+                    >
+                      <span style={{ fontSize: '0.78rem', fontWeight: 900, color: '#fff', background: on ? 'var(--crayon-red)' : 'var(--ink)', borderRadius: 99, padding: '1px 8px' }}>{role}</span>
+                      <GameCard card={moveCard(getMove(c.id))} size="100cqw" selected={on} />
+                      <span style={{ fontSize: '0.68rem', fontWeight: 800, lineHeight: 1.3 }}>{c.reason}</span>
+                    </motion.button>
+                  );
+                })}
+              </div>
+            </motion.div>
+          )}
           {focusMult(character.moveIds) > 1 && (
             <div style={{ marginTop: 6, fontWeight: 800, color: 'var(--crayon-red)' }}>
               こうげき技が すくない ぶん、こうげきの いりょく ×{focusMult(character.moveIds)}
@@ -274,11 +318,49 @@ export function RevealScene() {
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.25 + STAT_ORDER.length * 0.16 + 0.5 }}
-        style={{ marginTop: '0.8rem' }}
+        style={{ marginTop: '0.8rem', opacity: needPick ? 0.45 : 1 }}
+        disabled={needPick}
         onClick={confirmReveal}
       >
-        たたかいへ →
+        {needPick ? '4つめの わざを えらんでね' : 'たたかいへ →'}
       </motion.button>
     </div>
+  );
+}
+
+/** きまった わざ 1まい（カード＋なぜ この わざ なのか）。 */
+function MoveTile({ id, why, delay }: { id: string; why?: string; delay: number }) {
+  let card;
+  try {
+    card = moveCard(getMove(id));
+  } catch {
+    return null;
+  }
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 14, rotate: -4 }}
+      animate={{ opacity: 1, y: 0, rotate: 0 }}
+      transition={{ delay, type: 'spring', stiffness: 260, damping: 18 }}
+      style={{ display: 'grid', justifyItems: 'center', alignContent: 'start', gap: 4, minWidth: 0, containerType: 'inline-size' }}
+    >
+      <GameCard card={card} size="100cqw" />
+      {why && (
+        <div
+          style={{
+            fontSize: '0.7rem',
+            fontWeight: 800,
+            color: 'var(--ink)',
+            background: '#fff8d6',
+            border: '2px solid var(--ink)',
+            borderRadius: 8,
+            padding: '2px 5px',
+            lineHeight: 1.3,
+            width: '100%',
+          }}
+        >
+          {why}
+        </div>
+      )}
+    </motion.div>
   );
 }

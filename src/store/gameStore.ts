@@ -23,6 +23,8 @@ interface CapturedSlot {
   analysis: AnalyzeResult;
   /** 解析方法。'ai' = Gemini、'local' = ピクセル解析フォールバック。 */
   analyzedBy?: 'ai' | 'local';
+  /** 4つめの 技を えらんだか。 */
+  movePicked?: boolean;
 }
 
 interface GameState {
@@ -55,6 +57,8 @@ interface GameState {
   setCaptured: (slot: CapturedSlot) => void;
   /** リビール画面で名前を手直しする。 */
   renamePlayer: (name: string) => void;
+  /** 4つめの 技を えらぶ（moveChoices の なかから）。 */
+  chooseMove: (id: string) => void;
   confirmReveal: () => void;
   chooseCpu: (character: Character) => void;
   finishBattle: (won: boolean) => void;
@@ -114,6 +118,17 @@ export const useGame = create<GameState>((set, get) => ({
     const trimmed = name.trim().slice(0, 12);
     if (!trimmed || trimmed === player.character.name) return;
     set({ player: { ...player, character: { ...player.character, name: trimmed } } });
+  },
+
+  chooseMove: (id) => {
+    const { player } = get();
+    if (!player) return;
+    const c = player.character;
+    const opt = c.moveChoices?.find((x) => x.id === id);
+    if (!opt) return;
+    const moveIds = [...c.moveIds.slice(0, 3), opt.id];
+    const moveReasons = [...(c.moveReasons ?? []).slice(0, 3), opt.reason];
+    set({ player: { ...player, character: { ...c, moveIds, moveReasons }, movePicked: true } });
   },
 
   confirmReveal: () => {

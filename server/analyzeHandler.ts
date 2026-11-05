@@ -70,6 +70,8 @@ function mockFeatures(req: AnalyzeRequest): Record<string, unknown> {
     bodyType: '(mock) ふつうの体つき',
     motif: 'うさぎ',
     motifTags: ['animal', 'cute', 'fluffy', 'long_legs'],
+    battleStyle: 'speed',
+    styleReason: 'ながい あしで ぴょんぴょん',
     powerLook: r(10),
     powerReason: '(mock) するどい ところが ある',
     toughnessLook: r(10),

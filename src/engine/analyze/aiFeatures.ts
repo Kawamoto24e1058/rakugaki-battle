@@ -5,8 +5,9 @@
  * 既存の featuresToCharacter（ピクセル解析と同じ下流）がそれをキャラに変換する。
  * ＝ AI は「ピクセル特徴抽出」だけを賢く置き換える。ネット断のときはピクセル解析にフォールバック。
  */
-import type { Attribute, Weapon } from '../types';
+import type { Attribute, BattleStyle, Weapon } from '../types';
 import { ATTRIBUTE_META } from '../attributes';
+import { BATTLE_STYLES } from './style';
 import type { Character } from '../types';
 import type { FeatureVector } from './features';
 import { featuresToCharacter } from './toCharacter';
@@ -47,6 +48,9 @@ export interface AiFeatures {
   motif: string;
   /** 特徴タグ（AI_MOTIF_TAGS の中から）。 */
   motifTags: string[];
+  /** タイプ（たたかいかた）。 */
+  battleStyle?: BattleStyle;
+  styleReason?: string;
 
   // ---- 「この生き物はどう見えるか」＝ステータスの印象（各 0..1）。AI が絵の具体物を見て付ける ----
   /** つよそう（するどい・武器・攻撃的なポーズ）。→ こうげき */
@@ -118,6 +122,8 @@ export function aiFeaturesToCharacter(ai: AiFeatures, seed: number): Character {
     },
     motif: ai.motif || undefined,
     motifTags: ai.motifTags,
+    style: ai.battleStyle,
+    styleReason: r(ai.styleReason ?? ''),
     statReasons: {
       power: r(ai.powerReason),
       tough: r(ai.toughnessReason),
@@ -157,6 +163,8 @@ export function coerceAiFeatures(raw: unknown): AiFeatures | null {
     bodyType: typeof o.bodyType === 'string' ? o.bodyType.slice(0, 60) : '',
     motif: typeof o.motif === 'string' ? o.motif.trim().slice(0, 12) : '',
     motifTags: Array.isArray(o.motifTags) ? (o.motifTags as unknown[]).filter((t): t is string => typeof t === 'string' && MOTIF_TAGS.has(t)).slice(0, 8) : [],
+    battleStyle: BATTLE_STYLES.includes(o.battleStyle as BattleStyle) ? (o.battleStyle as BattleStyle) : undefined,
+    styleReason: typeof o.styleReason === 'string' ? o.styleReason.slice(0, 60) : '',
     powerLook: clamp(num('powerLook'), 0, 1),
     powerReason: typeof o.powerReason === 'string' ? o.powerReason.slice(0, 80) : '',
     toughnessLook: clamp(num('toughnessLook'), 0, 1),

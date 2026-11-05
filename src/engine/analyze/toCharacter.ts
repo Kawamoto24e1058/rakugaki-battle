@@ -1,7 +1,8 @@
-import type { Attribute, AnalysisReason, Character, Stats, Weapon } from '../types';
+import type { Attribute, AnalysisReason, BattleStyle, Character, Stats, Weapon } from '../types';
+import { decideStyle, STYLE_META } from './style';
 import { ATTRIBUTE_META } from '../attributes';
 import { activeTags } from './tags';
-import { assignMoveSet } from '../moves/assign';
+import { assignMoveChoices } from '../moves/assign';
 import { assignKosei, getKosei, koseiTitle } from '../personalities';
 import { mulberry32, randInt, type Rng } from '../rng';
 import { clamp01, type FeatureVector } from './features';
@@ -22,6 +23,9 @@ export interface AnalysisOverrides {
   /** AI が 見た「何の絵か」と 特徴タグ（技の 割りふりに つかう）。 */
   motif?: string;
   motifTags?: string[];
+  /** AI が 決めた タイプ（たたかいかた）。なければ 見た目の 印象から きめる。 */
+  style?: BattleStyle;
+  styleReason?: string;
 }
 
 const mix = (a: number, b: number, t: number) => a * (1 - t) + b * t;
@@ -33,7 +37,7 @@ const LOOK_WEIGHT = 0.75;
 export const POWER_BUDGET = 130;
 /** きゅうしょ＋こんじょう の 合計。 */
 export const SUB_BUDGET = 40;
-const MAIN_MIN = 13;
+const MAIN_MIN = 17;
 const MAIN_MAX = 52;
 const HP_MIN = 50;
 const HP_MAX = 118;
@@ -217,6 +221,22 @@ export function featuresToCharacter(
   let luckScore = 0.25 + sharpen01(clamp01((f.colorCount - 1) / 4) * 0.6 + f.saturation * 0.4);
   let heartScore = 0.25 + sharpen01(Math.min(1, f.eyeSpots / 2) * 0.55 + (personality === 'calm' ? 0.32 : 0.03) + f.symmetry * 0.15);
 
+  // タイプ（たたかいかた）：とびぬけた 印象で きめて、その タイプの ステータスの 形に よせる
+  const look01 = look ?? {
+    power: clamp01((atkScore - 12) / 52),
+    tough: clamp01((defScore - 12) / 40),
+    speed: clamp01((spdScore - 10) / 64),
+  };
+  const decided = decideStyle({ aiStyle: overrides.style, look: look01, motifTags: overrides.motifTags });
+  const style = decided.style;
+  const sm = STYLE_META[style].mult;
+  atkScore *= sm.atk;
+  defScore *= sm.def;
+  spdScore *= sm.spd;
+  hpScore *= sm.hp;
+  luckScore *= sm.luck;
+  heartScore *= sm.heart;
+
   // とくせい：とくべつな 苦手（と その ぶんの 得意）。合計は あとで そろえるので つよさは かわらない
   const quirk = pickQuirk(f, personality, look);
   if (quirk) {
@@ -254,9 +274,9 @@ export function featuresToCharacter(
   const kosei = getKosei(koseiId);
   const koseiName = koseiTitle(tags, seed);
 
-  const analysis = buildReasons(f, attribute, weapon, personality, baseStats, bst01, tags, kosei, overrides.statReasons);
+  const analysis = buildReasons(f, attribute, weapon, personality, baseStats, bst01, tags, kosei, overrides.statReasons, { style, why: overrides.styleReason || decided.why });
   const name = overrides.name ?? overrides.flavor?.name ?? makeName(rng, attribute);
-  const moveSet = assignMoveSet({ seed: seed >>> 0, attribute, personality, tags, weapon, stats: baseStats, motif: overrides.motif, motifTags: overrides.motifTags });
+  const { slots: moveSet, choices } = assignMoveChoices({ seed: seed >>> 0, attribute, personality, tags, weapon, stats: baseStats, motif: overrides.motif, motifTags: overrides.motifTags, style });
 
   return {
     id: `c_${(seed >>> 0).toString(36)}_${Date.now().toString(36)}`,
@@ -268,10 +288,12 @@ export function featuresToCharacter(
     baseStats,
     moveIds: moveSet.map((m) => m.id),
     moveReasons: moveSet.map((m) => m.reason),
+    ...(choices.length > 0 ? { moveChoices: choices } : {}),
     koseiId,
     koseiTitle: koseiName,
     ...(quirk ? { quirk } : {}),
     ...(overrides.motif ? { motif: overrides.motif } : {}),
+    style,
     analysis,
     seed: seed >>> 0,
     wins: 0,
@@ -303,6 +325,7 @@ function buildReasons(
   tags: string[],
   kosei: { name: string; tagline: string; passiveJp: string; activeName: string },
   statReasons?: { power?: string; tough?: string; speed?: string; hp?: string },
+  styleInfo?: { style: BattleStyle; why: string },
 ): AnalysisReason[] {
   const r: AnalysisReason[] = [];
   const arche = archetypeLabel(stats);
@@ -326,6 +349,10 @@ function buildReasons(
     detected: bst01 > 0.66 ? 'しっかり描き込んである' : bst01 > 0.34 ? 'ふつうの描き込み' : 'あっさりした線',
     effect: 'つよさの ごうけいは みんな おなじ（くばりかたが ちがう）',
   });
+  if (styleInfo) {
+    const m = STYLE_META[styleInfo.style];
+    r.push({ key: 'style', label: 'タイプ', detected: styleInfo.why, effect: `${m.jp}：${m.desc}` });
+  }
   r.push({
     key: 'arche',
     label: 'ステータスの かたより',

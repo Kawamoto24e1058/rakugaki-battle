@@ -19,6 +19,7 @@ const ALL_FIELDS = [
   'temperament',
   'bodyType',
   'motif', 'motifTags',
+  'battleStyle', 'styleReason',
   'powerLook', 'powerReason',
   'toughnessLook', 'toughnessReason',
   'speedLook', 'speedReason',
@@ -39,6 +40,8 @@ export const AI_JSON_INSTRUCTION = `出力は次のキーだけを持つ JSON �
 - bodyType: string（体つきを一言で。例「戦車のようにゴツい」「小さくて身軽」「大きなスライム」）
 - motif: string（何の絵か。ひらがな・カタカナで 2〜8字。例「うさぎ」「ドラゴン」「ロボット」「おばけ」「ねこ」。わからなければ「ふしぎな いきもの」）
 - motifTags: string[]（次の中から 当てはまるもの 2〜6個：${AI_MOTIF_TAGS.join(', ')}）
+- battleStyle: "power" | "guard" | "speed" | "magic" | "balance"（たたかいかた。いちばん 目立つ とくちょう で 1つ）
+- styleReason: string（タイプに した 理由。絵の 具体物を 1つ 挙げた 子ども向けの 一言）
 - powerLook, toughnessLook, speedLook, hpLook: number 0〜1（見た目の印象。4つが同値・全部0.5にならないよう、強い所は0.75+/弱い所は0.35-）
 - powerReason, toughnessReason, speedReason, hpReason: string（その数値にした理由。絵の中の"具体物"を挙げた子ども向けの一言。例「するどいツメがある → こうげき つよい」）
 - name: string（カタカナ中心 4〜7字・毎回ユニーク）
@@ -70,6 +73,8 @@ export const GEMINI_RESPONSE_SCHEMA = {
     bodyType: { type: 'STRING', description: 'この生き物の体つきを一言で（例：「戦車のようにゴツい」「小さくて身軽」「大きくてやわらかい」）' },
     motif: { type: 'STRING', description: '何の絵か。ひらがな・カタカナ 2〜8字（例「うさぎ」「ドラゴン」「ロボット」「おばけ」）。わからなければ「ふしぎな いきもの」' },
     motifTags: { type: 'ARRAY', items: { type: 'STRING', enum: AI_MOTIF_TAGS as unknown as string[] }, description: '当てはまる 特徴を 2〜6個（種類・体の部位・ふんいき）' },
+    battleStyle: { type: 'STRING', enum: ['power', 'guard', 'speed', 'magic', 'balance'], description: 'たたかいかた。power＝ツメ・キバ・武器・大きな口など こうげき的／guard＝こうら・よろい・盾・どっしり／speed＝つばさ・細い体・長い足・乗り物／magic＝つえ・まほう・おばけ・ふしぎ／balance＝どれも 目立たない' },
+    styleReason: { type: 'STRING', description: 'タイプに した 理由（絵の 具体物を 1つ。子ども向け 15〜25字）' },
     powerLook: { type: 'NUMBER', description: '0〜1。こうげき の見た目。するどいツメ・牙・角・武器・大きな口・怒り顔・攻撃ポーズ・トゲ ほど高い。武器なし/やさしい姿は低い' },
     powerReason: REASON_PROP('こうげき'),
     toughnessLook: { type: 'NUMBER', description: '0〜1。ぼうぎょ の見た目。鎧・甲羅・盾・分厚い体・硬い殻・岩や鉄の質感・どっしり四角い体 ほど高い。ヒョロヒョロは低い' },
@@ -120,6 +125,10 @@ export const AI_SYSTEM_PROMPT = `あなたは子ども向け「お絵かきバ�
 - トゲトゲのモンスター：こうげき0.85 すばやさ0.5 ぼうぎょ0.45 たいりょく0.6
 - 岩ゴーレム：ぼうぎょ0.9 たいりょく0.8 こうげき0.6 すばやさ0.15
 bodyType には体つきの一言（「戦車のようにゴツい」など）を書く。
+
+■ タイプ（battleStyle）
+- 絵の いちばん 目立つ とくちょうで 1つ えらぶ：power（ツメ・キバ・つの・武器・大きな口・こわい顔）／guard（こうら・よろい・盾・岩・どっしり 大きい）／speed（つばさ・細い体・長い足・車・ジェット）／magic（つえ・ぼうし・まほう・おばけ・ふしぎな 形）／balance（とくに 目立つものが ない）。
+- powerLook など 4つの 数値と むじゅん しないように（power なら powerLook が いちばん 高い）。
 
 ■ 何の絵か（motif / motifTags）
 - motif には 子どもが 言いそうな ことばで「何を 描いたか」を 書く（うさぎ・ドラゴン・ロボット・おにぎり・くるま 等）。
