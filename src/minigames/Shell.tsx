@@ -73,7 +73,7 @@ export function MinigameStage({
   );
 
   return (
-    <div style={{ width: '100%', maxWidth: '52rem', position: 'relative', display: 'grid', gap: '0.4rem' }}>
+    <div style={{ width: '100%', maxWidth: '64rem', position: 'relative', display: 'grid', gap: '0.4rem' }}>
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', justifyContent: 'center', columnGap: '0.6rem', rowGap: '0.1rem', textAlign: 'center' }}>
         <span style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(1.8rem, 6vw, 2.6rem)', whiteSpace: 'nowrap', color: KIND_META[def.kind].color, WebkitTextStroke: '2px var(--ink)', paintOrder: 'stroke' }}>{def.command}</span>
         <span style={{ fontSize: 'clamp(1rem, 3.4vw, 1.3rem)', fontWeight: 900, color: 'var(--ink)' }}>{def.howto}</span>

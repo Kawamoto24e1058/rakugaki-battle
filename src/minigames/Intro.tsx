@@ -59,7 +59,7 @@ export function MinigameIntro({ def, cpu, onDone }: { def: MinigameDef; cpu: boo
         position: 'fixed',
         inset: 0,
         zIndex: 40,
-        background: 'rgba(250, 246, 236, 0.94)',
+        background: 'rgba(250, 246, 236, 0.6)',
         display: 'grid',
         alignContent: 'center',
         justifyItems: 'center',

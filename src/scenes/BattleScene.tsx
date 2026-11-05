@@ -20,6 +20,7 @@ import { MoveReveal } from './battle/MoveReveal';
 import { STATUS_META } from '../engine/status';
 import { sfx } from '../audio/sfx';
 import { MinigameIntro, MinigameStage, pickMinigame, type MgFighter, type MinigameOutcome } from '../minigames';
+import { MinigameScene } from './battle/MinigameScene';
 import type { Beat, Snap } from './battle/types';
 
 /** reveal＝このターンの技が きまる → mgIntro＝ミニゲームの しょうかい → minigame＝ミニゲーム → animating＝こうげきの演出 → over */
@@ -190,7 +191,17 @@ export function BattleScene() {
             onDone={() => setPhase('mgIntro')}
           />
         )}
-        {phase === 'mgIntro' && <MinigameIntro key={`mi-${turnKey}`} def={game} cpu={cpu} onDone={() => setPhase('minigame')} />}
+      </AnimatePresence>
+      {/* ミニゲームは 場面ごと 切りかわる（まるく ひろがって 入り、まるく しぼんで もどる） */}
+      <AnimatePresence>
+        {(phase === 'mgIntro' || phase === 'minigame') && (
+          <MinigameScene key={`ms-${turnKey}`} def={game} turn={state.turn} names={names}>
+            <AnimatePresence>{phase === 'mgIntro' && <MinigameIntro key={`mi-${turnKey}`} def={game} cpu={cpu} onDone={() => setPhase('minigame')} />}</AnimatePresence>
+            {phase === 'minigame' && (
+              <MinigameStage key={`mg-${turnKey}`} def={game} seed={(state.seed ^ Math.imul(state.turn, 0x9e37)) >>> 0} cpu={cpu} cpuSkill={cpuSkill} names={names} fighters={[0, 1].map((i) => ({ name: names[i], attribute: chars[i].attribute, image: images[i] })) as [MgFighter, MgFighter]} onDone={onMinigameDone} />
+            )}
+          </MinigameScene>
+        )}
       </AnimatePresence>
       {curBeat.win != null && <VictoryOverlay name={names[curBeat.win]} char={chars[curBeat.win]} image={images[curBeat.win]} />}
       {curBeat.koseiAct && (
@@ -243,12 +254,10 @@ export function BattleScene() {
         </div>
       ) : phase === 'over' ? (
         <div style={{ fontSize: '0.9rem', opacity: 0.7 }}>けっかへ…</div>
-      ) : phase === 'reveal' || phase === 'mgIntro' ? (
+      ) : (
         <div style={{ width: '100%', maxWidth: '52rem', display: 'grid', gap: '0.4rem', justifyItems: 'center' }}>
           {recap && <TurnRecap recap={recap} names={names} />}
         </div>
-      ) : (
-        <MinigameStage key={`mg-${turnKey}`} def={game} seed={(state.seed ^ Math.imul(state.turn, 0x9e37)) >>> 0} cpu={cpu} cpuSkill={cpuSkill} names={names} fighters={[0, 1].map((i) => ({ name: names[i], attribute: chars[i].attribute, image: images[i] })) as [MgFighter, MgFighter]} onDone={onMinigameDone} />
       )}
       <button
         className="crayon-btn"
