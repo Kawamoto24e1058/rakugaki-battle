@@ -257,6 +257,48 @@ export function peelEdges(ink: Uint8Array, w: number, h: number): Uint8Array {
   return dilate(fringe, w, h, 1);
 }
 
+/**
+ * 用紙の マーカーで まっすぐに した 画像 むけ：ふちの 帯（5%）の 中だけで おわっている もの のうち
+ * 印刷された わく線（ほそい）・紙の 影（色が うすい）を 消す。帯の 内がわまで のびている もの（ふち際まで 描いた 絵）は のこす。
+ * img を 直接 書きかえる。
+ */
+export function clearEdgeBand(img: ImageData, bandFrac = 0.05): void {
+  const { width: w, height: h, data } = img;
+  const n = w * h;
+  const bx = Math.round(w * bandFrac);
+  const by = Math.round(h * bandFrac);
+  const ink = new Uint8Array(n);
+  for (let p = 0; p < n; p++) if (data[p * 4 + 3] > 24) ink[p] = 1;
+  const mask = dilate(ink, w, h, 2);
+  const { label, comps } = labelComponents(mask, ink, w, h);
+  const inner = new Uint8Array(comps.length);
+  const chroma = new Float64Array(comps.length);
+  for (let p = 0; p < n; p++) {
+    const l = label[p];
+    if (l < 0 || !ink[p]) continue;
+    const i = p * 4;
+    chroma[l] += Math.max(data[i], data[i + 1], data[i + 2]) - Math.min(data[i], data[i + 1], data[i + 2]);
+    if (inner[l]) continue;
+    const x = p % w;
+    const y = (p - x) / w;
+    if (x >= bx && x < w - bx && y >= by && y < h - by) inner[l] = 1;
+  }
+  // 消すのは「ほそくて 長い 線（印刷の わく線）」か「色の うすい かたまり（紙の 影）」だけ。
+  // ふち際に 描いた 太くて 色の ある 線は のこす
+  const thinMax = Math.max(2, Math.min(w, h) * 0.006);
+  const junk = comps.map((c, i) => {
+    if (inner[i] || c.ink === 0) return false;
+    const len = Math.max(c.x1 - c.x0 + 1, c.y1 - c.y0 + 1);
+    // わく線は 辺に そって 長く のびる（25% 以上）。ふち際の みじかい 線は 子どもの 絵かも しれない
+    const frameLine = c.ink / len <= thinMax && len >= Math.min(w, h) * 0.25;
+    return frameLine || chroma[i] / c.ink < 28;
+  });
+  for (let p = 0; p < n; p++) {
+    const l = label[p];
+    if (l >= 0 && junk[l]) data[p * 4 + 3] = 0;
+  }
+}
+
 /** 2値画像を 半径 r だけ けずる（ふくらませるの 反対）。 */
 function erode(src: Uint8Array, w: number, h: number, r: number): Uint8Array {
   const inv = new Uint8Array(w * h);

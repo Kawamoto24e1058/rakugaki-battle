@@ -1,7 +1,7 @@
 import { computeHomography, warpPerspective, type Point } from './warp';
 import { detectCornerMarkers, type CornerMarkers } from './markers';
 import { estimatePaperColor, removeBackground } from './bgRemove';
-import { fillEnclosed, isolateSubject } from './subject';
+import { clearEdgeBand, fillEnclosed, isolateSubject } from './subject';
 
 export type { Point, CornerMarkers };
 export { detectCornerMarkers, computeHomography, warpPerspective, estimatePaperColor, removeBackground, isolateSubject };
@@ -79,7 +79,11 @@ export function scanDrawing(img: ImageData, opts: { outSize?: number; fill?: boo
 
   const paper = estimatePaperColor(working);
   const removed = removeBackground(working, paper);
-  if (cornersFound) clearCornerSpecks(removed);
+  if (cornersFound) {
+    clearCornerSpecks(removed);
+    // 印刷された わく線・紙の 影など、ふちの 帯の 中だけで おわっている ものを 消す
+    clearEdgeBand(removed);
+  }
   // 用紙なしで とったとき（マーカーなし）は、まわりの ペン・けしゴム・紙の はし・つくえ が うつりこむので
   // 絵の 本体だけ のこして わくいっぱいに する。用紙のときは わくの 中だけなので そのまま
   // （わく際まで 描いた 絵を けずらないため）。

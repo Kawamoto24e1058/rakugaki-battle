@@ -97,3 +97,37 @@ describe('切り抜き：線で かこまれた 内がわを 白で うめる', 
     expect(alphaAt(out, 100, 100)).toBe(0);
   });
 });
+
+import { clearEdgeBand } from '../src/engine/scan/subject';
+
+describe('切り抜き：用紙の ふちの 帯', () => {
+  /** 色つきの 図形を 描く（色は 図形ごと）。 */
+  function paint(w: number, h: number, shapes: [(x: number, y: number) => boolean, [number, number, number]][]): ImageData {
+    const data = new Uint8ClampedArray(w * h * 4);
+    for (let y = 0; y < h; y++)
+      for (let x = 0; x < w; x++)
+        for (const [f, c] of shapes)
+          if (f(x, y)) {
+            const i = (y * w + x) * 4;
+            data.set([c[0], c[1], c[2], 255], i);
+          }
+    return { data, width: w, height: h, colorSpace: 'srgb' } as ImageData;
+  }
+  const rect = (x0: number, y0: number, x1: number, y1: number) => (x: number, y: number) => x >= x0 && x <= x1 && y >= y0 && y <= y1;
+  const circle = (cx: number, cy: number, r: number) => (x: number, y: number) => (x - cx) ** 2 + (y - cy) ** 2 <= r * r;
+
+  it('印刷の わく線（ほそくて 長い）と 紙の 影（灰色）は 消し、ふち際に 描いた 色つきの 絵と 本体は のこす', () => {
+    const img = paint(400, 400, [
+      [circle(200, 200, 80), [40, 120, 90]], // 本体
+      [rect(210, 8, 380, 9), [190, 150, 80]], // 上の わく線（茶色・ほそい）
+      [rect(385, 120, 395, 170), [150, 150, 150]], // 右の 影（灰色）
+      [rect(150, 2, 180, 12), [230, 140, 20]], // ふち際に 描いた オレンジの 線（みじかい）
+    ]);
+    clearEdgeBand(img);
+    const a = (x: number, y: number) => img.data[(y * 400 + x) * 4 + 3];
+    expect(a(200, 200)).toBe(255);
+    expect(a(300, 8)).toBe(0);
+    expect(a(390, 140)).toBe(0);
+    expect(a(165, 4)).toBe(255);
+  });
+});
