@@ -84,10 +84,10 @@ export function scanDrawing(img: ImageData, opts: { outSize?: number; fill?: boo
     // 印刷された わく線・紙の 影など、ふちの 帯の 中だけで おわっている ものを 消す
     clearEdgeBand(removed);
   }
-  // 用紙なしで とったとき（マーカーなし）は、まわりの ペン・けしゴム・紙の はし・つくえ が うつりこむので
-  // 絵の 本体だけ のこして わくいっぱいに する。用紙のときは わくの 中だけなので そのまま
-  // （わく際まで 描いた 絵を けずらないため）。
-  const subject = cornersFound ? removed : isolateSubject(removed);
+  // 絵の 本体だけ のこして わくいっぱいに する。
+  //  用紙なし：まわりの ペン・けしゴム・紙の はし・つくえ が うつりこむ
+  //  用紙あり：古い 用紙の 四辺の わく線・紙の 影・けしゴムの かす が のこる（実写で おきた）
+  const subject = isolateSubject(removed, { sheet: cornersFound });
   // 線で かこまれた 内がわ（白い からだ）は すけないよう 白で うめる
   const output = opts.fill === false ? subject : fillEnclosed(subject);
   return { output, cornersFound };

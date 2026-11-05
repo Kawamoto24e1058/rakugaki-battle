@@ -10,7 +10,12 @@
  *     （つえ・うで などの ほそい 線は のこり、外がわの わく線は 消える）
  * そのあと 絵が わくいっぱいに なるよう、絵の まわりで 切りぬいて 拡大する。
  */
-export function isolateSubject(img: ImageData, opts: { fit?: boolean } = {}): ImageData {
+/**
+ * opts.sheet：用紙の マーカーで まっすぐに した 画像（わく線・影は clearEdgeBand で 消してある）。
+ *  ふちを けずらない／凸包で しぼらない／ふちの 帯の ものも のこす／拡大しない。
+ *  （ふち際の かざり・はなれた 輪っか・毛先 を まもり、はなれた ゴミ だけ 消す）
+ */
+export function isolateSubject(img: ImageData, opts: { fit?: boolean; sheet?: boolean } = {}): ImageData {
   const { width: w, height: h, data } = img;
   const n = w * h;
   const size = Math.min(w, h);
@@ -24,7 +29,7 @@ export function isolateSubject(img: ImageData, opts: { fit?: boolean } = {}): Im
   }
   if (inkTotal === 0) return img;
 
-  const peeled = peelEdges(ink, w, h);
+  const peeled = opts.sheet ? new Uint8Array(n) : peelEdges(ink, w, h);
   let inkLeft = 0;
   for (let p = 0; p < n; p++) inkLeft += ink[p];
   if (inkLeft === 0) return img;
@@ -35,7 +40,8 @@ export function isolateSubject(img: ImageData, opts: { fit?: boolean } = {}): Im
   let coreInk = 0;
   for (let p = 0; p < n; p++) if ((core[p] &= ink[p])) coreInk++;
   const lineArt = coreInk < inkLeft * 0.25;
-  if (lineArt) core = ink;
+  // 線画、または 用紙ありの ときは ほそい 線も ふくめて かたまりに 分ける
+  if (lineArt || opts.sheet) core = ink;
 
   // 近くの ものを つなげる（たて・よこに 最大値フィルター）
   const r = Math.max(3, Math.round(size * 0.025));
@@ -68,6 +74,12 @@ export function isolateSubject(img: ImageData, opts: { fit?: boolean } = {}): Im
   const keep = comps.map((c, i) => {
     if (i === main) return true;
     if (c.ink === 0) return false;
+    // 用紙あり：わく線・影は もう 消してあるので、ある ていど 大きい ものは 場所に かかわらず のこす（はしの 輪っか・かざり）。
+    // 消すのは 本体から はなれた 小さな かす だけ
+    if (opts.sheet) {
+      const nearS = c.x1 >= m.x0 - padX && c.x0 <= m.x1 + padX && c.y1 >= m.y0 - padY && c.y0 <= m.y1 + padY;
+      return c.ink >= m.ink * 0.03 || (nearS && c.ink >= m.ink * 0.002);
+    }
     if (inEdgeBand(c)) return false;
     const near = c.x1 >= m.x0 - padX && c.x0 <= m.x1 + padX && c.y1 >= m.y0 - padY && c.y0 <= m.y1 + padY;
     if (near && !c.border) return true;
@@ -81,7 +93,7 @@ export function isolateSubject(img: ImageData, opts: { fit?: boolean } = {}): Im
 
   // のこす 範囲：線画なら かたまり そのもの、ふつうは のこした ふとい ところの 凸包 ＋ すこし
   let region: Uint8Array;
-  if (lineArt) {
+  if (lineArt || opts.sheet) {
     region = new Uint8Array(n);
     for (let p = 0; p < n; p++) if (label[p] >= 0 && keep[label[p]]) region[p] = 1;
   } else {
@@ -154,7 +166,7 @@ export function isolateSubject(img: ImageData, opts: { fit?: boolean } = {}): Im
     if (y > y1) y1 = y;
   }
   const cleaned = { data: out, width: w, height: h, colorSpace: 'srgb' } as ImageData;
-  if (opts.fit === false || x1 < 0) return cleaned;
+  if (opts.fit === false || opts.sheet || x1 < 0) return cleaned;
   return fitToFrame(cleaned, x0, y0, x1, y1);
 }
 
@@ -258,11 +270,11 @@ export function peelEdges(ink: Uint8Array, w: number, h: number): Uint8Array {
 }
 
 /**
- * 用紙の マーカーで まっすぐに した 画像 むけ：ふちの 帯（5%）の 中だけで おわっている もの のうち
+ * 用紙の マーカーで まっすぐに した 画像 むけ：ふちの 帯（7%）の 中だけで おわっている もの のうち
  * 印刷された わく線（ほそい）・紙の 影（色が うすい）を 消す。帯の 内がわまで のびている もの（ふち際まで 描いた 絵）は のこす。
  * img を 直接 書きかえる。
  */
-export function clearEdgeBand(img: ImageData, bandFrac = 0.05): void {
+export function clearEdgeBand(img: ImageData, bandFrac = 0.07): void {
   const { width: w, height: h, data } = img;
   const n = w * h;
   const bx = Math.round(w * bandFrac);
@@ -283,14 +295,16 @@ export function clearEdgeBand(img: ImageData, bandFrac = 0.05): void {
     const y = (p - x) / w;
     if (x >= bx && x < w - bx && y >= by && y < h - by) inner[l] = 1;
   }
-  // 消すのは「ほそくて 長い 線（印刷の わく線）」か「色の うすい かたまり（紙の 影）」だけ。
+  // 消すのは「辺に そって 長く のびる 線（印刷の わく線。そって できた 影も くっつく）」か「色の うすい かたまり（紙の 影）」だけ。
   // ふち際に 描いた 太くて 色の ある 線は のこす
-  const thinMax = Math.max(2, Math.min(w, h) * 0.006);
+  const thinMax = Math.max(5, Math.min(w, h) * 0.025);
   const junk = comps.map((c, i) => {
     if (inner[i] || c.ink === 0) return false;
-    const len = Math.max(c.x1 - c.x0 + 1, c.y1 - c.y0 + 1);
-    // わく線は 辺に そって 長く のびる（25% 以上）。ふち際の みじかい 線は 子どもの 絵かも しれない
-    const frameLine = c.ink / len <= thinMax && len >= Math.min(w, h) * 0.25;
+    const bw = c.x1 - c.x0 + 1;
+    const bh = c.y1 - c.y0 + 1;
+    // わく線は 辺に そって 長く のびる（25% 以上）。ふち際の みじかい 線は 子どもの 絵かも しれない。
+    // 太さは インク量 ÷（よこ＋たて）で はかる（2辺が L字に つながっても 線の 太さに なる）
+    const frameLine = c.ink / (bw + bh) <= thinMax && Math.max(bw, bh) >= Math.min(w, h) * 0.25;
     return frameLine || chroma[i] / c.ink < 28;
   });
   for (let p = 0; p < n; p++) {

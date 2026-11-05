@@ -268,6 +268,30 @@ describe('scanDrawing: 一連の処理', () => {
     expect(found).toBe(true);
   });
 
+  it('回帰：古い 用紙の 四辺の わく線・紙の 影・けしゴムの かす は 消え、絵は のこる', () => {
+    const lo = MARGIN + MK / 2; // 出力の はし（マーカーの 中心）
+    const hi = SIZE - MARGIN - MK / 2;
+    const img = photo((x, y) => {
+      if (Math.hypot(x - 120, y - 120) < 40) return [40, 120, 200, 255]; // 絵
+      const onFrame = (Math.abs(x - (lo + 4)) < 1.5 || Math.abs(x - (hi - 4)) < 1.5) && y > lo + 20 && y < hi - 20;
+      const onFrameH = (Math.abs(y - (lo + 4)) < 1.5 || Math.abs(y - (hi - 4)) < 1.5) && x > lo + 20 && x < hi - 20;
+      if (onFrame || onFrameH) return [200, 160, 70, 255]; // 印刷の わく線（ほそい 茶色）
+      if (x > hi - 8 && x < hi - 2 && y > 90 && y < 150) return [150, 150, 150, 255]; // 右はしの 紙の 影
+      if (x >= 70 && x < 73 && y >= 185 && y < 188) return [60, 60, 60, 255]; // けしゴムの かす
+      return null;
+    });
+    const out = 186;
+    const { output, cornersFound } = scanDrawing(img, { outSize: out, fill: false });
+    expect(cornersFound).toBe(true);
+    const alphaAt = alphaAtOf(output);
+    const o = (v: number) => Math.round(v - lo);
+    expect(alphaAt(o(120), o(120))).toBeGreaterThan(200); // 絵
+    expect(alphaAt(o(lo + 4), o(120))).toBe(0); // 左の わく線
+    expect(alphaAt(o(120), o(lo + 4))).toBe(0); // 上の わく線
+    expect(alphaAt(o(hi - 5), o(120))).toBe(0); // 影
+    expect(alphaAt(o(71), o(186))).toBe(0); // かす
+  });
+
   it('回帰：画面に対して大きい塗りつぶし（暗い色）の中心が穴にならない', () => {
     const cx = SIZE / 2;
     const cy = SIZE / 2;
