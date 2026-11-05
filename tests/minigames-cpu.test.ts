@@ -18,8 +18,8 @@ describe('ミニゲームの CPU', () => {
       }
       return { score: sc / 120, hitRate: hits / tot };
     };
-    const weak = avg(0.45);
-    const strong = avg(0.85);
+    const weak = avg(0.25);
+    const strong = avg(0.6);
     expect(strong.hitRate).toBeGreaterThan(0.05);
     expect(strong.score).toBeLessThan(90);
     expect(strong.score).toBeGreaterThan(weak.score);
@@ -31,8 +31,8 @@ describe('ミニゲームの CPU', () => {
     let strong = 0;
     for (let s = 1; s <= 80; s++) {
       direct += simulateDirect(s).got;
-      weak += simulateCpuCollect(s, 0.45).got;
-      strong += simulateCpuCollect(s, 0.85).got;
+      weak += simulateCpuCollect(s, 0.25).got;
+      strong += simulateCpuCollect(s, 0.6).got;
     }
     expect(strong).toBeLessThan(direct * 0.8);
     expect(strong).toBeGreaterThan(weak);
@@ -42,8 +42,8 @@ describe('ミニゲームの CPU', () => {
     let weak = 0;
     let strong = 0;
     for (let s = 1; s <= 80; s++) {
-      weak += catchScore(simulateCpuCatch(s, 0.45), makeDrops(s));
-      strong += catchScore(simulateCpuCatch(s, 0.85), makeDrops(s));
+      weak += catchScore(simulateCpuCatch(s, 0.25), makeDrops(s));
+      strong += catchScore(simulateCpuCatch(s, 0.6), makeDrops(s));
     }
     expect(strong / 80).toBeLessThan(90);
     expect(strong).toBeGreaterThan(weak);

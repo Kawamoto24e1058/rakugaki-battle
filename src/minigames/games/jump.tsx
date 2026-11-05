@@ -27,7 +27,7 @@ import {
 } from './jumpSim';
 
 /**
- * とべ！：はしってくる しょうがいぶつを スペースで とびこえる（クリックでも とべる）。
+ * とべ！：はしってくる しょうがいぶつを スペースで とびこえる。
  * ぎりぎりで とぶほど ボーナス。ぶつかると ゴツン（すこし とべなくなる）。
  */
 export function Jump({ seed, cpu, cpuSkill, names, fighters, onFinish }: GameProps) {
@@ -201,11 +201,7 @@ export function Jump({ seed, cpu, cpuSkill, names, fighters, onFinish }: GamePro
   const half = (p: Player) => (
     <Half key={p} player={p} name={names[p]} cpu={p === 1 && cpu}>
       <div style={{ width: '100%', display: 'grid', gap: 4 }}>
-        <canvas
-          ref={canvases[p]}
-          onPointerDown={p === 0 && !twoPlayer ? () => jump(0) : undefined}
-          style={{ ...canvasStyle(`${W} / ${H}`), cursor: p === 0 && !twoPlayer ? 'pointer' : 'default' }}
-        />
+        <canvas ref={canvases[p]} style={canvasStyle(`${W} / ${H}`)} />
         <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 900 }}>
           <span style={{ color: P_COLOR[p] }}>
             とびこえた {hud[p]} / {obs.current.length}

@@ -10,7 +10,6 @@ export const H = 130;
 export const FLOOR = 116;
 export const DURATION = 5;
 export const SPEED = 140;
-export const MOUSE_SPEED = 320;
 export const CATCH_HALF = 14; // うけとめられる はば（片がわ）
 export const CHAR_R = 13;
 

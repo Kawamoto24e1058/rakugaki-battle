@@ -97,16 +97,11 @@ export interface Soul {
 export const newSoul = (): Soul => ({ x: W / 2, y: H * 0.7, hits: 0, inv: 0, grazed: new Set(), outAt: null, t: 0 });
 
 /** うごかして、あたり／かすめ を しらべる。あたったら 'hit'、かすめたら 'graze'。 */
-export function stepSoul(s: Soul, mx: number, my: number, dt: number, live: LiveBullet[], teleport?: { x: number; y: number }): 'hit' | 'graze' | null {
+export function stepSoul(s: Soul, mx: number, my: number, dt: number, live: LiveBullet[]): 'hit' | 'graze' | null {
   if (s.hits >= LIVES) return null;
   s.t += dt;
-  if (teleport) {
-    s.x = teleport.x;
-    s.y = teleport.y;
-  } else {
-    s.x += mx * SPEED * dt;
-    s.y += my * SPEED * dt;
-  }
+  s.x += mx * SPEED * dt;
+  s.y += my * SPEED * dt;
   s.x = Math.max(HIT_R + 2, Math.min(W - HIT_R - 2, s.x));
   s.y = Math.max(HIT_R + 2, Math.min(H - HIT_R - 2, s.y));
   s.inv = Math.max(0, s.inv - dt);
@@ -137,30 +132,40 @@ export function dodgeScore(s: Soul): number {
 }
 
 /**
- * CPU の うごき：見えている たまから にげる＋まんなかへ もどる。
- * うまさ（0〜1）で「気づく おそさ」「気づく きょり」「うごく 速さ」が かわる。
+ * CPU の うごき：気づいた たまから にげる＋まんなかへ もどる。
+ * うまさ（0〜1）で「気づく たまの わりあい」「気づく きょり」「うごく 速さ」が かわる。
+ * 気づかない たまは たまごとに きめておく（よわい CPU は 見おとした たまに あたる。わざと あたりに いく ように 見えない）。
  */
 export function cpuSteer(s: Soul, bullets: Bullet[], t: number, skill: number, rng: () => number): [number, number] {
-  // 気づくのが すこし おそい（skill 0.45 で 0.19びょう、0.85 で 0.11びょう まえの たまを 見ている）
-  const lag = 0.2 - 0.14 * skill;
-  const seen = liveAt(bullets, Math.max(0, t - lag));
-  const sense = 16 + 20 * skill;
-  let fx = (W / 2 - s.x) * 0.012;
-  let fy = (H * 0.65 - s.y) * 0.012;
-  for (const b of seen) {
-    const dx = s.x - b.x;
-    const dy = s.y - b.y;
+  const notice = 0.3 + 0.5 * skill;
+  const sense = 16 + 22 * skill;
+  const look = 0.06 + 0.1 * skill;
+  let fx = (W / 2 - s.x) * 0.008;
+  let fy = (H * 0.7 - s.y) * 0.008;
+  for (const b of liveAt(bullets, t)) {
+    // たまごとに 気づくか どうか（毎フレーム かわらない）
+    const h = (Math.imul(b.id + 1, 0x9e3779b1) >>> 0) / 4294967296;
+    if (h > notice) continue;
+    const px = b.x + b.vx * look;
+    const py = b.y + b.vy * look;
+    const dx = s.x - px;
+    const dy = s.y - py;
     const d = Math.hypot(dx, dy);
     if (d > sense || d < 0.01) continue;
     const k = ((sense - d) / sense) ** 2 * 3;
-    fx += (dx / d) * k;
-    fy += (dy / d) * k;
+    // たまの すすむ むきと 直角に よける（まえに にげて おいこまれない）
+    const vm = Math.hypot(b.vx, b.vy) || 1;
+    const nx = -b.vy / vm;
+    const ny = b.vx / vm;
+    const side = dx * nx + dy * ny >= 0 ? 1 : -1;
+    fx += (nx * side * 0.8 + (dx / d) * 0.2) * k;
+    fy += (ny * side * 0.8 + (dy / d) * 0.2) * k;
   }
-  fx += (rng() - 0.5) * (1 - skill) * 0.8;
-  fy += (rng() - 0.5) * (1 - skill) * 0.8;
+  fx += (rng() - 0.5) * (1 - skill) * 0.3;
+  fy += (rng() - 0.5) * (1 - skill) * 0.3;
   const m = Math.hypot(fx, fy);
   if (m < 0.05) return [0, 0];
-  const sp = 0.55 + 0.4 * skill;
+  const sp = Math.min(1, m) * (0.5 + 0.45 * skill);
   return [(fx / m) * sp, (fy / m) * sp];
 }
 

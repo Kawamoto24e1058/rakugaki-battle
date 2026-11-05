@@ -6,7 +6,8 @@ import { P_COLOR } from './Arena';
 
 /**
  * つかう キーの 絵（ミニゲームの 説明で 大きく 出す）。文字が 読めなくても わかるように、キーの 形と うごきで 見せる。
- *  やじるし：4つの キーが じゅんばんに 光る ／ スペース：はばの ひろい キーが へこむ ／ マウス：マウスの 絵
+ *  やじるし：4つの キーが じゅんばんに 光る ／ スペース：はばの ひろい キーが へこむ ／ マウス：クリックする マウスの 絵
+ *  ゲームごとに 操作は 1つ（3つから えらぶ ゲームだけ、1人＝マウス・2人＝キー）
  *  2人の ときは P1＝WASD＋スペース、P2＝やじるし＋エンター
  */
 export function ControlPicture({ controls, player, twoPlayer }: { controls: Control[]; player: Player; twoPlayer: boolean }) {
@@ -15,15 +16,15 @@ export function ControlPicture({ controls, player, twoPlayer }: { controls: Cont
   const items: ReactNode[] = [];
   if (controls.includes('arrows')) items.push(<DirKeys key="arrows" color={color} wasd={useWasd} />);
   if (controls.includes('lr')) items.push(<RowKeys key="lr" color={color} keys={useWasd ? ['A', 'D'] : [-90, 90]} caption={`${useWasd ? 'A D' : '← →'}で うごく`} />);
-  if (controls.includes('pick3')) items.push(<RowKeys key="pick3" color={color} keys={useWasd ? ['A', 'S', 'D'] : [-90, 180, 90]} caption={`${useWasd ? 'A S D' : '← ↓ →'}で えらぶ`} />);
+  // 3つから えらぶ ゲーム：1人は マウスで クリック、2人は キー
+  if (controls.includes('pick3') && twoPlayer) items.push(<RowKeys key="pick3" color={color} keys={useWasd ? ['A', 'S', 'D'] : [-90, 180, 90]} caption={`${useWasd ? 'A S D' : '← ↓ →'}で えらぶ`} />);
   if (controls.includes('space')) items.push(<ActionKey key="space" color={color} label={twoPlayer && player === 1 ? 'エンター' : 'スペース'} />);
-  // スペースの ゲームは クリック、うごかす ゲームは マウスを うごかす
-  if (controls.includes('mouse') && !twoPlayer) items.push(<MouseIcon key="mouse" color={color} click={controls.includes('space') || controls.includes('pick3')} />);
+  if (controls.includes('mouse') && !twoPlayer) items.push(<MouseIcon key="mouse" color={color} />);
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', justifyContent: 'center', flexWrap: 'wrap' }}>
       {items.map((it, i) => (
         <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          {i > 0 && <span style={{ fontWeight: 900, fontSize: 'clamp(.9rem, 2.6vw, 1.1rem)', color: 'var(--ink-soft)' }}>か</span>}
+          {i > 0 && <span style={{ fontWeight: 900, fontSize: 'clamp(.9rem, 2.6vw, 1.1rem)', color: 'var(--ink-soft)' }}>と</span>}
           {it}
         </div>
       ))}
@@ -121,15 +122,15 @@ function ActionKey({ color, label }: { color: string; label: string }) {
   );
 }
 
-function MouseIcon({ color, click }: { color: string; click: boolean }) {
+function MouseIcon({ color }: { color: string }) {
   return (
     <div style={{ display: 'grid', justifyItems: 'center', gap: 4 }}>
-      <motion.svg viewBox="-20 -28 40 56" style={{ width: CAP, height: `calc(${CAP} * 1.4)` }} animate={click ? { y: [0, 0, 3, 0] } : { x: [0, 8, 0, -8, 0] }} transition={{ repeat: Infinity, duration: click ? 1.2 : 2.4 }}>
+      <motion.svg viewBox="-20 -28 40 56" style={{ width: CAP, height: `calc(${CAP} * 1.4)` }} animate={{ y: [0, 0, 3, 0] }} transition={{ repeat: Infinity, duration: 1.2 }}>
         <rect x={-15} y={-24} width={30} height={48} rx={15} fill="#fffdf5" stroke="var(--ink)" strokeWidth={3} />
         <path d="M-15,-6 L15,-6 M0,-24 L0,-6" stroke="var(--ink)" strokeWidth={3} />
         <path d="M-13,-8 L-13,-12 Q-13,-22 -2,-22 L-2,-8Z" fill={color} />
       </motion.svg>
-      <div style={{ fontWeight: 900, fontSize: 'clamp(.9rem, 2.6vw, 1.1rem)' }}>{click ? 'クリックでも OK' : 'マウスでも OK'}</div>
+      <div style={{ fontWeight: 900, fontSize: 'clamp(.9rem, 2.6vw, 1.1rem)' }}>マウスで クリック</div>
     </div>
   );
 }

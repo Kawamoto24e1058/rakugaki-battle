@@ -25,7 +25,7 @@ export function MinigameDemo() {
         ))}
       </div>
       {playing !== round && <MinigameIntro key={`i-${idx}-${round}`} def={MINIGAMES[idx]} cpu={!vs} onDone={() => setPlaying(round)} />}
-      {playing === round && <MinigameStage key={`${idx}-${round}`} def={MINIGAMES[idx]} seed={1234 + round * 77} cpu={!vs} cpuSkill={0.6} names={[fighters[0].name, fighters[1].name]} fighters={fighters} onDone={(o) => { setLast(o); setRound((r) => r + 1); }} />}
+      {playing === round && <MinigameStage key={`${idx}-${round}`} def={MINIGAMES[idx]} seed={1234 + round * 77} cpu={!vs} cpuSkill={0.25} names={[fighters[0].name, fighters[1].name]} fighters={fighters} onDone={(o) => { setLast(o); setRound((r) => r + 1); }} />}
       {last && <div style={{ fontSize: '0.8rem' }}>前回：{last.scores.map(Math.round).join(' - ')} / 勝ち {String(last.winner)} {last.perfect ? 'perfect' : ''}</div>}
     </div>
   );

@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, type CSSProperties, type ReactNode } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { keyLabels, usePlayerKeys } from './input';
+import { isTwoPlayer, keyLabels, usePlayerKeys } from './input';
 import { useMinigameCtx } from './context';
 import { CharacterSprite } from '../components/bits';
 import type { Player } from './types';
@@ -188,21 +188,15 @@ export function Half({
   );
 }
 
-/** 大きな押しボタン（タッチ）。キーボードでは スペース（2人の P2 は エンター）。 */
-export function BigButton({ player, label, onPress, disabled, cpu }: { player: Player; label: ReactNode; onPress: () => void; disabled?: boolean; cpu?: boolean }) {
-  const pulse = useContext(PulseCtx);
+/** 大きな ボタンの 絵（キーを おすと へこむ）。おすのは スペース（2人の P2 は エンター）。 */
+export function BigButton({ player, label, disabled, cpu }: { player: Player; label: ReactNode; disabled?: boolean; cpu?: boolean }) {
   return (
     <motion.button
       className="crayon-btn"
       disabled={disabled || cpu}
       whileTap={{ scale: 0.93 }}
-      onPointerDown={(e) => {
-        e.preventDefault();
-        if (!disabled && !cpu) {
-          onPress();
-          pulse();
-        }
-      }}
+      // クリックでは おせない（スペースだけ。マウスと キーで 有利・不利を 出さない）
+      tabIndex={-1}
       style={{
         width: '100%',
         minHeight: '4.4rem',
@@ -222,7 +216,7 @@ export function BigButton({ player, label, onPress, disabled, cpu }: { player: P
   );
 }
 
-/** 3択ボタン。キーは 1人＝← ↓ →、2人＝P1 A S D・P2 ← ↓ →。 */
+/** 3択ボタン。1人＝マウスで クリック、2人＝P1 A S D・P2 ← ↓ →。 */
 export function ChoiceButtons({
   player,
   options,
@@ -255,7 +249,8 @@ export function ChoiceButtons({
             whileTap={{ scale: 0.94 }}
             onPointerDown={(e) => {
               e.preventDefault();
-              if (!disabled && !cpu) {
+              // 1人の ときは クリックだけ、2人の ときは キーだけ
+              if (!disabled && !cpu && !isTwoPlayer()) {
                 onPick(i);
                 pulse();
               }
@@ -263,7 +258,7 @@ export function ChoiceButtons({
             style={{ minHeight: '4.2rem', padding: '0.2rem', background: bg, display: 'grid', placeItems: 'center', gap: 2, touchAction: 'manipulation', userSelect: 'none', borderColor: isPicked ? P_COLOR[player] : undefined }}
           >
             <div style={{ fontSize: '1.05rem', fontWeight: 800, lineHeight: 1.1 }}>{o}</div>
-            {!cpu && <div style={{ fontSize: '0.62rem', opacity: 0.6 }}>{keyLabels(player, 'choice')[i]}</div>}
+            {!cpu && isTwoPlayer() && <div style={{ fontSize: '0.62rem', opacity: 0.6 }}>{keyLabels(player, 'choice')[i]}</div>}
           </motion.button>
         );
       })}

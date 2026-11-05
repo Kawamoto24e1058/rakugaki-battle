@@ -5,7 +5,7 @@ import { usePads } from '../pads';
 import { sfx } from '../../audio/sfx';
 import type { GameProps, Player } from '../types';
 import { canvasStyle, drawFighter, fitCanvas, loadFighterImages } from './canvasKit';
-import { catchScore, CHAR_R, cpuMoveCatch, DURATION, dropY, FLOOR, H, makeDrops, MOUSE_SPEED, newCatcher, stepCatcher, W, type Catcher, type Drop } from './catchSim';
+import { catchScore, CHAR_R, cpuMoveCatch, DURATION, dropY, FLOOR, H, makeDrops, newCatcher, stepCatcher, W, type Catcher, type Drop } from './catchSim';
 
 const FRUIT = ['#e8503a', '#f2b705', '#7b5cf0'];
 
@@ -55,14 +55,13 @@ function drawDrop(g: CanvasRenderingContext2D, d: Drop, y: number, t: number) {
 
 /**
  * うけとめろ！：上から おちてくる くだもの を うけとめる。ばくだんは よける（あたると すこし うごけない）。
- * ← →（2人は A D／← →）で うごく。1人の ときは マウスの よこの いちを おいかける。
+ * ← →（2人は A D／← →）で うごく。
  */
 export function CatchGame({ seed, cpu, cpuSkill, names, fighters, onFinish }: GameProps) {
   const twoPlayer = !cpu;
   const pads = usePads(twoPlayer);
   const canvases = [useRef<HTMLCanvasElement>(null), useRef<HTMLCanvasElement>(null)];
   const cs = useRef<[Catcher, Catcher]>([newCatcher(), newCatcher()]);
-  const mouseX = useRef<number | null>(null);
   const pops = useRef<{ p: Player; good: boolean; x: number; t: number }[]>([]);
   const [hud, setHud] = useState<[number, number]>([0, 0]);
   const [timeLeft, setTimeLeft] = useState(DURATION);
@@ -84,20 +83,12 @@ export function CatchGame({ seed, cpu, cpuSkill, names, fighters, onFinish }: Ga
         const c = cs.current[p];
         if (t < DURATION) {
           let mx = 0;
-          let max: number | undefined;
           if (p === 1 && cpu) mx = cpuMoveCatch(c, drops, t, cpuSkill, rng);
           else {
             const h = pads.held[p];
             mx = (h.has('right') ? 1 : 0) - (h.has('left') ? 1 : 0);
-            if (mx === 0 && p === 0 && mouseX.current != null) {
-              const dx = mouseX.current - c.x;
-              if (Math.abs(dx) > 0.5) {
-                mx = Math.sign(dx) * Math.min(1, Math.abs(dx) / (MOUSE_SPEED * dt));
-                max = MOUSE_SPEED;
-              }
-            }
           }
-          const ev = stepCatcher(c, drops, t, dt, mx, max);
+          const ev = stepCatcher(c, drops, t, dt, mx);
           if (ev === 'catch') {
             sfx.confirm();
             pops.current.push({ p, good: true, x: c.x, t });
@@ -187,15 +178,10 @@ export function CatchGame({ seed, cpu, cpuSkill, names, fighters, onFinish }: Ga
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const onMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    const r = e.currentTarget.getBoundingClientRect();
-    mouseX.current = ((e.clientX - r.left) / r.width) * W;
-  };
-
   const half = (p: Player) => (
     <Half key={p} player={p} name={names[p]} cpu={p === 1 && cpu}>
       <div style={{ width: '100%', display: 'grid', gap: 4 }}>
-        <canvas ref={canvases[p]} onPointerMove={p === 0 && !twoPlayer ? onMove : undefined} style={{ ...canvasStyle(`${W} / ${H}`), cursor: p === 0 && !twoPlayer ? 'ew-resize' : 'default' }} />
+        <canvas ref={canvases[p]} style={canvasStyle(`${W} / ${H}`)} />
         <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 900 }}>
           <span style={{ color: P_COLOR[p] }}>キャッチ {hud[p]}こ</span>
           <span style={{ fontSize: '0.85rem', color: 'var(--ink-soft)' }}>のこり {timeLeft}びょう</span>

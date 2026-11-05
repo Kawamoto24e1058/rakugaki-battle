@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { mulberry32 } from '../../engine/rng';
 import { CharacterSprite } from '../../components/bits';
 import { Arena, Half, P_COLOR } from '../Arena';
-import { keyLabels, usePlayerKeys } from '../input';
+import { isTwoPlayer, keyLabels, usePlayerKeys } from '../input';
 import type { GameProps, Player } from '../types';
 import type { MgFighter } from '../context';
 import { TimeBar } from './body';
@@ -116,7 +116,8 @@ export function Mole({ seed, cpu, cpuSkill, names, fighters, onFinish }: GamePro
                 disabled={p === 1 && cpu}
                 onPointerDown={(e) => {
                   e.preventDefault();
-                  if (!(p === 1 && cpu)) whack(p, h);
+                  // 1人の ときは クリックだけ、2人の ときは キーだけ
+                  if (!(p === 1 && cpu) && !isTwoPlayer()) whack(p, h);
                 }}
                 style={{ position: 'relative', height: '5.6rem', padding: 0, overflow: 'hidden', background: '#bfe3a8', touchAction: 'manipulation' }}
               >

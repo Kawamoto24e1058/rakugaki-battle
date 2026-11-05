@@ -16,7 +16,7 @@ export { MinigameIntro, KIND_META } from './Intro';
 
 /**
  * ミニゲーム（メイドインワリオ風に ひとことで わかる／アンダーテール風に そうさが かんたん）。
- * つかう キーは やじるし・スペース・マウス だけ（controls を 説明カードに 絵で 出す）。
+ * 操作は ゲームごとに 1つ：スペース／やじるし／マウスで クリック（2人の ときは キー）。説明カードに 絵で 出す。
  */
 export const MINIGAMES: MinigameDef[] = [
   // スペース
@@ -24,11 +24,11 @@ export const MINIGAMES: MinigameDef[] = [
   { id: 'timing', command: 'とめろ！', name: 'ぴったり ストップ', kind: 'body', howto: 'まんなかで とめよう', input: 'main', controls: ['space'], Component: Timing },
   { id: 'reaction', command: 'いまだ！', name: 'よーい ドン！', kind: 'body', howto: '「ドン！」で すぐ おす（はやすぎは フライング）', input: 'main', controls: ['space'], Component: Reaction },
   { id: 'rhythm', command: 'あわせろ！', name: 'リズム ポン', kind: 'body', howto: 'まるが かさなったら おす', input: 'main', controls: ['space'], Component: Rhythm },
-  { id: 'jump', command: 'とべ！', name: 'とべ！', kind: 'body', howto: 'ぶつからないように とびこえよう', input: 'main', controls: ['space', 'mouse'], Component: Jump },
+  { id: 'jump', command: 'とべ！', name: 'とべ！', kind: 'body', howto: 'ぶつからないように とびこえよう', input: 'main', controls: ['space'], Component: Jump },
   // やじるし
-  { id: 'dodge', command: 'よけろ！', name: 'よけろ！', kind: 'body', howto: 'たまに あたらないように にげよう', input: 'main', controls: ['arrows', 'mouse'], Component: Dodge },
-  { id: 'collect', command: 'あつめろ！', name: 'あつめろ！', kind: 'body', howto: 'ほしを たくさん とろう（トゲに ちゅうい）', input: 'main', controls: ['arrows', 'mouse'], Component: Collect },
-  { id: 'catch', command: 'うけとめろ！', name: 'うけとめろ！', kind: 'body', howto: 'くだもの を キャッチ（ばくだんは よける）', input: 'main', controls: ['lr', 'mouse'], Component: CatchGame },
+  { id: 'dodge', command: 'よけろ！', name: 'よけろ！', kind: 'body', howto: 'たまに あたらないように にげよう', input: 'main', controls: ['arrows'], Component: Dodge },
+  { id: 'collect', command: 'あつめろ！', name: 'あつめろ！', kind: 'body', howto: 'ほしを たくさん とろう（トゲに ちゅうい）', input: 'main', controls: ['arrows'], Component: Collect },
+  { id: 'catch', command: 'うけとめろ！', name: 'うけとめろ！', kind: 'body', howto: 'くだもの を キャッチ（ばくだんは よける）', input: 'main', controls: ['lr'], Component: CatchGame },
   // 3つから えらぶ
   { id: 'mole', command: 'たたけ！', name: 'もぐらたたき', kind: 'find', howto: 'でてきた あいてを たたこう', input: 'choice', controls: ['pick3', 'mouse'], Component: Mole },
   { id: 'odd', command: 'さがせ！', name: 'まちがいさがし', kind: 'find', howto: 'ひとつだけ ちがうのを さがそう', input: 'choice', controls: ['pick3', 'mouse'], Component: makeChoiceGame(makeOdd) },

@@ -9,7 +9,6 @@ export const W = 200;
 export const H = 150;
 export const DURATION = 6;
 export const SPEED = 120;
-export const MOUSE_SPEED = 240;
 export const R = 8; // あたり判定
 export const STAR_R = 8;
 export const SPIKE_R = 7;

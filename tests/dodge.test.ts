@@ -17,8 +17,8 @@ describe('ミニゲーム「よけろ！」', () => {
       idle += so.hits;
     }
     idle /= 120;
-    const weak = avgHits(0.45);
-    const strong = avgHits(0.85);
+    const weak = avgHits(0.25);
+    const strong = avgHits(0.6);
     expect(strong).toBeGreaterThan(0.5);
     expect(weak).toBeLessThan(idle);
     expect(strong).toBeLessThan(weak);

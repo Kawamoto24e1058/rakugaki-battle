@@ -51,7 +51,7 @@ export function Mash({ seed, cpu, cpuSkill, names, onFinish }: GameProps) {
   useEffect(() => {
     if (!cpu) return;
     const rng = mulberry32(seed ^ 0x51);
-    const rate = 5 + cpuSkill * 4.5;
+    const rate = 3.8 + cpuSkill * 4; // 1びょうに 4.8〜6.2かい（子どもの れんだ くらい）
     let timer = 0;
     const loop = () => {
       tap(1);
@@ -69,7 +69,7 @@ export function Mash({ seed, cpu, cpuSkill, names, onFinish }: GameProps) {
         <motion.div animate={{ scale: 0.6 + pct * 0.6 }} transition={{ type: 'spring', stiffness: 400, damping: 15 }} style={{ width: '5.4rem', height: '5.4rem', borderRadius: '50% 50% 48% 52%', background: P_COLOR[p], border: '3px solid var(--ink)', display: 'grid', placeItems: 'center', color: '#fff', fontFamily: 'var(--font-display)', fontSize: '1.8rem' }}>
           {taps[p]}
         </motion.div>
-        <BigButton player={p} label="おす！" onPress={() => tap(p)} cpu={p === 1 && cpu} />
+        <BigButton player={p} label="おす！" cpu={p === 1 && cpu} />
       </Half>
     );
   };
@@ -157,7 +157,7 @@ export function Timing({ seed, cpu, cpuSkill, names, onFinish }: GameProps) {
           <div style={{ position: 'absolute', left: `calc(${x * 100}% - 4px)`, width: 8, top: -2, bottom: -2, background: P_COLOR[p], border: '2px solid var(--ink)', borderRadius: 4 }} />
         </div>
         <div style={{ fontWeight: 800, minHeight: '1.3em' }}>{stops[p] != null ? `${Math.round(score(stops[p]))}てん` : 'みどりで とめる！'}</div>
-        <BigButton player={p} label="ストップ！" onPress={() => stop(p)} disabled={stops[p] != null} cpu={p === 1 && cpu} />
+        <BigButton player={p} label="ストップ！" disabled={stops[p] != null} cpu={p === 1 && cpu} />
       </Half>
     );
   };
@@ -222,7 +222,7 @@ export function Reaction({ seed, cpu, cpuSkill, names, onFinish }: GameProps) {
       <div style={{ fontFamily: 'var(--font-display)', fontSize: '1.4rem', minHeight: '2.2rem', color: view[p] === -1 ? 'var(--crayon-red)' : 'var(--ink)' }}>
         {view[p] == null ? '' : view[p]! < 0 ? 'フライング！' : `${Math.round(view[p]!)}ミリびょう`}
       </div>
-      <BigButton player={p} label="おす！" onPress={() => press(p)} disabled={view[p] != null} cpu={p === 1 && cpu} />
+      <BigButton player={p} label="おす！" disabled={view[p] != null} cpu={p === 1 && cpu} />
     </Half>
   );
   return (
@@ -315,7 +315,7 @@ export function Rhythm({ seed, cpu, cpuSkill, names, onFinish }: GameProps) {
       <div style={{ display: 'flex', gap: 4, minHeight: '1.3em', fontSize: '0.78rem', fontWeight: 800 }}>
         {marks[p].map((w, i) => (w ? <span key={i}>{w}</span> : null))}
       </div>
-      <BigButton player={p} label="ポン！" onPress={() => press(p)} cpu={p === 1 && cpu} />
+      <BigButton player={p} label="ポン！" cpu={p === 1 && cpu} />
     </Half>
   );
   return (

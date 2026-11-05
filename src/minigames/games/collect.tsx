@@ -4,18 +4,17 @@ import { usePads } from '../pads';
 import { sfx } from '../../audio/sfx';
 import type { GameProps, Player } from '../types';
 import { canvasStyle, drawFighter, drawStar, fitCanvas, loadFighterImages } from './canvasKit';
-import { collectScore, cpuMove, DURATION, H, makeWorld, MOUSE_SPEED, newCollector, R, spikesAt, SPIKE_R, STAR_R, stepCollector, W, type Collector } from './collectSim';
+import { collectScore, cpuMove, DURATION, H, makeWorld, newCollector, R, spikesAt, SPIKE_R, STAR_R, stepCollector, W, type Collector } from './collectSim';
 
 /**
  * あつめろ！：はこの 中で ほしを じゅんばんに とる。はねまわる トゲに あたると すこし うごけない。
- * やじるし（2人は WASD／やじるし）で うごく。1人の ときは マウスの カーソルを おいかける（はやい）。
+ * やじるし（2人は WASD／やじるし）で うごく。
  */
 export function Collect({ seed, cpu, cpuSkill, names, fighters, onFinish }: GameProps) {
   const twoPlayer = !cpu;
   const pads = usePads(twoPlayer);
   const canvases = [useRef<HTMLCanvasElement>(null), useRef<HTMLCanvasElement>(null)];
   const cs = useRef<[Collector, Collector]>([newCollector(), newCollector()]);
-  const mouse = useRef<{ x: number; y: number } | null>(null);
   const bursts = useRef<{ p: Player; x: number; y: number; t: number }[]>([]);
   const [hud, setHud] = useState<[number, number]>([0, 0]);
   const [timeLeft, setTimeLeft] = useState(DURATION);
@@ -37,28 +36,15 @@ export function Collect({ seed, cpu, cpuSkill, names, fighters, onFinish }: Game
         if (t < DURATION) {
           let mx = 0;
           let my = 0;
-          let max: number | undefined;
           if (p === 1 && cpu) {
             [mx, my] = cpuMove(c, world, t, cpuSkill);
           } else {
             const h = pads.held[p];
             mx = (h.has('right') ? 1 : 0) - (h.has('left') ? 1 : 0);
             my = (h.has('down') ? 1 : 0) - (h.has('up') ? 1 : 0);
-            if (mx === 0 && my === 0 && p === 0 && mouse.current) {
-              const dx = mouse.current.x - c.x;
-              const dy = mouse.current.y - c.y;
-              const d = Math.hypot(dx, dy);
-              // カーソルに おいつく（ちかい ときは ぴったり とまる）
-              if (d > 0.5) {
-                const k = Math.min(1, d / (MOUSE_SPEED * dt));
-                mx = (dx / d) * k;
-                my = (dy / d) * k;
-                max = MOUSE_SPEED;
-              }
-            }
           }
           const star = world.stars[c.got % world.stars.length];
-          const ev = stepCollector(c, world, t, dt, mx, my, max);
+          const ev = stepCollector(c, world, t, dt, mx, my);
           if (ev === 'got') {
             sfx.confirm();
             bursts.current.push({ p, x: star.x, y: star.y, t });
@@ -148,15 +134,10 @@ export function Collect({ seed, cpu, cpuSkill, names, fighters, onFinish }: Game
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const onMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    const r = e.currentTarget.getBoundingClientRect();
-    mouse.current = { x: ((e.clientX - r.left) / r.width) * W, y: ((e.clientY - r.top) / r.height) * H };
-  };
-
   const half = (p: Player) => (
     <Half key={p} player={p} name={names[p]} cpu={p === 1 && cpu}>
       <div style={{ width: '100%', display: 'grid', gap: 4 }}>
-        <canvas ref={canvases[p]} onPointerMove={p === 0 && !twoPlayer ? onMove : undefined} style={{ ...canvasStyle(`${W} / ${H}`, true), cursor: p === 0 && !twoPlayer ? 'crosshair' : 'default' }} />
+        <canvas ref={canvases[p]} style={canvasStyle(`${W} / ${H}`, true)} />
         <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 900 }}>
           <span style={{ color: P_COLOR[p] }}>ほし {hud[p]}こ</span>
           <span style={{ fontSize: '0.85rem', color: 'var(--ink-soft)' }}>のこり {timeLeft}びょう</span>

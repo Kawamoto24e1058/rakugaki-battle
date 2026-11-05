@@ -13,7 +13,7 @@ import { cpuSteer, dodgeScore, DURATION, H, HIT_R, liveAt, LIVES, makeBullets, n
  *  ・たまの とび方は ふたりとも おなじ（公平）。見た目だけ 相手の 属性（火の玉・しずく・はっぱ・かみなり・やみの たま）
  *  ・3回 あたると アウト。たまの すぐ そばを かすめると 加点（ひきわけ だらけに ならない）
  *  ・あたり判定は キャラの 絵より 小さい（アンダーテールの ハートと おなじ 考え方。ぎりぎりで よけられる）
- *  ・やじるし（2人は WASD／やじるし）で うごく。1人の ときは マウスの カーソルに そのまま ついてくる
+ *  ・やじるし（2人は WASD／やじるし）で うごく（マウスは つかわない：マウスと キーで 有利・不利が でないように）
  */
 const DRAW_R = 13;
 
@@ -93,8 +93,6 @@ export function Dodge({ seed, cpu, cpuSkill, names, fighters, onFinish }: GamePr
   const pads = usePads(twoPlayer);
   const canvases = [useRef<HTMLCanvasElement>(null), useRef<HTMLCanvasElement>(null)];
   const souls = useRef<[Soul, Soul]>([newSoul(), newSoul()]);
-  // マウスの いち（1人の ときの P1 だけ）。うごいた フレームだけ そこへ ワープ
-  const mouse = useRef<{ x: number; y: number } | null>(null);
   const sparks = useRef<{ p: Player; x: number; y: number; t: number }[]>([]);
   const [hud, setHud] = useState<{ hits: [number, number]; grazes: [number, number] }>({ hits: [0, 0], grazes: [0, 0] });
   const [timeLeft, setTimeLeft] = useState(DURATION);
@@ -130,7 +128,6 @@ export function Dodge({ seed, cpu, cpuSkill, names, fighters, onFinish }: GamePr
         if (t < DURATION) {
           let mx = 0;
           let my = 0;
-          let warp: { x: number; y: number } | undefined;
           if (p === 1 && cpu) {
             [mx, my] = cpuSteer(s, bullets, t, cpuSkill, rng);
           } else {
@@ -142,12 +139,8 @@ export function Dodge({ seed, cpu, cpuSkill, names, fighters, onFinish }: GamePr
               mx /= m;
               my /= m;
             }
-            if (p === 0 && mouse.current && m === 0) {
-              warp = mouse.current;
-              mouse.current = null;
-            }
           }
-          const ev = stepSoul(s, mx, my, dt, live, warp);
+          const ev = stepSoul(s, mx, my, dt, live);
           if (ev === 'hit') {
             sfx.hit(0.3);
             sync();
@@ -255,19 +248,12 @@ export function Dodge({ seed, cpu, cpuSkill, names, fighters, onFinish }: GamePr
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // マウス：カーソルの いちに そのまま（1人の ときの P1 だけ）
-  const onMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    const r = e.currentTarget.getBoundingClientRect();
-    mouse.current = { x: ((e.clientX - r.left) / r.width) * W, y: ((e.clientY - r.top) / r.height) * H };
-  };
-
   const half = (p: Player) => (
     <Half key={p} player={p} name={names[p]} cpu={p === 1 && cpu}>
       <div style={{ width: '100%', display: 'grid', gap: 4 }}>
         <canvas
           ref={canvases[p]}
-          onPointerMove={p === 0 && !twoPlayer ? onMove : undefined}
-          style={{ width: '100%', aspectRatio: `${W} / ${H}`, display: 'block', borderRadius: 6, border: '4px solid #fff', outline: '3px solid var(--ink)', touchAction: 'none', cursor: p === 0 && !twoPlayer ? 'none' : 'default' }}
+          style={{ width: '100%', aspectRatio: `${W} / ${H}`, display: 'block', borderRadius: 6, border: '4px solid #fff', outline: '3px solid var(--ink)', touchAction: 'none', }}
         />
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontWeight: 900 }}>
           <span style={{ display: 'flex', gap: 2 }}>

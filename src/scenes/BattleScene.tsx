@@ -62,7 +62,8 @@ export function BattleScene() {
   const maxHp: [number, number] = [chars[0].baseStats.hp, chars[1].baseStats.hp];
   const images: [string | null, string | null] = [player.imageUrl, opponent.imageUrl];
   const cpu = mode !== 'versus';
-  const cpuSkill = Math.min(0.85, 0.45 + runWins * 0.08);
+  // CPU の うまさ（ミニゲーム）。子どもが ふつうに 遊んで 半分 いじょう かてる くらい。勝ちすすむと すこし つよく
+  const cpuSkill = Math.min(0.6, 0.25 + runWins * 0.07);
 
   const [phase, setPhase] = useState<Phase>('reveal');
   const [beats, setBeats] = useState<Beat[]>([]);
