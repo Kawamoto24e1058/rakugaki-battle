@@ -31,7 +31,7 @@ export function Mash({ seed, cpu, cpuSkill, names, onFinish }: GameProps) {
   usePlayerKeys((p) => {
     if (p === 1 && cpu) return;
     tap(p);
-  });
+  }, true, 'button');
 
   useEffect(() => {
     const id = window.setInterval(() => {
@@ -121,7 +121,7 @@ export function Timing({ seed, cpu, cpuSkill, names, onFinish }: GameProps) {
   usePlayerKeys((p) => {
     if (p === 1 && cpu) return;
     stop(p);
-  });
+  }, true, 'button');
   useEffect(() => {
     let raf = 0;
     const loop = () => {
@@ -195,7 +195,7 @@ export function Reaction({ seed, cpu, cpuSkill, names, onFinish }: GameProps) {
   usePlayerKeys((p) => {
     if (p === 1 && cpu) return;
     press(p);
-  });
+  }, true, 'button');
   useEffect(() => {
     const a = window.setTimeout(() => {
       goAt.current = now();
@@ -276,7 +276,7 @@ export function Rhythm({ seed, cpu, cpuSkill, names, onFinish }: GameProps) {
   usePlayerKeys((p) => {
     if (p === 1 && cpu) return;
     press(p);
-  });
+  }, true, 'button');
   useEffect(() => {
     let raf = 0;
     const loop = () => {

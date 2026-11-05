@@ -8,7 +8,8 @@ import type { Player } from './types';
  *  2人（1台の キーボード）：P1＝WASD＋スペース ／ P2＝やじるし＋エンター
  */
 export type Dir = 'up' | 'down' | 'left' | 'right';
-export type Control = 'arrows' | 'space' | 'mouse';
+/** arrows＝4ほうこう、lr＝← → だけ、pick3＝3つから えらぶ（← ↓ →／A S D）、space＝けってい、mouse＝マウス */
+export type Control = 'arrows' | 'lr' | 'pick3' | 'space' | 'mouse';
 
 const DIR_KEYS: Record<string, [Player | 'any', Dir]> = {
   arrowup: [1, 'up'], arrowdown: [1, 'down'], arrowleft: [1, 'left'], arrowright: [1, 'right'],

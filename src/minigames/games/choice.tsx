@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { motion } from 'framer-motion';
 import { mulberry32 } from '../../engine/rng';
-import { Arena, ChoiceButtons, COLORS, Half, Shape, SHAPE_JP, type ShapeKind } from '../Arena';
+import { Arena, ChoiceButtons, COLORS, Half, Shape, type ShapeKind } from '../Arena';
 import { usePlayerKeys } from '../input';
 import type { GameProps, Player } from '../types';
 import type { MgFighter } from '../context';
@@ -31,87 +31,7 @@ export const shuffle = <T,>(a: T[], rng: Rng): T[] => {
 export const pickN = <T,>(a: T[], n: number, rng: Rng) => shuffle(a, rng).slice(0, n);
 
 // ---------------------------------------------------------------- 問題づくり
-const QUIZ: [string, string, string, string][] = [
-  ['りんごの いろは？', 'あか', 'あお', 'くろ'],
-  ['そらを とぶのは？', 'とり', 'さかな', 'かめ'],
-  ['うみに すむのは？', 'くじら', 'らいおん', 'うさぎ'],
-  ['つめたいのは？', 'こおり', 'ひ', 'たいよう'],
-  ['よるに ひかるのは？', 'つき', 'にんじん', 'くつ'],
-  ['あしが 8ぽん あるのは？', 'たこ', 'いぬ', 'にわとり'],
-  ['ながい はなの どうぶつは？', 'ぞう', 'ねこ', 'ぶた'],
-  ['あめのひに さすのは？', 'かさ', 'ぼうし', 'てぶくろ'],
-  ['バナナの いろは？', 'きいろ', 'みどり', 'むらさき'],
-  ['ゆきだるまが とけるのは？', 'あつい とき', 'さむい とき', 'よる'],
-  ['いちばん おおきいのは？', 'くじら', 'ねずみ', 'あり'],
-  ['はねが あるのは？', 'ちょうちょ', 'へび', 'かえる'],
-  ['ぴょんぴょん はねるのは？', 'うさぎ', 'かたつむり', 'さかな'],
-  ['にじの いろの かずは？', '7', '3', '10'],
-  ['1しゅうかんは なんにち？', '7にち', '5にち', '10にち'],
-  ['かえるの こどもは？', 'おたまじゃくし', 'ひよこ', 'こいぬ'],
-  ['あさ さいしょに いうのは？', 'おはよう', 'おやすみ', 'いただきます'],
-  ['はっぱの いろは？', 'みどり', 'あか', 'しろ'],
-  ['はなで においを かぐのは？', 'はな', 'みみ', 'て'],
-  ['なつに なくむしは？', 'せみ', 'ペンギン', 'くま'],
-];
-
-export function makeQuiz(rng: Rng): Question {
-  const q = QUIZ[Math.floor(rng() * QUIZ.length)];
-  const opts = shuffle([q[1], q[2], q[3]], rng);
-  return { prompt: q[0], options: opts, answer: opts.indexOf(q[1]) };
-}
-
-export function makeMath(rng: Rng): Question {
-  const plus = rng() < 0.7;
-  const a = 1 + Math.floor(rng() * (plus ? 6 : 9));
-  const b = 1 + Math.floor(rng() * (plus ? 5 : a));
-  const ans = plus ? a + b : a - Math.min(a, b);
-  const bb = plus ? b : Math.min(a, b);
-  const set = new Set<number>([ans]);
-  while (set.size < 3) set.add(Math.max(0, ans + Math.floor(rng() * 5) - 2));
-  const opts = shuffle([...set], rng);
-  return { prompt: `${a} ${plus ? '＋' : 'ー'} ${bb} ＝ ？`, options: opts.map(String), answer: opts.indexOf(ans) };
-}
-
-export function makeColor(rng: Rng): Question {
-  const cs = pickN(COLORS, 3, rng);
-  const ans = Math.floor(rng() * 3);
-  return {
-    prompt: (
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
-        この いろは？ <span style={{ display: 'inline-block', width: '2.6rem', height: '2.6rem', borderRadius: 10, background: cs[ans].hex, border: '3px solid var(--ink)' }} />
-      </span>
-    ),
-    options: cs.map((c) => c.jp),
-    answer: ans,
-  };
-}
-
 const SHAPES: ShapeKind[] = ['circle', 'square', 'triangle', 'star', 'heart', 'diamond'];
-
-export function makeMemory(rng: Rng): Question {
-  const ks = pickN(SHAPES, 3, rng);
-  const cs = pickN(COLORS, 3, rng);
-  const ans = Math.floor(rng() * 3);
-  return {
-    study: {
-      ms: 1800,
-      node: (
-        <span style={{ display: 'inline-flex', gap: 14 }}>
-          {ks.map((k, i) => (
-            <Shape key={i} kind={k} color={cs[i].hex} size={46} />
-          ))}
-        </span>
-      ),
-    },
-    prompt: (
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-        <Shape kind={ks[ans]} color={cs[ans].hex} size={40} /> は どこに あった？
-      </span>
-    ),
-    options: ['ひだり', 'まんなか', 'みぎ'],
-    answer: ans,
-  };
-}
 
 export function makeOdd(rng: Rng): Question {
   const k = SHAPES[Math.floor(rng() * SHAPES.length)];
@@ -122,49 +42,6 @@ export function makeOdd(rng: Rng): Question {
   return {
     prompt: 'ひとつだけ ちがうのは どれ？',
     options: [0, 1, 2].map((i) => (i === ans ? <Shape kind={other.k} color={other.c.hex} size={38} /> : <Shape kind={k} color={c.hex} size={38} />)),
-    answer: ans,
-  };
-}
-
-export function makeCount(rng: Rng): Question {
-  const n = 3 + Math.floor(rng() * 6);
-  const k = SHAPES[Math.floor(rng() * SHAPES.length)];
-  const c = COLORS[Math.floor(rng() * COLORS.length)];
-  // 6×3 のマスから かさならないように えらぶ
-  const cells = shuffle(Array.from({ length: 18 }, (_, i) => i), rng).slice(0, n);
-  const pts = cells.map((c) => ({ x: 9 + (c % 6) * 16 + (rng() - 0.5) * 6, y: 6 + Math.floor(c / 6) * 30 + (rng() - 0.5) * 8, r: Math.floor(rng() * 40) - 20 }));
-  const set = new Set<number>([n]);
-  while (set.size < 3) set.add(Math.max(1, n + (rng() < 0.5 ? -1 : 1) * (1 + Math.floor(rng() * 2))));
-  const opts = shuffle([...set], rng);
-  return {
-    prompt: (
-      <div style={{ display: 'grid', justifyItems: 'center', gap: 4 }}>
-        <span>{SHAPE_JP[k]}は いくつ？</span>
-        <div style={{ position: 'relative', width: 'min(86vw, 22rem)', height: '6.2rem', border: '3px solid var(--ink)', borderRadius: 12, background: '#fff' }}>
-          {pts.map((p, i) => (
-            <div key={i} style={{ position: 'absolute', left: `${p.x}%`, top: `${p.y}%`, translate: '-50% -10%' }}>
-              <Shape kind={k} color={c.hex} size={26} rotate={p.r} />
-            </div>
-          ))}
-        </div>
-      </div>
-    ),
-    options: opts.map(String),
-    answer: opts.indexOf(n),
-  };
-}
-
-export function makeSilhouette(rng: Rng): Question {
-  const ks = pickN(SHAPES, 3, rng);
-  const ans = Math.floor(rng() * 3);
-  const cs = pickN(COLORS, 3, rng);
-  return {
-    prompt: (
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
-        この かげは どれ？ <Shape kind={ks[ans]} color="#33302b" size={46} />
-      </span>
-    ),
-    options: ks.map((k, i) => <Shape key={i} kind={k} color={cs[i].hex} size={38} />),
     answer: ans,
   };
 }

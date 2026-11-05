@@ -14,8 +14,11 @@ export function ControlPicture({ controls, player, twoPlayer }: { controls: Cont
   const useWasd = twoPlayer && player === 0;
   const items: ReactNode[] = [];
   if (controls.includes('arrows')) items.push(<DirKeys key="arrows" color={color} wasd={useWasd} />);
+  if (controls.includes('lr')) items.push(<RowKeys key="lr" color={color} keys={useWasd ? ['A', 'D'] : [-90, 90]} caption={`${useWasd ? 'A D' : '← →'}で うごく`} />);
+  if (controls.includes('pick3')) items.push(<RowKeys key="pick3" color={color} keys={useWasd ? ['A', 'S', 'D'] : [-90, 180, 90]} caption={`${useWasd ? 'A S D' : '← ↓ →'}で えらぶ`} />);
   if (controls.includes('space')) items.push(<ActionKey key="space" color={color} label={twoPlayer && player === 1 ? 'エンター' : 'スペース'} />);
-  if (controls.includes('mouse') && !twoPlayer) items.push(<MouseIcon key="mouse" color={color} />);
+  // スペースの ゲームは クリック、うごかす ゲームは マウスを うごかす
+  if (controls.includes('mouse') && !twoPlayer) items.push(<MouseIcon key="mouse" color={color} click={controls.includes('space') || controls.includes('pick3')} />);
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', justifyContent: 'center', flexWrap: 'wrap' }}>
       {items.map((it, i) => (
@@ -82,6 +85,30 @@ function DirKeys({ color, wasd }: { color: string; wasd: boolean }) {
   );
 }
 
+const arrowSvg = (rot: number) => (
+  <svg viewBox="-10 -10 20 20" width="55%" height="55%" style={{ transform: `rotate(${rot}deg)` }}>
+    <path d="M0,-7 L7,1 L2.5,1 L2.5,7 L-2.5,7 L-2.5,1 L-7,1Z" fill="var(--ink)" />
+  </svg>
+);
+
+/** よこ ならびの キー（← → や ← ↓ →）。じゅんに 光る。数字は やじるしの むき（度）、文字は そのまま。 */
+function RowKeys({ color, keys, caption }: { color: string; keys: (number | string)[]; caption: string }) {
+  const n = keys.length;
+  const lit = (i: number) => Array.from({ length: n * 2 }, (_, k) => (Math.floor(k / 2) === i ? 1 : 0));
+  return (
+    <div style={{ display: 'grid', justifyItems: 'center', gap: 4 }}>
+      <div style={{ display: 'flex', gap: 4 }}>
+        {keys.map((k, i) => (
+          <Key key={i} color={color} lit={lit(i)}>
+            {typeof k === 'number' ? arrowSvg(k) : k}
+          </Key>
+        ))}
+      </div>
+      <div style={{ fontWeight: 900, fontSize: 'clamp(.9rem, 2.6vw, 1.1rem)' }}>{caption}</div>
+    </div>
+  );
+}
+
 /** けってい キー（スペース／エンター）。トン、トンと へこむ。 */
 function ActionKey({ color, label }: { color: string; label: string }) {
   return (
@@ -94,15 +121,15 @@ function ActionKey({ color, label }: { color: string; label: string }) {
   );
 }
 
-function MouseIcon({ color }: { color: string }) {
+function MouseIcon({ color, click }: { color: string; click: boolean }) {
   return (
     <div style={{ display: 'grid', justifyItems: 'center', gap: 4 }}>
-      <motion.svg viewBox="-20 -28 40 56" style={{ width: CAP, height: `calc(${CAP} * 1.4)` }} animate={{ x: [0, 8, 0, -8, 0] }} transition={{ repeat: Infinity, duration: 2.4 }}>
+      <motion.svg viewBox="-20 -28 40 56" style={{ width: CAP, height: `calc(${CAP} * 1.4)` }} animate={click ? { y: [0, 0, 3, 0] } : { x: [0, 8, 0, -8, 0] }} transition={{ repeat: Infinity, duration: click ? 1.2 : 2.4 }}>
         <rect x={-15} y={-24} width={30} height={48} rx={15} fill="#fffdf5" stroke="var(--ink)" strokeWidth={3} />
         <path d="M-15,-6 L15,-6 M0,-24 L0,-6" stroke="var(--ink)" strokeWidth={3} />
         <path d="M-13,-8 L-13,-12 Q-13,-22 -2,-22 L-2,-8Z" fill={color} />
       </motion.svg>
-      <div style={{ fontWeight: 900, fontSize: 'clamp(.9rem, 2.6vw, 1.1rem)' }}>マウスでも OK</div>
+      <div style={{ fontWeight: 900, fontSize: 'clamp(.9rem, 2.6vw, 1.1rem)' }}>{click ? 'クリックでも OK' : 'マウスでも OK'}</div>
     </div>
   );
 }

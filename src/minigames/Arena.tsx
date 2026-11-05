@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, type CSSProperties, type ReactNode } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { KEY_LABELS, usePlayerKeys } from './input';
+import { keyLabels, usePlayerKeys } from './input';
 import { useMinigameCtx } from './context';
 import { CharacterSprite } from '../components/bits';
 import type { Player } from './types';
@@ -50,6 +50,13 @@ export function Half({
   usePlayerKeys((p) => {
     if (p === player && !cpu) bump();
   });
+  usePlayerKeys(
+    (p) => {
+      if (p === player && !cpu) bump();
+    },
+    true,
+    'button',
+  );
   const result = outcome ? (outcome.winner == null ? 'draw' : outcome.winner === player ? 'win' : 'lose') : null;
 
   return (
@@ -181,7 +188,7 @@ export function Half({
   );
 }
 
-/** 大きな押しボタン（タッチ）。キーボードでは A/S/D・J/K/L のどれでも押せる。 */
+/** 大きな押しボタン（タッチ）。キーボードでは スペース（2人の P2 は エンター）。 */
 export function BigButton({ player, label, onPress, disabled, cpu }: { player: Player; label: ReactNode; onPress: () => void; disabled?: boolean; cpu?: boolean }) {
   const pulse = useContext(PulseCtx);
   return (
@@ -210,12 +217,12 @@ export function BigButton({ player, label, onPress, disabled, cpu }: { player: P
       }}
     >
       {label}
-      {!cpu && <div style={{ fontSize: '0.68rem', opacity: 0.85, marginTop: 2, whiteSpace: 'normal' }}>キー：{KEY_LABELS[player].join(' / ')}</div>}
+      {!cpu && <div style={{ fontSize: '0.68rem', opacity: 0.85, marginTop: 2, whiteSpace: 'normal' }}>キー：{keyLabels(player, 'button').join(' / ')}</div>}
     </motion.button>
   );
 }
 
-/** 3択ボタン。キーは P1＝A S D、P2＝J K L。 */
+/** 3択ボタン。キーは 1人＝← ↓ →、2人＝P1 A S D・P2 ← ↓ →。 */
 export function ChoiceButtons({
   player,
   options,
@@ -256,7 +263,7 @@ export function ChoiceButtons({
             style={{ minHeight: '4.2rem', padding: '0.2rem', background: bg, display: 'grid', placeItems: 'center', gap: 2, touchAction: 'manipulation', userSelect: 'none', borderColor: isPicked ? P_COLOR[player] : undefined }}
           >
             <div style={{ fontSize: '1.05rem', fontWeight: 800, lineHeight: 1.1 }}>{o}</div>
-            {!cpu && <div style={{ fontSize: '0.62rem', opacity: 0.6 }}>{KEY_LABELS[player][i]}</div>}
+            {!cpu && <div style={{ fontSize: '0.62rem', opacity: 0.6 }}>{keyLabels(player, 'choice')[i]}</div>}
           </motion.button>
         );
       })}

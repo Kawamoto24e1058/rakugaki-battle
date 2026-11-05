@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { MinigameDef, MinigameKind } from './types';
-import { KEY_LABELS } from './input';
+import { keyLabels, setTwoPlayer } from './input';
 import { P_COLOR } from './Arena';
 import { sfx } from '../audio/sfx';
 import { ControlPicture } from './ControlPicture';
@@ -25,6 +25,7 @@ const NEXT: Record<string, Step> = { band: 'title', title: 3, 3: 2, 2: 1, 1: 'go
  */
 export function MinigameIntro({ def, cpu, onDone }: { def: MinigameDef; cpu: boolean; onDone: () => void }) {
   const [step, setStep] = useState<Step>('band');
+  setTwoPlayer(!cpu);
 
   useEffect(() => {
     if (step === 'band') sfx.whoosh();
@@ -264,7 +265,7 @@ function HowToInput({ def, cpu }: { def: MinigameDef; cpu: boolean }) {
             </div>
           )}
           <div style={{ fontSize: 'clamp(.85rem, 2.8vw, 1rem)', fontWeight: 800, color: 'var(--ink-soft)' }}>
-            {def.input === 'main' ? `キー ${KEY_LABELS[p].join('・')} どれでも` : `キー ${KEY_LABELS[p].join('・')}`}
+            {`キー ${keyLabels(p, def.input === 'main' ? 'button' : 'choice').join('・')}`}
           </div>
         </div>
       ))}

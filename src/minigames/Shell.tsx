@@ -5,6 +5,7 @@ import { P_COLOR } from './Arena';
 import { sfx } from '../audio/sfx';
 import { KIND_META } from './Intro';
 import { MinigameCtx, type MgFighter } from './context';
+import { setTwoPlayer } from './input';
 
 /** スコアから 勝ち負けを決める（4点差未満は ひきわけ）。 */
 export function judge(scores: [number, number]): MinigameOutcome {
@@ -38,6 +39,8 @@ export function MinigameStage({
   fighters: [MgFighter, MgFighter];
   onDone: (o: MinigameOutcome) => void;
 }) {
+  // キーの わりあて（1人か 2人か）。キーを おした ときに 読むので 描く たびに 入れておけば よい
+  setTwoPlayer(!cpu);
   // カウントダウンは MinigameIntro が やる（タイトルから そのまま ゲームへ）
   const [stage, setStage] = useState<Stage>('play');
   const [outcome, setOutcome] = useState<MinigameOutcome | null>(null);

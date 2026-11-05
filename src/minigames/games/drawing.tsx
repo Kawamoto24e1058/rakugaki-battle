@@ -2,12 +2,12 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { motion } from 'framer-motion';
 import { mulberry32 } from '../../engine/rng';
 import { CharacterSprite } from '../../components/bits';
-import { Arena, ChoiceButtons, COLORS, Half, Shape, type ShapeKind } from '../Arena';
+import { Arena, ChoiceButtons, Half } from '../Arena';
 import { usePlayerKeys } from '../input';
 import type { GameProps, Player } from '../types';
 import type { MgFighter } from '../context';
 import { TimeBar } from './body';
-import { pickN, shuffle, type Question, type Rng } from './choice';
+import { shuffle } from './choice';
 import { sfx } from '../../audio/sfx';
 
 const now = () => performance.now();
@@ -201,67 +201,3 @@ export function Cups({ seed, cpu, cpuSkill, names, fighters, onFinish }: GamePro
 }
 
 // ================================================================ だれの かげ？
-const DECOY: ShapeKind[] = ['star', 'heart', 'triangle', 'diamond'];
-
-/** どちらかの キャラの かげを 見せて、だれか あてる。 */
-export function makeWhoShadow(rng: Rng, fighters: [MgFighter, MgFighter]): Question {
-  const target = rng() < 0.5 ? 0 : 1;
-  const decoy = DECOY[Math.floor(rng() * DECOY.length)];
-  const order = shuffle([0, 1, 2], rng); // 2＝おとりの かたち
-  const opt = (k: number) =>
-    k < 2 ? (
-      <div style={{ display: 'grid', justifyItems: 'center' }}>
-        <Sprite f={fighters[k]} size="2.6rem" flip={k === 1} />
-        <span style={{ fontSize: '0.7rem' }}>{fighters[k].name}</span>
-      </div>
-    ) : (
-      <div style={{ display: 'grid', justifyItems: 'center' }}>
-        <Shape kind={decoy} color={COLORS[2].hex} size={36} />
-        <span style={{ fontSize: '0.7rem' }}>ちがう</span>
-      </div>
-    );
-  return {
-    prompt: (
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 12 }}>
-        この かげは だれ？
-        <motion.span initial={{ scale: 0.6 }} animate={{ scale: 1 }} style={{ display: 'inline-block' }}>
-          <Sprite f={fighters[target]} size="4.4rem" flip={target === 1} shadow />
-        </motion.span>
-      </span>
-    ),
-    options: order.map(opt),
-    answer: order.indexOf(target),
-  };
-}
-
-// ================================================================ なんびき いる？
-/** 2人の キャラが まざって ならぶ。かたほうが なんびき いるか かぞえる。 */
-export function makeHowMany(rng: Rng, fighters: [MgFighter, MgFighter]): Question {
-  const target = rng() < 0.5 ? 0 : 1;
-  const n = 2 + Math.floor(rng() * 5); // 2〜6
-  const others = 2 + Math.floor(rng() * 4);
-  const cells = pickN(Array.from({ length: 18 }, (_, i) => i), n + others, rng);
-  const items = cells.map((c, i) => ({ c, who: i < n ? target : 1 - target, rot: Math.floor(rng() * 30) - 15, flip: rng() < 0.5 }));
-  const set = new Set<number>([n]);
-  while (set.size < 3) set.add(Math.max(1, n + (rng() < 0.5 ? -1 : 1) * (1 + Math.floor(rng() * 2))));
-  const opts = shuffle([...set], rng);
-  return {
-    prompt: (
-      <div style={{ display: 'grid', justifyItems: 'center', gap: 4 }}>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-          <Sprite f={fighters[target]} size="2rem" /> {fighters[target].name} は なんびき？
-        </span>
-        <div style={{ position: 'relative', width: 'min(86vw, 26rem)', height: '7.4rem', border: '3px solid var(--ink)', borderRadius: 12, background: '#fff' }}>
-          {items.map((it, i) => (
-            <div key={i} style={{ position: 'absolute', left: `${8 + (it.c % 6) * 16.5}%`, top: `${6 + Math.floor(it.c / 6) * 31}%`, translate: '-50% 0', rotate: `${it.rot}deg` }}>
-              <Sprite f={fighters[it.who]} size="2.1rem" flip={it.flip} />
-            </div>
-          ))}
-        </div>
-      </div>
-    ),
-    options: opts.map(String),
-    answer: opts.indexOf(n),
-  };
-}
-
