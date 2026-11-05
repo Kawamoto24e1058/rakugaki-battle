@@ -21,6 +21,8 @@ import { STATUS_META } from '../engine/status';
 import { sfx } from '../audio/sfx';
 import { MinigameIntro, MinigameStage, pickMinigame, type MgFighter, type MinigameOutcome } from '../minigames';
 import { MinigameScene } from './battle/MinigameScene';
+import { MessageBox } from './battle/MessageBox';
+import { RewardBanner } from './battle/RewardBanner';
 import type { Beat, Snap } from './battle/types';
 
 /** reveal＝このターンの技が きまる → mgIntro＝ミニゲームの しょうかい → minigame＝ミニゲーム → animating＝こうげきの演出 → over */
@@ -203,6 +205,7 @@ export function BattleScene() {
           </MinigameScene>
         )}
       </AnimatePresence>
+      <AnimatePresence>{curBeat.reward && <RewardBanner key={`rw-${turnKey}`} winner={curBeat.reward.winner} perfect={curBeat.reward.perfect} names={names} chars={chars} images={images} />}</AnimatePresence>
       {curBeat.win != null && <VictoryOverlay name={names[curBeat.win]} char={chars[curBeat.win]} image={images[curBeat.win]} />}
       {curBeat.koseiAct && (
         <KoseiCutIn
@@ -224,26 +227,13 @@ export function BattleScene() {
 
         <Stage chars={chars} images={images} names={names} beat={curBeat} beatKey={phase === 'animating' ? beatIdx : -1 - turnKey} label={stageLabel} />
 
-        {(phase === 'animating' || phase === 'over') && (
-          <div
-            className="sketch-card"
-            onClick={phase === 'animating' ? advance : undefined}
-            style={{
-              width: '100%',
-              minHeight: '2.3rem',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              textAlign: 'center',
-              fontWeight: 800,
-              fontSize: 'clamp(.9rem, 2.6vw, 1.1rem)',
-              padding: '0.35rem 0.9rem',
-              cursor: phase === 'animating' ? 'pointer' : 'default',
-            }}
-          >
-            {phase === 'animating' ? curBeat.banner : state.winner === 'draw' ? 'ひきわけ' : `${names[state.winner as Side]} の かち！`}
-          </div>
-        )}
+        {/* 実況の まど（ポケモン風）。おすと はやおくり */}
+        <MessageBox
+          key={phase === 'animating' ? `b-${turnKey}-${beatIdx}` : `p-${phase}`}
+          text={phase === 'animating' ? curBeat.banner : phase === 'over' ? (state.winner === 'draw' ? 'ひきわけ！' : `${names[state.winner as Side]}の かち！`) : ''}
+          active={phase === 'animating'}
+          onNext={advance}
+        />
       </div>
 
       {phase === 'animating' ? (

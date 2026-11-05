@@ -56,6 +56,31 @@ export const STATUS_ART: Partial<Record<Chip['kind'], { pal: keyof typeof PALETT
 
 const WIN_BANNER_DRAW = 'ひきわけ！';
 
+/** ダメージの ひとこと（ポケモン風の 実況）。 */
+function tagLine(tag: string, name: string): string {
+  switch (tag) {
+    case 'クリティカル':
+      return 'きゅうしょに あたった！';
+    case 'ばつぐん':
+      return 'こうかは ばつぐんだ！';
+    case 'カウンター':
+      return 'カウンター！';
+    case 'こんじょう':
+      return 'こんじょうで ちからが でた！';
+    case 'いのちをけずった':
+      return `${name}は いのちを けずった！`;
+    case 'トゲ':
+      return 'トゲが ささった！';
+    case 'みちづれ':
+      return 'みちづれ！';
+    default:
+      return tag.endsWith('！') ? tag : `${tag}！`;
+  }
+}
+
+/** 文字を 読む 時間（1文字 ずつ 出して、読みおわるまで）。 */
+const readMs = (text: string) => 700 + text.replace(/\s/g, '').length * 75;
+
 /** エンジンの ClashEvent 列を、画面で順に見せる「場面（Beat）」の列に変換する。 */
 export function buildBeats(
   events: ClashEvent[],
@@ -81,7 +106,7 @@ export function buildBeats(
 
   const add = (
     banner: string,
-    o: Partial<Pick<Beat, 'acting' | 'actKind' | 'striker' | 'hit' | 'floats' | 'fx' | 'order' | 'shake' | 'flash' | 'impact' | 'ms' | 'win' | 'koseiAct'>> & { keepCallout?: boolean } = {},
+    o: Partial<Pick<Beat, 'acting' | 'actKind' | 'striker' | 'hit' | 'floats' | 'fx' | 'order' | 'shake' | 'flash' | 'impact' | 'ms' | 'win' | 'koseiAct' | 'reward'>> & { keepCallout?: boolean } = {},
   ) => {
     beats.push({
       hp: [...hp],
@@ -101,9 +126,11 @@ export function buildBeats(
       shake: o.shake ?? 0,
       flash: o.flash ?? null,
       impact: o.impact ?? null,
-      ms: o.ms ?? 1300,
+      // 文が ながいときは 読める だけ 長く 見せる
+      ms: Math.max(o.ms ?? 1300, readMs(banner)),
       win: o.win,
       koseiAct: o.koseiAct,
+      reward: o.reward,
     });
   };
 
@@ -136,8 +163,8 @@ export function buildBeats(
         callout = null;
         const order: OrderInfo = { first: ev.first, reason: ev.reason, spd: ev.spd };
         table = { ...EMPTY_TABLE, first: ev.first };
-        if (ev.reason === 'minigame') add(`${names[ev.first]} が ミニゲームに かった！ 先に こうげき`, { order, ms: 1500 });
-        else add('すばやさくらべ！', { order, ms: 2600 });
+        if (ev.reason === 'minigame') add(`${names[ev.first]}が ミニゲームで かった！`, { order, ms: 2800, reward: { winner: ev.first, perfect: !!mg?.perfect } });
+        else add(mg && mg.winner == null ? 'ミニゲームは ひきわけ！ すばやい ほうが 先に うごく' : 'すばやさくらべ！', { order, ms: 2600 });
         break;
       }
       case 'act': {
@@ -178,22 +205,22 @@ export function buildBeats(
           boost: !mg || mg.winner == null || ev.kind === 'blocked' ? undefined : mg.winner === side ? `ミニゲーム かち ×${MG_WIN_MULT}${mg.perfect ? '・クリティカル' : ''}` : `ミニゲーム まけ ×${MG_LOSE_MULT}`,
         };
         if (ev.kind === 'charge') {
-          add(`${names[side]} は ちからを ためている…！ 次の ターンに はなつよ`, {
+          add(`${names[side]}は ちからを ためている！\nつぎの ターンに はなつよ`, {
             acting: side,
             actKind: 'charge',
             fx: fxFor('charge', side, 1.2, { pal: PALETTES.kosei, motifs: ['chargeorb'] }),
             ms: 2000,
           });
         } else if (ev.release) {
-          add(`${names[side]} は ためた ちからを はなつ！`, { acting: side, actKind: 'release', impact: 'どかん！', flash: card?.art.pal.main ?? null, shake: 8, ms: 1500 });
+          add(`${names[side]}は ためた ちからを はなった！`, { acting: side, actKind: 'release', impact: 'どかん！', flash: card?.art.pal.main ?? null, shake: 8, ms: 1500 });
         } else if (ev.kind === 'kosei') {
-          add(`${names[side]} こせい はつどう！`, { acting: side, actKind: 'support', koseiAct: { side, moveName: ev.moveName }, ms: 2600 });
+          add(`${names[side]}の こせいが はつどう！`, { acting: side, actKind: 'support', koseiAct: { side, moveName: ev.moveName }, ms: 2600 });
         } else if (ev.kind === 'blocked') {
-          add(`${names[side]} は ${ev.moveName.replace(/[（）]/g, '')}`, { ms: 1300 });
+          add(`${names[side]}は ${ev.moveName.replace(/[（）]/g, '')}`, { ms: 1300 });
         } else if (ev.kind === 'support') {
-          add(`${names[side]} の ほじょわざ「${ev.moveName}」`, { acting: side, actKind: 'support', ms: 1100 });
+          add(`${names[side]}の ${ev.moveName}！`, { acting: side, actKind: 'support', ms: 1100 });
         } else {
-          add(`${names[side]} の こうげき「${ev.moveName}」！`, { acting: side, actKind: 'attack', ms: 1000 });
+          add(`${names[side]}の ${ev.moveName}！`, { acting: side, actKind: 'attack', ms: 1000 });
         }
         break;
       }
@@ -210,7 +237,8 @@ export function buildBeats(
         const float: Floating = { id: ++seq, side: ev.side, text: `${ev.amount}`, kind: 'dmg', big: loud || ratio >= 0.2, tag: ev.tag };
         const size = Math.max(0.85, Math.min(1.6, 0.85 + ratio * 3.2)) * (crit ? 1.2 : 1);
         const fx = attackerHits ? fxFor('hit', ev.side, size * (lastRelease ? 1.25 : 1), { crit, release: lastRelease }) : fxFor('hit', ev.side, 0.8, { motifs: ['burst'], pal: PALETTES.atk });
-        const msg = ev.tag ? `${ev.tag}！ ${names[ev.side]} に ${ev.amount} ダメージ（のこり ${ev.hpAfter}）` : `${names[ev.side]} に ${ev.amount} ダメージ！（のこり ${ev.hpAfter}）`;
+        const hitLine = `${names[ev.side]}に ${ev.amount} ダメージ！`;
+        const msg = ev.tag ? (ev.tag === 'ふんばった！' ? `${hitLine}\n${names[ev.side]}は ふんばった！` : `${tagLine(ev.tag, names[ev.side])}\n${hitLine}`) : hitLine;
         add(msg, {
           hit: ev.side,
           striker: attackerHits ? lastAct!.side : undefined,
@@ -225,7 +253,7 @@ export function buildBeats(
       }
       case 'heal': {
         setHp(ev.side, ev.hpAfter);
-        add(`${names[ev.side]} は HP を ${ev.amount} かいふく！（のこり ${ev.hpAfter}）`, {
+        add(`${names[ev.side]}の HPが ${ev.amount} かいふくした！`, {
           floats: [{ id: ++seq, side: ev.side, text: `+${ev.amount}`, kind: 'heal', big: ev.amount >= 20 }],
           fx: { id: ++seq, kind: 'heal', target: ev.side, pal: PALETTES.sup, motifs: ['cure'], size: 1, crit: false, release: false },
           ms: 1400,
@@ -237,7 +265,7 @@ export function buildBeats(
         const debuff = meta.kind === 'debuff';
         if (ev.kind !== 'charging') chips = [ev.side === 0 ? [...chips[0].filter((c) => c.kind !== ev.kind), { kind: ev.kind, jp: meta.jp, good: !debuff }] : chips[0], ev.side === 1 ? [...chips[1].filter((c) => c.kind !== ev.kind), { kind: ev.kind, jp: meta.jp, good: !debuff }] : chips[1]];
         const fxKind: FxSpec['kind'] = ev.kind === 'guard' || ev.kind === 'defUp' || ev.kind === 'thorns' ? 'guard' : debuff ? 'debuff' : 'buff';
-        add(`${names[ev.side]} は「${meta.jp}」に なった！`, {
+        add(`${names[ev.side]}は ${meta.jp}に なった！`, {
           floats: [{ id: ++seq, side: ev.side, text: meta.jp, kind: 'info', big: false }],
           fx: statusFx(ev.kind, ev.side, fxKind),
           impact: debuff && ev.kind !== 'charging' ? `${meta.jp}！` : null,
@@ -246,12 +274,12 @@ export function buildBeats(
         break;
       }
       case 'status-resist':
-        add(`${names[ev.side]} には きかなかった`, { ms: 900 });
+        add(`${names[ev.side]}には きかなかった！`, { ms: 900 });
         break;
       case 'status-tick': {
         const meta = STATUS_META[ev.kind];
         setHp(ev.side, ev.hpAfter);
-        add(`${names[ev.side]} は ${meta.jp} で ${ev.amount} ダメージ（のこり ${ev.hpAfter}）`, {
+        add(`${names[ev.side]}は ${meta.jp}で ${ev.amount} ダメージ！`, {
           hit: ev.side,
           floats: [{ id: ++seq, side: ev.side, text: `${ev.amount}`, kind: 'dmg', big: false, tag: meta.jp }],
           fx: statusFx(ev.kind, ev.side, 'status'),
@@ -264,7 +292,7 @@ export function buildBeats(
       case 'field': {
         const m = FIELD_META[ev.kind];
         field = { kind: ev.kind, turnsLeft: ev.turns };
-        add(`${names[ev.side]} が「${m.jp}」にした！（${m.desc}）`, { impact: `${m.jp}！`, ms: 2200 });
+        add(`${names[ev.side]}が「${m.jp}」に した！\n${m.desc}`, { impact: `${m.jp}！`, ms: 2200 });
         break;
       }
       case 'field-end':
@@ -274,13 +302,13 @@ export function buildBeats(
       case 'barrier': {
         const mkChip = (c: Chip[]) => [...c.filter((x) => x.kind !== 'barrier'), { kind: 'barrier' as const, jp: `バリア ${ev.amount}`, good: true }];
         chips = [ev.side === 0 ? mkChip(chips[0]) : chips[0], ev.side === 1 ? mkChip(chips[1]) : chips[1]];
-        add(`${names[ev.side]} は バリアを はった！（${ev.amount}）`, { fx: statusFx('barrier', ev.side, 'guard'), ms: 1400 });
+        add(`${names[ev.side]}は バリアを はった！`, { fx: statusFx('barrier', ev.side, 'guard'), ms: 1400 });
         break;
       }
       case 'barrier-hit': {
         const mkChip = (c: Chip[]) => c.map((x) => (x.kind === 'barrier' ? { ...x, jp: `バリア ${ev.left}` } : x));
         chips = [ev.side === 0 ? mkChip(chips[0]) : chips[0], ev.side === 1 ? mkChip(chips[1]) : chips[1]];
-        add(`バリアが ${ev.absorbed} ダメージを うけとめた！（のこり ${ev.left}）`, {
+        add(`バリアが ${ev.absorbed} ダメージを うけとめた！`, {
           hit: ev.side,
           floats: [{ id: ++seq, side: ev.side, text: `${ev.absorbed}`, kind: 'info', big: false, tag: 'バリア' }],
           fx: statusFx('barrier', ev.side, 'guard'),
@@ -292,7 +320,7 @@ export function buildBeats(
       case 'barrier-end': {
         const rm = (c: Chip[]) => c.filter((x) => x.kind !== 'barrier');
         chips = [ev.side === 0 ? rm(chips[0]) : chips[0], ev.side === 1 ? rm(chips[1]) : chips[1]];
-        add(`${names[ev.side]} の バリアが なくなった`, { impact: ev.side != null ? 'バリア はれつ！' : null, ms: 1100 });
+        add(`${names[ev.side]}の バリアが なくなった！`, { impact: ev.side != null ? 'バリア はれつ！' : null, ms: 1100 });
         break;
       }
       case 'timer-set': {
@@ -312,10 +340,10 @@ export function buildBeats(
         break;
       }
       case 'trap-set':
-        add(`${names[ev.side]} は わなを しかけた！`, { ms: 1300 });
+        add(`${names[ev.side]}は わなを しかけた！`, { ms: 1300 });
         break;
       case 'trap':
-        add(`${names[ev.side]} は わなに ひっかかった！`, { impact: 'わな！', ms: 1100 });
+        add(`${names[ev.side]}は わなに ひっかかった！`, { impact: 'わな！', ms: 1100 });
         break;
       case 'swap': {
         if (ev.kind === 'hp') {
@@ -327,7 +355,7 @@ export function buildBeats(
         break;
       }
       case 'sudden-death':
-        add(`サドンデス！ リードしている ${names[ev.leader]} が おおきく けずられる`, { impact: 'サドンデス！', keepCallout: false, ms: 1800 });
+        add(`サドンデス！\nリードしている ${names[ev.leader]}が おおきく けずられる`, { impact: 'サドンデス！', keepCallout: false, ms: 1800 });
         break;
       default:
         break;
@@ -343,7 +371,7 @@ export function buildBeats(
   first = null;
   if (next.done) {
     if (next.winner === 'draw') add(WIN_BANNER_DRAW, { ms: 1800 });
-    else add(`${names[next.winner as Side]} の かち！`, { ms: 3000, win: next.winner as Side });
+    else add(`${names[next.winner as Side]}の かち！`, { ms: 3000, win: next.winner as Side });
   } else {
     add(`ターン ${next.turn} へ`, { ms: 900 });
   }

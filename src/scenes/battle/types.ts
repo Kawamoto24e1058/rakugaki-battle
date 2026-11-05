@@ -87,4 +87,6 @@ export interface Beat extends Snap {
   ms: number;
   win?: Side;
   koseiAct?: { side: Side; moveName: string };
+  /** ミニゲームの ごほうび（勝った側・パーフェクト）。この場面で 大きく 見せる。 */
+  reward?: { winner: Side; perfect: boolean };
 }
