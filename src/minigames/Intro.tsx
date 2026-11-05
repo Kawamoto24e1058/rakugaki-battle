@@ -4,6 +4,7 @@ import type { MinigameDef, MinigameKind } from './types';
 import { KEY_LABELS } from './input';
 import { P_COLOR } from './Arena';
 import { sfx } from '../audio/sfx';
+import { ControlPicture } from './ControlPicture';
 
 export const KIND_META: Record<MinigameKind, { jp: string; color: string }> = {
   body: { jp: 'からだ', color: '#e8503a' },
@@ -205,6 +206,18 @@ export function MinigameIntro({ def, cpu, onDone }: { def: MinigameDef; cpu: boo
 /** つかう ボタンの絵（ボタン1つ／3つから えらぶ）と キー。 */
 function HowToInput({ def, cpu }: { def: MinigameDef; cpu: boolean }) {
   const players = cpu ? ([0] as const) : ([0, 1] as const);
+  if (def.controls) {
+    return (
+      <div style={{ display: 'flex', gap: '2.2rem', justifyContent: 'center', alignItems: 'start', flexWrap: 'wrap' }}>
+        {players.map((p) => (
+          <div key={p} style={{ display: 'grid', justifyItems: 'center', gap: 6 }}>
+            {!cpu && <div style={{ fontSize: '1.1rem', fontWeight: 900, color: P_COLOR[p] }}>{p === 0 ? 'P1' : 'P2'}</div>}
+            <ControlPicture controls={def.controls!} player={p} twoPlayer={!cpu} />
+          </div>
+        ))}
+      </div>
+    );
+  }
   const mash = def.id === 'mash';
   return (
     <div style={{ display: 'flex', gap: '1.8rem', justifyContent: 'center', alignItems: 'end', flexWrap: 'wrap' }}>

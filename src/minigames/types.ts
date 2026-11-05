@@ -1,5 +1,6 @@
 import type { ComponentType } from 'react';
 import type { MgFighter } from './context';
+import type { Control } from './pads';
 
 export type Player = 0 | 1;
 
@@ -30,6 +31,8 @@ export interface MinigameDef {
   howto: string;
   /** 操作のヒント（'main'＝ボタン1つ、'choice'＝3つから選ぶ）。 */
   input: 'main' | 'choice';
+  /** 新しい ミニゲーム：つかう 操作（やじるし・スペース・マウス）。あると 説明に キーの 絵を 大きく 出す。 */
+  controls?: Control[];
   Component: ComponentType<GameProps>;
 }
 

@@ -4,6 +4,7 @@ import { makeChoiceGame, makeColor, makeCount, makeMath, makeMemory, makeOdd, ma
 import { Lottery, Roulette } from './games/luck';
 import { HighLow, Janken, Mole, Stopwatch, Tug } from './games/party';
 import { Cups, makeHowMany, makeWhoShadow } from './games/drawing';
+import { Dodge } from './games/dodge';
 import type { MinigameDef } from './types';
 
 export * from './types';
@@ -12,6 +13,7 @@ export { MinigameStage, judge } from './Shell';
 export { MinigameIntro, KIND_META } from './Intro';
 
 export const MINIGAMES: MinigameDef[] = [
+  { id: 'dodge', command: 'よけろ！', name: 'よけろ！', kind: 'body', howto: 'たまに あたらないように にげよう', input: 'main', controls: ['arrows', 'mouse'], Component: Dodge },
   { id: 'mash', command: 'れんだ！', name: 'れんだ！', kind: 'body', howto: '3びょうで たくさん おそう', input: 'main', Component: Mash },
   { id: 'timing', command: 'とめろ！', name: 'ぴったり ストップ', kind: 'body', howto: 'まんなかで とめよう', input: 'main', Component: Timing },
   { id: 'reaction', command: 'はやおし！', name: 'よーい ドン！', kind: 'body', howto: '「ドン！」で すぐ おす（はやすぎは フライング）', input: 'main', Component: Reaction },
