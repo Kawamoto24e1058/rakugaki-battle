@@ -23,8 +23,8 @@ interface CapturedSlot {
   analysis: AnalyzeResult;
   /** 解析方法。'ai' = Gemini、'local' = ピクセル解析フォールバック。 */
   analyzedBy?: 'ai' | 'local';
-  /** 4つめの 技を えらんだか。 */
-  movePicked?: boolean;
+  /** 技えらびで えらんだ 技（回ごと。まだなら null）。 */
+  movePicks?: (string | null)[];
 }
 
 interface GameState {
@@ -57,8 +57,8 @@ interface GameState {
   setCaptured: (slot: CapturedSlot) => void;
   /** リビール画面で名前を手直しする。 */
   renamePlayer: (name: string) => void;
-  /** 4つめの 技を えらぶ（moveChoices の なかから）。 */
-  chooseMove: (id: string) => void;
+  /** 技えらび：round 回めの 技を えらぶ（moveRounds の なかから）。null で えらびなおし（ぜんぶ）。 */
+  chooseMove: (round: number | null, id?: string) => void;
   confirmReveal: () => void;
   chooseCpu: (character: Character) => void;
   finishBattle: (won: boolean) => void;
@@ -120,15 +120,24 @@ export const useGame = create<GameState>((set, get) => ({
     set({ player: { ...player, character: { ...player.character, name: trimmed } } });
   },
 
-  chooseMove: (id) => {
+  chooseMove: (round, id) => {
     const { player } = get();
     if (!player) return;
     const c = player.character;
-    const opt = c.moveChoices?.find((x) => x.id === id);
+    const rounds = c.moveRounds ?? [];
+    if (round == null) {
+      set({ player: { ...player, movePicks: rounds.map(() => null) } });
+      return;
+    }
+    const opt = rounds[round]?.options.find((x) => x.id === id);
     if (!opt) return;
-    const moveIds = [...c.moveIds.slice(0, 3), opt.id];
-    const moveReasons = [...(c.moveReasons ?? []).slice(0, 3), opt.reason];
-    set({ player: { ...player, character: { ...c, moveIds, moveReasons }, movePicked: true } });
+    const picks = [...(player.movePicks ?? rounds.map(() => null))];
+    picks[round] = opt.id;
+    const moveIds = [...c.moveIds];
+    const moveReasons = [...(c.moveReasons ?? c.moveIds.map(() => ''))];
+    moveIds[round] = opt.id;
+    moveReasons[round] = opt.reason;
+    set({ player: { ...player, character: { ...c, moveIds, moveReasons }, movePicks: picks } });
   },
 
   confirmReveal: () => {

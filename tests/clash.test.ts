@@ -41,8 +41,12 @@ describe('手札バトル', () => {
 
   it('技の割り振り：同じ絵なら同じ技、いろんな絵で いろんな技が出る', () => {
     expect(drawn([210, 40, 30]).moveIds).toEqual(drawn([210, 40, 30]).moveIds);
+    // 4つとも 子どもが えらぶので、えらべる 候補ぜんぶの しゅるいを かぞえる
     const seen = new Set<string>();
-    for (let i = 0; i < 60; i++) for (const id of drawn([(i * 53) % 256, (i * 97) % 256, (i * 29) % 256], 40 + (i % 60), 50 + ((i * 7) % 60)).moveIds) seen.add(id);
+    for (let i = 0; i < 60; i++) {
+      const c = drawn([(i * 53) % 256, (i * 97) % 256, (i * 29) % 256], 40 + (i % 60), 50 + ((i * 7) % 60));
+      for (const r of c.moveRounds ?? []) for (const o of r.options) seen.add(o.id);
+    }
     expect(seen.size).toBeGreaterThan(40);
   });
 
@@ -56,18 +60,18 @@ describe('手札バトル', () => {
     }
   });
 
-  it('技の割り振り：絵の特徴で かたよる（トゲ・あらっぽい＝こうげき多め／まる・おだやか＝ほじょ多め）', () => {
+  it('技の割り振り：タイプで かたよる（パワー＝こうげき ばかり／かたい＝はねかえす ほじょ技も）', () => {
     const stats = (atk: number, def: number) => ({ hp: 90, atk, def, spd: 35, luck: 30, heart: 30 });
     let fierce = 0;
-    let calm = 0;
+    let guard = 0;
     for (let seed = 1; seed <= 60; seed++) {
-      const a = assignMoveSet({ seed, attribute: 'fire', personality: 'aggressive', tags: ['shape:spiky', 'mood:fierce'], weapon: 'sword', stats: stats(55, 25) });
-      const b = assignMoveSet({ seed, attribute: 'water', personality: 'calm', tags: ['shape:round', 'mood:calm'], weapon: 'shield', stats: stats(25, 55) });
+      const a = assignMoveSet({ seed, attribute: 'fire', personality: 'aggressive', tags: ['shape:spiky', 'mood:fierce'], weapon: 'sword', stats: stats(55, 25), style: 'power' });
+      const b = assignMoveSet({ seed, attribute: 'water', personality: 'calm', tags: ['shape:round', 'mood:calm'], weapon: 'shield', stats: stats(25, 55), style: 'guard' });
       fierce += a.filter((s) => getMove(s.id).category === 'attack').length;
-      calm += b.filter((s) => getMove(s.id).category === 'attack').length;
+      guard += b.filter((s) => getMove(s.id).category === 'attack').length;
     }
-    expect(fierce / 60).toBeGreaterThan(3.3);
-    expect(calm / 60).toBeLessThan(2.3);
+    expect(fierce / 60).toBeGreaterThan(3.5);
+    expect(guard / 60).toBeLessThan(3.3);
   });
 
   it('技の割り振り：つばさの絵には 先制・かぜの技が 入りやすい', () => {

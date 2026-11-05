@@ -276,7 +276,7 @@ export function featuresToCharacter(
 
   const analysis = buildReasons(f, attribute, weapon, personality, baseStats, bst01, tags, kosei, overrides.statReasons, { style, why: overrides.styleReason || decided.why });
   const name = overrides.name ?? overrides.flavor?.name ?? makeName(rng, attribute);
-  const { slots: moveSet, choices } = assignMoveChoices({ seed: seed >>> 0, attribute, personality, tags, weapon, stats: baseStats, motif: overrides.motif, motifTags: overrides.motifTags, style });
+  const { slots: moveSet, rounds } = assignMoveChoices({ seed: seed >>> 0, attribute, personality, tags, weapon, stats: baseStats, motif: overrides.motif, motifTags: overrides.motifTags, style });
 
   return {
     id: `c_${(seed >>> 0).toString(36)}_${Date.now().toString(36)}`,
@@ -288,7 +288,7 @@ export function featuresToCharacter(
     baseStats,
     moveIds: moveSet.map((m) => m.id),
     moveReasons: moveSet.map((m) => m.reason),
-    ...(choices.length > 0 ? { moveChoices: choices } : {}),
+    ...(rounds.length === 4 ? { moveRounds: rounds } : {}),
     koseiId,
     koseiTitle: koseiName,
     ...(quirk ? { quirk } : {}),

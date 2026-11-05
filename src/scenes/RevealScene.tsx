@@ -38,6 +38,7 @@ export function RevealScene() {
   const chooseMove = useGame((s) => s.chooseMove);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
+  const [editRound, setEditRound] = useState<number | null>(null);
 
   if (!player) return null;
   const { character, imageUrl, analyzedBy } = player;
@@ -45,9 +46,12 @@ export function RevealScene() {
   const reasonOf = (key: string) => reasons.find((r) => r.key === key);
   const kosei = getKosei(character.koseiId);
   const attrReason = reasonOf('color');
-  const choices = character.moveChoices ?? [];
-  const picked = !!player.movePicked;
-  const needPick = choices.length > 0 && !picked;
+  const rounds = character.moveRounds ?? [];
+  const picks = player.movePicks ?? rounds.map(() => null);
+  // いま えらぶ 回（押して えらびなおす 回 → まだ えらんで いない いちばん 前の 回）
+  const firstOpen = picks.findIndex((p) => p == null);
+  const current = editRound ?? (firstOpen >= 0 ? firstOpen : null);
+  const needPick = rounds.length > 0 && firstOpen >= 0;
 
   return (
     <div className="scene" style={{ justifyContent: 'flex-start', paddingTop: 'clamp(1rem,4vh,2rem)' }}>
@@ -248,62 +252,89 @@ export function RevealScene() {
           style={{ fontSize: '0.78rem', color: 'var(--ink-soft)', textAlign: 'center', width: '100%' }}
         >
           <div style={{ fontWeight: 800, color: 'var(--ink)', marginBottom: 4 }}>この子の わざ（まいターン この中から 1つが でるよ）</div>
-          {/* きまった わざ（えらぶ ときは 3まい、えらばない キャラは 4まい） */}
-          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${choices.length > 0 ? 4 : character.moveIds.length}, minmax(0, 1fr))`, gap: '0.4rem', width: '100%', maxWidth: '32rem', margin: '0 auto' }}>
-            {(choices.length > 0 ? character.moveIds.slice(0, 3) : character.moveIds).map((id, i) => (
-              <MoveTile key={id} id={id} why={character.moveReasons?.[i]} delay={0.25 + STAT_ORDER.length * 0.16 + 0.45 + i * 0.22} />
-            ))}
-            {choices.length > 0 && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.25 + STAT_ORDER.length * 0.16 + 0.45 + 3 * 0.22 }}
-                style={{ display: 'grid', placeItems: 'center', aspectRatio: '5 / 7', border: '3px dashed var(--ink)', borderRadius: 10, background: picked ? 'transparent' : '#fff8d6', containerType: 'inline-size' }}
-              >
-                {picked ? (
-                  <GameCard card={moveCard(getMove(character.moveIds[3]))} size="100cqw" />
-                ) : (
-                  <span style={{ fontFamily: 'var(--font-display)', fontSize: '2.2rem', color: 'var(--ink-soft)' }}>？</span>
-                )}
-              </motion.div>
-            )}
-          </div>
-
-          {/* 4つめは 子どもが えらぶ（おなじ 強さで 役わりが ちがう 3まい） */}
-          {choices.length > 0 && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.25 + STAT_ORDER.length * 0.16 + 1.3 }}
-              style={{ marginTop: '0.8rem', border: '3px solid var(--ink)', borderRadius: 14, background: picked ? '#f3f8ef' : '#fff1ec', padding: '0.6rem', display: 'grid', gap: '0.4rem' }}
-            >
-              <div style={{ fontFamily: 'var(--font-display)', fontSize: '1.25rem', color: 'var(--ink)' }}>4つめの わざを えらぼう！</div>
-              <div style={{ fontSize: '0.78rem', fontWeight: 800 }}>どれも おなじ つよさ。すきな たたかいかたを えらんでね</div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '0.5rem', width: '100%', maxWidth: '26rem', margin: '0 auto' }}>
-                {choices.map((c) => {
-                  const on = picked && character.moveIds[3] === c.id;
-                  let role = '';
-                  try {
-                    role = moveRole(getMove(c.id));
-                  } catch {
-                    role = '';
-                  }
+          {rounds.length === 0 ? (
+            <div style={{ display: 'grid', gridTemplateColumns: `repeat(${character.moveIds.length}, minmax(0, 1fr))`, gap: '0.4rem', width: '100%', maxWidth: '32rem', margin: '0 auto' }}>
+              {character.moveIds.map((id, i) => (
+                <MoveTile key={id} id={id} why={character.moveReasons?.[i]} delay={0.25 + STAT_ORDER.length * 0.16 + 0.45 + i * 0.22} />
+              ))}
+            </div>
+          ) : (
+            <>
+              {/* 4つの わく：えらんだ 技（おすと その 回を えらびなおし）／まだ なら ？ */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '0.4rem', width: '100%', maxWidth: '32rem', margin: '0 auto' }}>
+                {rounds.map((_, i) => {
+                  const id = picks[i];
+                  const active = current === i;
                   return (
-                    <motion.button
-                      key={c.id}
-                      whileHover={{ y: -4 }}
-                      whileTap={{ scale: 0.95 }}
-                      onClick={() => chooseMove(c.id)}
-                      style={{ all: 'unset', cursor: 'pointer', display: 'grid', justifyItems: 'center', gap: 4, minWidth: 0, containerType: 'inline-size', opacity: picked && !on ? 0.55 : 1 }}
+                    <button
+                      key={i}
+                      onClick={() => id && setEditRound(i)}
+                      style={{ all: 'unset', cursor: id ? 'pointer' : 'default', display: 'grid', justifyItems: 'center', alignContent: 'start', gap: 3, minWidth: 0, containerType: 'inline-size' }}
                     >
-                      <span style={{ fontSize: '0.78rem', fontWeight: 900, color: '#fff', background: on ? 'var(--crayon-red)' : 'var(--ink)', borderRadius: 99, padding: '1px 8px' }}>{role}</span>
-                      <GameCard card={moveCard(getMove(c.id))} size="100cqw" selected={on} />
-                      <span style={{ fontSize: '0.68rem', fontWeight: 800, lineHeight: 1.3 }}>{c.reason}</span>
-                    </motion.button>
+                      <span style={{ fontSize: '0.62rem', fontWeight: 900, color: active ? '#fff' : 'var(--ink-soft)', background: active ? 'var(--crayon-red)' : 'transparent', borderRadius: 99, padding: '0 6px', whiteSpace: 'nowrap' }}>{i + 1}かいめ</span>
+                      {id ? (
+                        <GameCard card={moveCard(getMove(id))} size="100cqw" selected={active} />
+                      ) : (
+                        <div style={{ width: '100%', aspectRatio: '5 / 7', display: 'grid', placeItems: 'center', border: `3px dashed ${active ? 'var(--crayon-red)' : 'var(--ink)'}`, borderRadius: 10, background: active ? '#fff1ec' : '#fffdf5' }}>
+                          <span style={{ fontFamily: 'var(--font-display)', fontSize: '2rem', color: 'var(--ink-soft)' }}>？</span>
+                        </div>
+                      )}
+                      {id && <span style={{ fontSize: '0.62rem', fontWeight: 800, lineHeight: 1.25 }}>{character.moveReasons?.[i]}</span>}
+                    </button>
                   );
                 })}
               </div>
-            </motion.div>
+
+              {/* えらぶ ところ（1回に 3まい。おなじ 強さで 役わりが ちがう） */}
+              {current != null && rounds[current] && (
+                <motion.div
+                  key={current}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  style={{ marginTop: '0.7rem', border: '3px solid var(--ink)', borderRadius: 14, background: '#fff1ec', padding: '0.6rem', display: 'grid', gap: '0.4rem' }}
+                >
+                  <div style={{ fontFamily: 'var(--font-display)', fontSize: '1.25rem', color: 'var(--ink)' }}>
+                    {current + 1}かいめ：{rounds[current].title}を えらぼう！
+                  </div>
+                  <div style={{ fontSize: '0.78rem', fontWeight: 800 }}>どれも おなじ つよさ。すきな たたかいかたを えらんでね</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '0.5rem', width: '100%', maxWidth: '26rem', margin: '0 auto' }}>
+                    {rounds[current].options.map((c) => {
+                      const on = picks[current] === c.id;
+                      let role = '';
+                      try {
+                        role = moveRole(getMove(c.id));
+                      } catch {
+                        role = '';
+                      }
+                      return (
+                        <motion.button
+                          key={c.id}
+                          whileHover={{ y: -4 }}
+                          whileTap={{ scale: 0.95 }}
+                          onClick={() => {
+                            chooseMove(current, c.id);
+                            setEditRound(null);
+                          }}
+                          style={{ all: 'unset', cursor: 'pointer', display: 'grid', justifyItems: 'center', gap: 4, minWidth: 0, containerType: 'inline-size' }}
+                        >
+                          <span style={{ fontSize: '0.78rem', fontWeight: 900, color: '#fff', background: on ? 'var(--crayon-red)' : 'var(--ink)', borderRadius: 99, padding: '1px 8px' }}>{role}</span>
+                          <GameCard card={moveCard(getMove(c.id))} size="100cqw" selected={on} />
+                          <span style={{ fontSize: '0.68rem', fontWeight: 800, lineHeight: 1.3 }}>{c.reason}</span>
+                        </motion.button>
+                      );
+                    })}
+                  </div>
+                </motion.div>
+              )}
+              {current == null && (
+                <div style={{ marginTop: '0.6rem', display: 'flex', gap: '0.6rem', justifyContent: 'center', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <span style={{ fontFamily: 'var(--font-display)', fontSize: '1.1rem', color: 'var(--crayon-green)' }}>ぜんぶ えらんだ！</span>
+                  <button className="crayon-btn" style={{ fontSize: '0.8rem', padding: '0.2em 0.9em' }} onClick={() => chooseMove(null)}>
+                    えらびなおす
+                  </button>
+                </div>
+              )}
+            </>
           )}
           {focusMult(character.moveIds) > 1 && (
             <div style={{ marginTop: 6, fontWeight: 800, color: 'var(--crayon-red)' }}>
@@ -322,7 +353,7 @@ export function RevealScene() {
         disabled={needPick}
         onClick={confirmReveal}
       >
-        {needPick ? '4つめの わざを えらんでね' : 'たたかいへ →'}
+        {needPick ? 'わざを ぜんぶ えらんでね' : 'たたかいへ →'}
       </motion.button>
     </div>
   );

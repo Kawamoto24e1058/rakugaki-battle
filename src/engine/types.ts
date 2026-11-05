@@ -77,8 +77,8 @@ export interface Character {
   moveReasons?: string[];
   /** 何の絵か（AI が 見た もの。「うさぎ」など）。 */
   motif?: string;
-  /** 4つめの 技の 候補（おなじ 強さで 役わりが ちがう 3枚）。えらんだら moveIds[3] を かえる。 */
-  moveChoices?: { id: string; reason: string }[];
+  /** 技えらび（4回。1回ずつ おなじ 強さで 役わりが ちがう 3枚から 1枚）。えらんだら moveIds[回] を かえる。 */
+  moveRounds?: { title: string; options: { id: string; reason: string }[] }[];
   /** タイプ（たたかいかた）。ステータスの 形と 得意な 技が きまる。古い セーブには ない。 */
   style?: BattleStyle;
   /** とくせい（とくべつな 得意・苦手。つよさの 合計は かわらない）。ない キャラも いる。 */

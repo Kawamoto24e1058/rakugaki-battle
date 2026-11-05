@@ -52,7 +52,8 @@ function traitsOf(m: MoveDef): Set<Trait> {
   if (m.heal || m.drain || m.cures || m.delay?.heal) t.add('heal');
   if (m.buff && m.buff.stat !== 'def') t.add('buff');
   if (m.debuff) t.add('debuff');
-  if (m.status && !m.status.toSelf) t.add('status');
+  // ひるみは「じょうたいいじょう（まほうっぽい）」では なく たいあたりの おまけ
+  if (m.status && !m.status.toSelf) t.add(m.status.kind === 'flinch' ? 'blow' : 'status');
   if (m.critBoost || m.pierce || m.read || m.when?.t === 'foePick' || m.id.startsWith('ey_')) t.add('eye');
   if (m.dice || m.coin || m.allOrNothing || m.randomAttr || m.hand?.kind === 'luck') t.add('luck');
   if (m.field) t.add('field');
@@ -142,8 +143,6 @@ const STYLE_RULES: Record<BattleStyle, Rule & { need: Trait[] }> = {
   magic: { reason: 'まほうタイプ だから', traits: { status: 5, field: 3, debuff: 3, magic: 3 }, need: ['status', 'field', 'debuff'] },
   balance: { reason: 'バランスタイプ だから', traits: { eye: 2, buff: 2, heal: 1, blow: 1 }, need: [] },
 };
-/** タイプ → こうげき寄り（＋）か ほじょ寄り（−）か。 */
-const STYLE_AGGRESSION: Record<BattleStyle, number> = { power: 0.45, speed: 0.3, balance: 0, guard: -0.1, magic: -0.1 };
 
 const KIND_TAGS = new Set(['dragon', 'dinosaur', 'robot', 'vehicle', 'plant', 'food', 'ghost', 'slime', 'bug', 'bird', 'fish', 'human', 'monster', 'animal']);
 
@@ -223,52 +222,11 @@ function partnerNeed(m: MoveDef): ((x: MoveDef) => boolean) | null {
   return null;
 }
 
-/** 絵の理由が ないとき：もう入っている技との 相性を 理由にする。 */
-function synergyReason(m: MoveDef, picked: MoveDef[]): string | null {
-  const w = m.when;
-  let partner: MoveDef | undefined;
-  if (w?.t === 'first') partner = picked.find((p) => p.id !== m.id && p.first);
-  else {
-    const need = partnerNeed(m);
-    if (need) partner = picked.find(need);
-  }
-  return partner ? `「${partner.name}」と あわせると つよい から` : null;
-}
-
 /** あいてに 何もしない まもり・かいふく技。 */
 function isStall(m: MoveDef): boolean {
   if (m.category !== 'support') return false;
   const t = traitsOf(m);
   return (t.has('guard') || t.has('heal')) && !m.reflect && !m.read && !m.status && !m.debuff && !m.trap && !m.delay?.damage;
-}
-
-/** どれだけ こうげき寄りか（＋なら こうげき、−なら ほじょ）。 */
-function aggression(input: AssignInput, rng: () => number): number {
-  const tags = new Set(input.tags ?? []);
-  let a = input.personality === 'aggressive' ? 0.3 : -0.3;
-  if (tags.has('shape:spiky')) a += 0.3;
-  if (tags.has('shape:round')) a -= 0.15;
-  if (input.weapon === 'sword') a += 0.15;
-  if (input.weapon === 'shield') a -= 0.2;
-  if (input.stats) a += (input.stats.atk - input.stats.def) / 80;
-  if (input.style) a += STYLE_AGGRESSION[input.style];
-  return a + (rng() - 0.5) * 0.5;
-}
-
-/** こうげき寄り度 → ほじょ技の数（0〜3）。 */
-export function supportCountFor(a: number): number {
-  return a > 0.3 ? 0 : a > -0.25 ? 1 : a > -0.6 ? 2 : 3;
-}
-
-function pickWeighted<T>(list: { v: T; w: number }[], rng: () => number): T | null {
-  const total = list.reduce((s, x) => s + x.w, 0);
-  if (total <= 0) return null;
-  let r = rng() * total;
-  for (const x of list) {
-    r -= x.w;
-    if (r < 0) return x.v;
-  }
-  return list[list.length - 1]?.v ?? null;
 }
 
 /** 技の 役わり（えらべる 3枚は ちがう 役わりに する）。 */
@@ -285,160 +243,121 @@ export function moveRole(m: MoveDef): string {
 }
 
 /** えらべる 技の 強さの はんい（つよすぎ・よわすぎは 候補に しない＝つよい技を えらぶだけに ならない）。 */
-const CHOICE_BAND: [number, number] = [0.42, 0.64];
-/** 3枚の 強さの ちがいの 上限（勝率）。 */
-export const CHOICE_SPREAD = 0.05;
+const CHOICE_BAND: [number, number] = [0.38, 0.58];
+/** 3枚の 強さの ちがいの 上限（勝率）。そろわない ときは CHOICE_SPREAD_WIDE まで ゆるめる。 */
+export const CHOICE_SPREAD = 0.04;
+const CHOICE_SPREAD_WIDE = 0.06;
 
 /** 技の 強さの 値（勝率。表に なければ まんなか）。 */
 export const moveValue = (id: MoveId) => MOVE_VALUE[id] ?? 0.5;
 
+/** 技えらびの 1回ぶん（テーマと 3枚）。 */
+export interface MoveRound {
+  title: string;
+  options: MoveSlot[];
+}
+
 export interface MoveChoiceSet {
-  /** きまった 4つ（4つめは えらぶ 前の おすすめ＝choices[0]）。 */
+  /** きまった 4つ（えらぶ 前は 各回の 1まいめ＝いちばん 絵に 合う もの。CPU は これを つかう）。 */
   slots: MoveSlot[];
-  /** 4つめの 候補（おなじ 強さで 役わりが ちがう 3枚）。えらべない ときは 空。 */
-  choices: MoveSlot[];
+  /** 4回ぶんの 技えらび（子どもが 1回ずつ 3まいから 1まい えらぶ）。 */
+  rounds: MoveRound[];
 }
 
 /**
- * 絵から キャラの技を きめる（同じ絵→同じ技）。
- *  1つめ：じぶんの属性の こうげき（かならず）
- *  2つめ：タイプの とくい技（パワー＝大わざ、かたい＝はねかえす・まもる、すばやい＝先制・れんぞく、まほう＝じょうたいいじょう）
- *  3つめ：絵に いちばん 合う 技（AI が 見た ツメ・つばさ など）
- *  4つめ：子どもが えらぶ。絵に 合う 技から「強さが おなじで 役わりが ちがう 3枚」を 出す
- *  コンボ技（「まえのターンに ○○なら」など）は、あいぼうの技も いっしょに入る。
+ * 絵から 技えらびを つくる（同じ絵→同じ候補）。4つとも 子どもが えらぶ。
+ *  1回め：ぞくせいの わざ（じぶんの 属性の こうげき）
+ *  2回め：タイプの わざ（パワー＝大わざ・かたい＝はねかえす・すばやい＝先制や れんぞく・まほう＝じょうたいいじょう）
+ *  3回め：えの とくちょうの わざ（AI が 見た ツメ・つばさ など に 合う もの）
+ *  4回め：すきな わざ（絵に 合う もの なら なんでも）
+ * どの 回も 1まいめ は その 絵に いちばん 合う 技。のこり 2まいは それと「強さが ちかい（勝率 ±4%）」
+ * 「おなじ しゅるい（こうげき／ほじょ）」「役わりが ちがう」もの。
+ * 1つの 技は 1回にしか 出ない。ため技は 1キャラ 1つまで。コンボの あいぼうが いる 技・まもるだけ の 技・
+ * つよすぎ／よわすぎ の 技は 出さない。
  */
 export function assignMoveChoices(input: AssignInput): MoveChoiceSet {
   const rng = mulberry32((input.seed ^ 0x4d4f5645) >>> 0);
   const rules = activeRules(input);
   const all = Object.values(MOVES);
   const allowed = (m: MoveDef) => !m.attribute || m.attribute === input.attribute;
-  const supports = supportCountFor(aggression(input, rng));
-  const AUTO = MOVES_PER_CHARACTER - 1;
+  const shown = new Set<MoveId>();
+  const usedReasons = new Set<string>();
+  let chargeShown = false;
+  const base = all.filter((m) => allowed(m) && !partnerNeed(m) && !isStall(m));
+  const inBand = (m: MoveDef) => moveValue(m.id) >= CHOICE_BAND[0] && moveValue(m.id) <= CHOICE_BAND[1];
 
-  const slots: MoveSlot[] = [];
-  const picked: MoveDef[] = [];
-  const has = (m: MoveDef) => picked.some((p) => p.id === m.id);
-  // ほじょが 2つ以上なら、そのうち1つは あいてに はたらきかける技にする
-  const stallCap = Math.max(1, supports - 1);
-  const stallFull = () => picked.filter(isStall).length >= stallCap;
-  const add = (m: MoveDef, reason: string) => {
-    picked.push(m);
-    slots.push({ id: m.id, reason });
-  };
-  const usable = (m: MoveDef) =>
-    !has(m) &&
-    allowed(m) &&
-    !(m.charge && picked.some((p) => p.charge)) &&
-    !(isRareMove(m) && picked.filter((p) => isRareMove(p)).length >= 1) &&
-    // まもり・かいふくだけの技は かずを しぼる（ずっと まもって おわらない を ふせぐ）
-    !(isStall(m) && stallFull());
-
-  /** cands から 絵に合うものを ひとつ えらぶ。あいぼうが入らない コンボ技は のぞく。 */
-  const choose = (cands: MoveDef[], fallbackReason: string, limit: number) => {
-    const left = limit - picked.length;
-    const list = cands
-      .filter(usable)
-      .filter((m) => {
-        const need = partnerNeed(m);
-        if (!need || picked.some(need)) return true;
-        return left >= 2 && all.some((x) => allowed(x) && !has(x) && x.id !== m.id && need(x) && !(isStall(x) && (isStall(m) ? picked.filter(isStall).length + 1 : picked.filter(isStall).length) >= stallCap));
-      })
-      .map((m) => {
-        const f = fitOf(m, rules);
-        // 絵に合うほど 出やすい（合わない技も すこしは 出る＝あそび）
-        return { v: { m, reasons: f.reasons }, w: (0.35 + f.score * f.score * 0.04) * (isRareMove(m) ? 0.55 : 1) };
-      });
-    const got = pickWeighted(list, rng);
-    if (!got) return null;
-    const used = new Set(slots.map((x) => x.reason));
-    const fresh = got.reasons.find((r) => !used.has(r));
-    add(got.m, fresh ?? synergyReason(got.m, picked) ?? got.reasons[0] ?? fallbackReason);
-    // コンボの あいぼうが まだ いなければ、つぎの枠で いっしょに入れる
-    const need = partnerNeed(got.m);
-    if (need && !picked.some(need) && picked.length < limit) {
-      const partners = all.filter((x) => {
-        if (!usable(x) || !need(x)) return false;
-        const own = partnerNeed(x);
-        return !own || picked.some(own);
-      });
-      const p = pickWeighted(
-        partners.map((x) => ({ v: x, w: 0.4 + fitOf(x, rules).score * 0.1 })),
-        rng,
-      );
-      if (p) add(p, `「${got.m.name}」と くみあわせると つよい から`);
-    }
-    return got.m;
-  };
-
-  // 1つめ：じぶんの属性の こうげき（理由は いつも 属性＝いちばん わかりやすい）
-  const attrWhy = `${ATTR_WORD[input.attribute]}タイプ だから`;
-  choose(all.filter((m) => m.category === 'attack' && m.attribute === input.attribute), attrWhy, AUTO);
-  if (slots[0]) slots[0].reason = attrWhy;
-
-  // 2つめ：タイプの とくい技
-  if (input.style && STYLE_RULES[input.style].need.length > 0) {
-    const sr = STYLE_RULES[input.style];
-    const before = slots.length;
-    choose(all.filter((m) => [...traitsOf(m)].some((t) => sr.need.includes(t))), sr.reason, AUTO);
-    if (slots[before]) slots[before].reason = sr.reason;
-  }
-
-  // 3つめ（〜）：絵に 合う 技
-  const attacksWanted = MOVES_PER_CHARACTER - supports;
-  for (let i = 0; i < 12 && picked.length < AUTO; i++) {
-    const cat = picked.filter((p) => p.category === 'attack').length < attacksWanted ? 'attack' : 'support';
-    choose(all.filter((m) => m.category === cat), cat === 'attack' ? 'つよそう だから' : 'たたかいを たすける ため', AUTO);
-  }
-  while (picked.length < AUTO) {
-    const rest = all.filter((m) => allowed(m) && !has(m) && !partnerNeed(m));
-    add(rest[Math.floor(rng() * rest.length)], 'なんとなく 気に入った から');
-  }
-
-  // 4つめ：えらぶ 候補（おなじ 強さ・ちがう 役わり・絵に 合う）
-  const choices: MoveSlot[] = [];
-  if (picked.length < MOVES_PER_CHARACTER) {
-    const pool = all
-      // まもる・かいふく だけの 技は 候補に しない（ながびく）
-      .filter((m) => usable(m) && !partnerNeed(m) && !isStall(m))
-      .filter((m) => moveValue(m.id) >= CHOICE_BAND[0] && moveValue(m.id) <= CHOICE_BAND[1])
-      .map((m) => ({ m, fit: fitOf(m, rules), jitter: rng() }))
-      .sort((a, b) => b.fit.score + b.jitter * 2 - (a.fit.score + a.jitter * 2));
-    const used = new Set(slots.map((x) => x.reason));
-    // いちばん 合う 技を 基準に、強さが ちかくて 役わりが ちがう 技を あと 2つ
-    for (const anchor of pool.slice(0, 6)) {
-      const v0 = moveValue(anchor.m.id);
-      const set = [anchor];
-      for (const c of pool) {
-        if (set.length >= 3) break;
-        if (set.some((x) => x.m.id === c.m.id || moveRole(x.m) === moveRole(c.m))) continue;
-        if (set.some((x) => Math.abs(moveValue(x.m.id) - moveValue(c.m.id)) > CHOICE_SPREAD)) continue;
-        if (Math.abs(moveValue(c.m.id) - v0) > CHOICE_SPREAD) continue;
-        set.push(c);
-      }
-      if (set.length === 3) {
-        for (const c of set) {
-          // 理由は 3まいで かさならない ように（なければ 役わりを 理由に）
-          const reason = c.fit.reasons.find((r) => !used.has(r)) ?? `${moveRole(c.m)}が できる`;
-          used.add(reason);
-          choices.push({ id: c.m.id, reason });
+  /** cands から 3まい。1まいめ＝いちばん 合う もの、のこり＝強さが ちかくて おなじ しゅるい・ちがう 役わり。 */
+  const pick3 = (cands: MoveDef[], fallbackReason: string, extra: MoveDef[] = []): MoveSlot[] => {
+    const rank = (list: MoveDef[]) =>
+      list
+        .filter((m) => !shown.has(m.id) && inBand(m) && !(m.charge && chargeShown))
+        // せいしつが おおい 技（のしかかり 等）が いつも 上に こないよう、せいしつの かずで ならす
+        .map((m) => ({ m, fit: fitOf(m, rules), score: fitOf(m, rules).score / Math.sqrt(Math.max(1, traitsOf(m).size)), jitter: rng() }))
+        .sort((a, b) => b.score + b.jitter * 2 - (a.score + a.jitter * 2));
+    const pool = rank(cands);
+    const backup = rank(extra.filter((m) => !cands.includes(m)));
+    // まず テーマの 技だけで そろえる。だめなら ふつうの 技で おぎなう
+    for (const fill of [pool, [...pool, ...backup]])
+    for (const spread of [CHOICE_SPREAD, CHOICE_SPREAD_WIDE]) {
+      for (const strictRole of [true, false]) {
+        for (const anchor of pool.slice(0, 4)) {
+          const set = [anchor];
+          for (const c of fill) {
+            if (set.length >= 3) break;
+            if (set.some((x) => x.m.id === c.m.id)) continue;
+            // 3まいは おなじ しゅるい（こうげき／ほじょ）。どれを えらんでも こうげきと ほじょの かずが かわらない
+            if (c.m.category !== anchor.m.category) continue;
+            if (c.m.charge && set.some((x) => x.m.charge)) continue;
+            if (strictRole && set.some((x) => moveRole(x.m) === moveRole(c.m))) continue;
+            if (set.some((x) => Math.abs(moveValue(x.m.id) - moveValue(c.m.id)) > spread)) continue;
+            set.push(c);
+          }
+          if (set.length === 3) {
+            return set.map((c) => {
+              shown.add(c.m.id);
+              if (c.m.charge) chargeShown = true;
+              const reason = c.fit.reasons.find((r) => !usedReasons.has(r)) ?? fallbackReason;
+              usedReasons.add(reason);
+              return { id: c.m.id, reason };
+            });
+          }
         }
-        break;
       }
     }
-    if (choices.length > 0) {
-      picked.push(MOVES[choices[0].id]);
-      slots.push(choices[0]);
-    } else {
-      // そろわない ときは えらばせずに 絵に 合う 技を 1つ
-      choose(all, 'つよそう だから', MOVES_PER_CHARACTER);
-      while (picked.length < MOVES_PER_CHARACTER) {
-        const rest = all.filter((m) => allowed(m) && !has(m) && !partnerNeed(m));
-        add(rest[Math.floor(rng() * rest.length)], 'なんとなく 気に入った から');
-      }
-    }
-  }
-  return { slots: slots.slice(0, MOVES_PER_CHARACTER), choices };
+    return [];
+  };
+
+  // パワータイプは ため技（大わざ）を パワーの 回の ために とっておく
+  if (input.style === 'power') chargeShown = true;
+  const rounds: MoveRound[] = [];
+  const attrWhy = `${ATTR_WORD[input.attribute]}タイプ だから`;
+  // 1回め：ぞくせいの わざ（たりなければ ふつうの こうげきも まぜる）
+  let r1 = pick3(base.filter((m) => m.category === 'attack' && m.attribute === input.attribute), attrWhy, base.filter((m) => m.category === 'attack' && !m.attribute));
+  r1 = r1.map((o) => ({ ...o, reason: MOVES[o.id].attribute ? attrWhy : o.reason }));
+  rounds.push({ title: `${ATTR_WORD[input.attribute]}の わざ`, options: r1 });
+  // 2回め：タイプの わざ
+  const sr = input.style ? STYLE_RULES[input.style] : null;
+  const styleCands = sr && sr.need.length > 0 ? base.filter((m) => [...traitsOf(m)].some((t) => sr.need.includes(t))) : base;
+  if (input.style === 'power') chargeShown = false;
+  const r2 = pick3(styleCands, sr?.reason ?? 'たたかいに つかえる から', base);
+  if (input.style === 'power') chargeShown = true;
+  rounds.push({ title: input.style ? `${STYLE_TITLE[input.style]}の わざ` : 'とくいな わざ', options: r2 });
+  // 3回め：えの とくちょう（AI の タグが あれば それに 合う もの）
+  const motifRules = (input.motifTags ?? []).map((t) => MOTIF_RULES[t]).filter(Boolean);
+  const motifCands = motifRules.length > 0 ? base.filter((m) => motifRules.some((r) => [...traitsOf(m)].some((t) => (r.traits[t] ?? 0) > 0))) : base;
+  const r3 = pick3(motifCands, 'えに あっている から', base);
+  rounds.push({ title: 'えの とくちょうの わざ', options: r3 });
+  // 4回め：すきな わざ
+  rounds.push({ title: 'すきな わざ', options: pick3(base, 'つかって みたい から') });
+
+  // そろわなかった 回は、のこりの 技から 3まい（強さだけ そろえる）
+  for (const r of rounds) if (r.options.length === 0) r.options = pick3(all.filter((m) => allowed(m) && !partnerNeed(m)), 'つかって みたい から');
+  const ok = rounds.filter((r) => r.options.length === 3);
+  const slots = ok.map((r) => r.options[0]);
+  return { slots, rounds: ok };
 }
+
+const STYLE_TITLE: Record<BattleStyle, string> = { power: 'パワー', guard: 'かたい', speed: 'すばやい', magic: 'まほう', balance: 'バランス' };
 
 /** 4つの 技（えらぶ 前の おすすめ）。 */
 export function assignMoveSet(input: AssignInput): MoveSlot[] {

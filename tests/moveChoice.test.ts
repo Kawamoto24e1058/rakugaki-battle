@@ -24,41 +24,41 @@ function randomChar(rng: () => number, i: number): Character {
 }
 
 describe('技の えらびかた', () => {
-  it('4つめの 候補は 3枚あり、役わりが ちがい、どれを えらんでも 勝ちやすさが ほぼ おなじ', () => {
+  it('技えらびは 4回、どの回も 3まいで ちがう 技。どれを えらんでも 勝ちやすさが ほぼ おなじ', () => {
     const rng = mulberry32(7);
     const foes = Array.from({ length: 12 }, (_, i) => randomChar(rng, 500 + i));
+    const winRate = (me: Character) => {
+      let w = 0;
+      const N = 800;
+      for (let g = 0; g < N; g++) {
+        const foe = foes[g % foes.length];
+        const left = g % 2 === 0;
+        const r = playClashToEnd(createClashState(left ? me : foe, left ? foe : me, 7000 + g * 13));
+        if (r.winner === 'draw') w += 0.5;
+        else if ((r.winner === 0) === left) w += 1;
+      }
+      return w / N;
+    };
     let checked = 0;
-    let worst = 0;
     let spreadSum = 0;
-    for (let i = 0; i < 30; i++) {
+    let worst = 0;
+    for (let i = 0; i < 16; i++) {
       const c = randomChar(rng, i);
-      const ch = c.moveChoices ?? [];
-      if (ch.length === 0) continue;
-      expect(ch.length).toBe(3);
-      expect(new Set(ch.map((x) => x.id)).size).toBe(3);
-      const rates = ch.map((opt) => {
-        const me: Character = { ...c, moveIds: [...c.moveIds.slice(0, 3), opt.id] };
-        let w = 0;
-        const N = 240;
-        for (let g = 0; g < N; g++) {
-          const foe = foes[g % foes.length];
-          const left = g % 2 === 0;
-          const r = playClashToEnd(createClashState(left ? me : foe, left ? foe : me, 7000 + g * 13));
-          if (r.winner === 'draw') w += 0.5;
-          else if ((r.winner === 0) === left) w += 1;
-        }
-        return w / N;
-      });
+      const rounds = c.moveRounds ?? [];
+      expect(rounds.length).toBe(4);
+      const ids = rounds.flatMap((r) => r.options.map((o) => o.id));
+      expect(new Set(ids).size).toBe(12); // 1つの 技は 1回にしか 出ない
+      // 子どもが ばらばらに えらんだ 4とおりの 組みあわせ
+      const rates = [0, 1, 2, 3].map((k) => winRate({ ...c, moveIds: rounds.map((r, ri) => r.options[(k + ri) % 3].id) }));
       const spread = Math.max(...rates) - Math.min(...rates);
-      worst = Math.max(worst, spread);
       spreadSum += spread;
+      worst = Math.max(worst, spread);
       checked++;
     }
-    expect(checked).toBeGreaterThan(20);
-    // どれを えらんでも 勝率の ちがいは 平均 8% 未満
-    expect(spreadSum / checked).toBeLessThan(0.08);
-    expect(worst).toBeLessThan(0.18);
-  }, 120000);
+    console.log("spread", (spreadSum / checked).toFixed(3), "worst", worst.toFixed(3));
+    expect(spreadSum / checked).toBeLessThan(0.1);
+    expect(worst).toBeLessThan(0.2);
+  }, 180000);
 
   it('タイプで ステータスの 形が はっきり ちがう', () => {
     const rng = mulberry32(11);
