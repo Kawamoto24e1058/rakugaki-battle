@@ -21,6 +21,7 @@ import { STATUS_META } from '../engine/status';
 import { sfx } from '../audio/sfx';
 import { MinigameIntro, MinigameStage, pickMinigame, type MgFighter, type MinigameOutcome } from '../minigames';
 import { MinigameScene } from './battle/MinigameScene';
+import { bgm } from '../audio/bgm';
 import { MessageBox } from './battle/MessageBox';
 import { RewardBanner } from './battle/RewardBanner';
 import type { Beat, Snap } from './battle/types';
@@ -151,6 +152,10 @@ export function BattleScene() {
   }
 
   const pinch = curBeat.hp.some((h, i) => h > 0 && h / maxHp[i] <= 0.3);
+  // ピンチに なったら BGM を すこし はやく
+  useEffect(() => {
+    bgm.setTempo(pinch ? 1.15 : 1);
+  }, [pinch]);
   const impact = curBeat.impact;
   const [soundOff, setSoundOff] = useState(sfx.isMuted());
   const stageLabel = phase === 'reveal' ? `ターン ${state.turn}：わざが きまるよ` : phase === 'mgIntro' || phase === 'minigame' ? `ターン ${state.turn}：${game.name}` : null;

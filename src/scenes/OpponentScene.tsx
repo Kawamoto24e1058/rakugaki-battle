@@ -1,6 +1,7 @@
 import { useGame } from '../store/gameStore';
-import { AttributeBadge } from '../components/bits';
+import { AttributeBadge, CharacterSprite } from '../components/bits';
 import { CPU_BLURBS } from '../data/cpuRoster';
+import { npcImage } from '../components/art/npcArt';
 
 export function OpponentScene() {
   const roster = useGame((s) => s.cpuRoster);
@@ -32,6 +33,9 @@ export function OpponentScene() {
             onClick={() => chooseCpu(cpu)}
             style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', textAlign: 'left', fontFamily: 'var(--font-body)' }}
           >
+            <span style={{ width: '4.2rem', height: '4.2rem', flexShrink: 0 }}>
+              <CharacterSprite imageUrl={npcImage(cpu.id)} attribute={cpu.attribute} name={cpu.name} />
+            </span>
             <span style={{ fontFamily: 'var(--font-display)', fontSize: '1.1rem', minWidth: '6rem' }}>{cpu.name}</span>
             <AttributeBadge attribute={cpu.attribute} size={0.85} />
             <span style={{ fontSize: '0.82rem', color: 'var(--ink-soft)' }}>{CPU_BLURBS[cpu.id]}</span>

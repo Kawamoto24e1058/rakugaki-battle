@@ -65,10 +65,22 @@ function noise(dur: number, vol: number, from: number, to: number, delay = 0): v
   src.start(t0);
 }
 
+/** BGM など ほかの 音から つかう（音を けしている ときは null）。 */
+export function audioContext(): AudioContext | null {
+  return ac();
+}
+const muteListeners = new Set<(m: boolean) => void>();
+/** 音の ON/OFF が かわったら よぶ。 */
+export function onMuteChange(f: (m: boolean) => void): () => void {
+  muteListeners.add(f);
+  return () => muteListeners.delete(f);
+}
+
 export const sfx = {
   isMuted: () => muted,
   setMuted(v: boolean) {
     muted = v;
+    muteListeners.forEach((f) => f(v));
     try {
       localStorage.setItem(KEY, v ? 'off' : 'on');
     } catch {

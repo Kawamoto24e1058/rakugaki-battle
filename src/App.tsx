@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useGame } from './store/gameStore';
 import { TitleScene } from './scenes/TitleScene';
 import { PrintTemplateScene } from './scenes/PrintTemplateScene';
@@ -11,6 +12,7 @@ import { CardGalleryScene } from './scenes/CardGalleryScene';
 import { CrayonDefs } from './components/art/CardArt';
 import { FxDemo } from './scenes/battle/FxDemo';
 import { MinigameDemo } from './minigames/MinigameDemo';
+import { bgm } from './audio/bgm';
 import { CardLab } from './components/art/CardLab';
 
 export default function App() {
@@ -48,6 +50,18 @@ export default function App() {
 
 function Screens() {
   const screen = useGame((s) => s.screen);
+  const lastWon = useGame((s) => s.lastWon);
+
+  // 場面ごとの BGM（バトルは バトルの 曲、結果は ジングルの あと ホームの 曲）
+  useEffect(() => {
+    if (screen === 'battle') bgm.play('battle');
+    else if (screen === 'result') {
+      bgm.jingle(lastWon === false ? 'lose' : 'win');
+      const t = window.setTimeout(() => bgm.play('home'), 3200);
+      return () => window.clearTimeout(t);
+    } else if (screen === 'print') bgm.play(null);
+    else bgm.play('home');
+  }, [screen, lastWon]);
 
   switch (screen) {
     case 'title':

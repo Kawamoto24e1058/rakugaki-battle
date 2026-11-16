@@ -3,6 +3,7 @@ import type { Character } from '../engine/types';
 import type { AnalyzeResult } from '../engine/analyze';
 import { makeCpuRoster } from '../data/cpuRoster';
 import { loadZukan, saveZukan } from './zukan';
+import { npcImage } from '../components/art/npcArt';
 
 export type Screen =
   | 'title'
@@ -103,8 +104,8 @@ export const useGame = create<GameState>((set, get) => ({
     const [a, b] = [roster[0], roster[3]];
     set({
       mode,
-      player: { character: a, imageUrl: null, analysis: { character: a } as unknown as AnalyzeResult },
-      opponent: { character: b, imageUrl: null, isCpu: mode === 'solo' },
+      player: { character: a, imageUrl: npcImage(a.id), analysis: { character: a } as unknown as AnalyzeResult },
+      opponent: { character: b, imageUrl: npcImage(b.id), isCpu: mode === 'solo' },
       runWins: 0,
       screen: 'battle',
     });
@@ -163,7 +164,7 @@ export const useGame = create<GameState>((set, get) => ({
   },
 
   chooseCpu: (character) =>
-    set({ opponent: { character, imageUrl: null, isCpu: true }, screen: 'battle' }),
+    set({ opponent: { character, imageUrl: npcImage(character.id), isCpu: true }, screen: 'battle' }),
 
   finishBattle: (won) => {
     // キャラは強化しない・記録も変えない。勝敗数はセッション内のカウントだけ。
