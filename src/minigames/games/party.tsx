@@ -41,7 +41,8 @@ export function Mole({ seed, cpu, cpuSkill, names, fighters, onFinish }: GamePro
   }, [seed]);
   const endAt = plan[plan.length - 1].at + plan[plan.length - 1].up + 300;
   const start = useRef(now());
-  const [t, setT] = useState(0);
+  // いま 出ている もぐら（かわった ときだけ 描きなおす。毎フレーム 描きなおすと 操作が おもくなる）
+  const [cur, setCur] = useState(-1);
   const hits = useRef<[Set<number>, Set<number>]>([new Set(), new Set()]);
   const misses = useRef<[number, number]>([0, 0]);
   const [tick, setTick] = useState(0);
@@ -70,20 +71,23 @@ export function Mole({ seed, cpu, cpuSkill, names, fighters, onFinish }: GamePro
     whack(p, i);
   });
   useEffect(() => {
-    let raf = 0;
-    const loop = () => {
-      const el = now() - start.current;
-      setT(el);
-      if (el >= endAt) {
-        if (!over.current) {
-          over.current = true;
-          const sc = (p: Player) => clamp((hits.current[p].size / MOLES) * 100 - misses.current[p] * 6);
-          onFinish([sc(0), sc(1)]);
-        }
-      } else raf = requestAnimationFrame(loop);
+    // 出ている もぐらは 30ms ごとに しらべて、かわった ときだけ 描きなおす
+    const id = window.setInterval(() => {
+      const c = current(now() - start.current);
+      setCur((p) => (p === c ? p : c));
+    }, 30);
+    const endT = window.setTimeout(() => {
+      window.clearInterval(id);
+      setCur(-1);
+      if (over.current) return;
+      over.current = true;
+      const sc = (p: Player) => clamp((hits.current[p].size / MOLES) * 100 - misses.current[p] * 6);
+      onFinish([sc(0), sc(1)]);
+    }, endAt);
+    return () => {
+      window.clearInterval(id);
+      window.clearTimeout(endT);
     };
-    raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useEffect(() => {
@@ -99,7 +103,6 @@ export function Mole({ seed, cpu, cpuSkill, names, fighters, onFinish }: GamePro
   }, [cpu, cpuSkill, seed]);
   void tick;
 
-  const cur = current(t);
   const side = (p: Player) => {
     const foe = fighters[p === 0 ? 1 : 0];
     return (
@@ -146,7 +149,7 @@ export function Mole({ seed, cpu, cpuSkill, names, fighters, onFinish }: GamePro
     );
   };
   return (
-    <Arena top={<TimeBar ms={Math.max(0, endAt - t)} total={endAt} label="でてきた あいてを たたけ！" />}>
+    <Arena top={<TimeBar startAt={start.current} total={endAt} label="でてきた あいてを たたけ！" />}>
       {side(0)}
       {side(1)}
     </Arena>

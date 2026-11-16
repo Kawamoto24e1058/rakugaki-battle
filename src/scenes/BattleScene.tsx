@@ -70,6 +70,16 @@ export function BattleScene() {
   const cpuSkill = Math.min(0.6, 0.25 + runWins * 0.07);
 
   const [phase, setPhase] = useState<Phase>('reveal');
+  // ミニゲームの 画面が ひらききったら、うしろの バトル画面は 止める（見えないのに 動きつづけて 操作が おもくなる）
+  const [covered, setCovered] = useState(false);
+  useEffect(() => {
+    if (phase !== 'mgIntro' && phase !== 'minigame') {
+      setCovered(false);
+      return;
+    }
+    const t = window.setTimeout(() => setCovered(true), 700);
+    return () => window.clearTimeout(t);
+  }, [phase]);
   const [beats, setBeats] = useState<Beat[]>([]);
   const [beatIdx, setBeatIdx] = useState(0);
   const pendingNext = useRef<ClashState | null>(null);
@@ -223,6 +233,7 @@ export function BattleScene() {
         />
       )}
 
+      {!covered && (
       <div style={{ width: '100%', maxWidth: '52rem', display: 'grid', gap: '0.4rem' }}>
         <div style={{ display: 'flex', gap: 'clamp(.8rem,4vw,2rem)' }}>
           {([0, 1] as Side[]).map((s) => (
@@ -240,6 +251,7 @@ export function BattleScene() {
           onNext={advance}
         />
       </div>
+      )}
 
       {phase === 'animating' ? (
         <div style={{ display: 'flex', gap: 5 }}>

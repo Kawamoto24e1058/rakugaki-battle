@@ -47,7 +47,6 @@ export function Cups({ seed, cpu, cpuSkill, names, fighters, onFinish }: GamePro
   const picks = useRef<[{ i: number; t: number } | null, { i: number; t: number } | null]>([null, null]);
   const [view, setView] = useState<[number | null, number | null]>([null, null]);
   const pickStart = useRef(0);
-  const [left, setLeft] = useState(CUP_PICK);
   const over = useRef(false);
   const finalSlots = useMemo(() => {
     const s = [...plan.start];
@@ -107,7 +106,6 @@ export function Cups({ seed, cpu, cpuSkill, names, fighters, onFinish }: GamePro
     if (phase !== 'pick') return;
     const id = window.setInterval(() => {
       const el = now() - pickStart.current;
-      setLeft(Math.max(0, CUP_PICK - el));
       if (el >= CUP_PICK) {
         window.clearInterval(id);
         end();
@@ -134,7 +132,7 @@ export function Cups({ seed, cpu, cpuSkill, names, fighters, onFinish }: GamePro
     <Arena
       top={
         <div style={{ display: 'grid', gap: 4 }}>
-          <TimeBar ms={phase === 'pick' ? left : phase === 'reveal' ? 0 : CUP_PICK} total={CUP_PICK} label={phase === 'show' ? 'よく みて！ どこに いるかな？' : phase === 'pick' ? 'じぶんの キャラは どこ？' : phase === 'reveal' ? 'こたえ！' : 'シャッフル！'} />
+          <TimeBar key={phase} startAt={phase === 'pick' ? pickStart.current : undefined} ms={phase === 'reveal' ? 0 : CUP_PICK} total={CUP_PICK} label={phase === 'show' ? 'よく みて！ どこに いるかな？' : phase === 'pick' ? 'じぶんの キャラは どこ？' : phase === 'reveal' ? 'こたえ！' : 'シャッフル！'} />
           <div style={{ position: 'relative', height: '8.5rem', border: '4px solid var(--ink)', borderRadius: 14, background: '#fff8e6', overflow: 'hidden' }}>
             {[0, 1, 2].map((item) => {
               const pos = posOf(item);

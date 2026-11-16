@@ -58,7 +58,6 @@ export function makeChoiceGame(make: (rng: Rng, fighters: [MgFighter, MgFighter]
     const studyMs = q.study?.ms ?? 0;
     const start = useRef(now());
     const [studying, setStudying] = useState(studyMs > 0);
-    const [left, setLeft] = useState(LIMIT);
     const picks = useRef<[{ i: number; t: number } | null, { i: number; t: number } | null]>([null, null]);
     const [view, setView] = useState<[number | null, number | null]>([null, null]);
     const [reveal, setReveal] = useState(false);
@@ -92,7 +91,6 @@ export function makeChoiceGame(make: (rng: Rng, fighters: [MgFighter, MgFighter]
       const st = studyMs > 0 ? window.setTimeout(() => setStudying(false), studyMs) : 0;
       const id = window.setInterval(() => {
         const el = now() - start.current - studyMs;
-        setLeft(Math.max(0, LIMIT - Math.max(0, el)));
         if (el >= LIMIT) {
           window.clearInterval(id);
           end();
@@ -134,7 +132,7 @@ export function makeChoiceGame(make: (rng: Rng, fighters: [MgFighter, MgFighter]
       <Arena
         top={
           <div style={{ display: 'grid', gap: 4 }}>
-            <TimeBar ms={left} total={LIMIT} label="" />
+            <TimeBar startAt={start.current + studyMs} total={LIMIT} label="" />
             <motion.div key={studying ? 's' : 'q'} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} style={{ textAlign: 'center', fontFamily: 'var(--font-display)', fontSize: '1.35rem', minHeight: '3rem', display: 'grid', placeItems: 'center' }}>
               {studying ? q.study!.node : q.prompt}
             </motion.div>
