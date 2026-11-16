@@ -15,7 +15,7 @@ export function Aura({ chips, side }: { chips: Chip[]; side: 0 | 1 }) {
       {frozen && (
         <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} style={{ position: 'absolute', inset: '-6%', zIndex: 4, pointerEvents: 'none' }}>
           <svg viewBox="-50 -50 100 100" width="100%" height="100%">
-            <g filter="url(#crayon)" opacity={0.78}>
+            <g opacity={0.78}>
               <g transform="scale(1.9)">{MOTIFS.iceblock(PALETTES.water)}</g>
             </g>
           </svg>
@@ -60,7 +60,7 @@ export function Aura({ chips, side }: { chips: Chip[]; side: 0 | 1 }) {
               title={c.jp}
             >
               <svg viewBox="-48 -48 96 96" width="100%" height="100%" style={{ overflow: 'visible' }}>
-                <g filter="url(#crayon)">{Draw && Draw(pal)}</g>
+                <g>{Draw && Draw(pal)}</g>
               </svg>
             </motion.div>
           );

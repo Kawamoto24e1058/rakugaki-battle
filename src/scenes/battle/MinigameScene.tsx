@@ -27,10 +27,12 @@ export function MinigameScene({ def, turn, names, children }: { def: MinigameDef
           position: 'absolute',
           left: '50%',
           top: '50%',
-          width: '220vmax',
-          height: '220vmax',
-          marginLeft: '-110vmax',
-          marginTop: '-110vmax',
+          width: '160vmax',
+          height: '160vmax',
+          marginLeft: '-80vmax',
+          marginTop: '-80vmax',
+          // まわすだけ なので GPU に まかせる（描きなおさない）
+          willChange: 'transform',
           background: `repeating-conic-gradient(${color}22 0deg 10deg, transparent 10deg 20deg)`,
           pointerEvents: 'none',
         }}

@@ -1,5 +1,6 @@
 import { ATTRIBUTE_META } from '../../engine/attributes';
 import type { MgFighter } from '../context';
+import { stickerNow } from '../../components/sticker';
 
 /** キャンバスの ミニゲームで つかう 道具。 */
 
@@ -23,7 +24,8 @@ export function loadFighterImages(fighters: [MgFighter, MgFighter]): (HTMLImageE
   return fighters.map((f) => {
     if (!f.image) return null;
     const im = new Image();
-    im.src = f.image;
+    // ステッカー画像（白い ふち つき・ふつうの 画像）を つかう。SVG を 毎フレーム 描くと おもい
+    im.src = stickerNow(f.image) ?? f.image;
     return im;
   });
 }

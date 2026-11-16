@@ -13,7 +13,7 @@ export function Fx({ fx }: { fx: FxSpec }) {
     return (
       <motion.div key={fx.id} style={layer}>
         <svg viewBox="-60 -50 120 100" width="100%" height="100%" style={{ overflow: 'visible' }}>
-          <g filter="url(#crayon)">
+          <g>
             {[0, 1].map((i) => (
               <motion.circle key={i} r={16} fill="none" stroke={pal.main} strokeWidth={4} initial={{ r: 12, opacity: 0.9 }} animate={{ r: 56, opacity: 0 }} transition={{ duration: 0.9, delay: i * 0.25 }} />
             ))}
@@ -36,7 +36,7 @@ export function Fx({ fx }: { fx: FxSpec }) {
       <motion.div key={fx.id} style={layer}>
         <svg viewBox="-60 -50 120 100" width="100%" height="100%" style={{ overflow: 'visible' }}>
           <motion.circle r={40} fill={pal.light} initial={{ opacity: 0.0, scale: 0.4 }} animate={{ opacity: [0, 0.45, 0], scale: [0.4, 1.3, 1.5] }} transition={{ duration: 1.1 }} />
-          <g filter="url(#crayon)">
+          <g>
             {fx.kind === 'charge'
               ? [1.9, 1.4, 0.95].map((s, i) => (
                   <motion.circle key={i} r={30 * s} fill="none" stroke={pal.main} strokeWidth={3} strokeDasharray="8 7" initial={{ opacity: 0, scale: 1.6 }} animate={{ opacity: [0, 0.9, 0.5], scale: [1.6, 1, 0.9] }} transition={{ duration: 1.2, delay: i * 0.18 }} />
@@ -66,7 +66,7 @@ export function Fx({ fx }: { fx: FxSpec }) {
             <circle r={16 * big} fill="#fffdf5" opacity={0.85} />
           </g>
         )}
-        <g filter="url(#crayon)">
+        <g>
           {Motifs.map((Draw, i) => (
             <g key={i} transform={`translate(${i === 0 ? 0 : 30} ${i === 0 ? 0 : -22}) scale(${(i === 0 ? 1.0 : 0.6) * (fx.crit ? 1.12 : 1)})`}>
               {Draw(pal)}

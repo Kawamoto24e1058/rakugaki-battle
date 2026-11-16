@@ -13,6 +13,8 @@ import { CrayonDefs } from './components/art/CardArt';
 import { FxDemo } from './scenes/battle/FxDemo';
 import { MinigameDemo } from './minigames/MinigameDemo';
 import { bgm } from './audio/bgm';
+import { NPC_ART } from './components/art/npcArt';
+import { stickerOf } from './components/sticker';
 import { CardLab } from './components/art/CardLab';
 
 export default function App() {
@@ -51,6 +53,11 @@ export default function App() {
 function Screens() {
   const screen = useGame((s) => s.screen);
   const lastWon = useGame((s) => s.lastWon);
+
+  // NPC の 絵は 先に ステッカー画像に しておく（バトル中に つくると カクつく）
+  useEffect(() => {
+    for (const u of Object.values(NPC_ART)) void stickerOf(u);
+  }, []);
 
   // 場面ごとの BGM（バトルは バトルの 曲、結果は ジングルの あと ホームの 曲）
   useEffect(() => {

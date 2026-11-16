@@ -11,7 +11,7 @@ export type SongId = 'home' | 'battle';
 export type JingleId = 'win' | 'lose';
 
 /** 音量（効果音より ひかえめ）。 */
-const VOL = 0.16;
+const VOL = 0.07;
 
 /** 8分音符の ならび。'-'＝のばす、'.'＝やすみ。 */
 type Bar = string;
@@ -102,6 +102,18 @@ function note(c: AudioContext, freq: number, t: number, dur: number, type: Oscil
   o.stop(t + dur + 0.02);
 }
 
+/** ノイズの 音（毎回 つくると おもいので 1回だけ つくって つかいまわす）。 */
+let noiseBuf: AudioBuffer | null = null;
+function noiseBuffer(c: AudioContext): AudioBuffer {
+  if (!noiseBuf || noiseBuf.sampleRate !== c.sampleRate) {
+    const len = Math.floor(c.sampleRate * 0.2);
+    noiseBuf = c.createBuffer(1, len, c.sampleRate);
+    const d = noiseBuf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+  }
+  return noiseBuf;
+}
+
 function drum(c: AudioContext, kind: 'kick' | 'snare' | 'hat', t: number) {
   if (kind === 'kick') {
     const o = c.createOscillator();
@@ -116,12 +128,8 @@ function drum(c: AudioContext, kind: 'kick' | 'snare' | 'hat', t: number) {
     return;
   }
   const dur = kind === 'snare' ? 0.12 : 0.04;
-  const len = Math.max(1, Math.floor(c.sampleRate * dur));
-  const buf = c.createBuffer(1, len, c.sampleRate);
-  const d = buf.getChannelData(0);
-  for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
   const src = c.createBufferSource();
-  src.buffer = buf;
+  src.buffer = noiseBuffer(c);
   const f = c.createBiquadFilter();
   f.type = kind === 'snare' ? 'bandpass' : 'highpass';
   f.frequency.value = kind === 'snare' ? 1800 : 7000;
@@ -130,6 +138,7 @@ function drum(c: AudioContext, kind: 'kick' | 'snare' | 'hat', t: number) {
   g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
   src.connect(f).connect(g).connect(out(c));
   src.start(t);
+  src.stop(t + dur + 0.01);
 }
 
 /** 1つの 16分音符ぶんを ならす。 */

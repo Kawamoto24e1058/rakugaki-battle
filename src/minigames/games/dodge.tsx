@@ -4,6 +4,7 @@ import type { Attribute } from '../../engine/types';
 import { ATTRIBUTE_META } from '../../engine/attributes';
 import { Arena, Half, P_COLOR } from '../Arena';
 import { usePads } from '../pads';
+import { loadFighterImages } from './canvasKit';
 import { sfx } from '../../audio/sfx';
 import type { GameProps, Player } from '../types';
 import { cpuSteer, dodgeScore, DURATION, H, HIT_R, liveAt, LIVES, makeBullets, newSoul, stepSoul, W, type LiveBullet, type Soul } from './dodgeSim';
@@ -100,12 +101,7 @@ export function Dodge({ seed, cpu, cpuSkill, names, fighters, onFinish }: GamePr
 
   useEffect(() => {
     const bullets = makeBullets(seed);
-    const imgs = fighters.map((f) => {
-      if (!f.image) return null;
-      const im = new Image();
-      im.src = f.image;
-      return im;
-    });
+    const imgs = loadFighterImages(fighters);
     const rng = mulberry32((seed * 7 + 3) >>> 0);
     const start = performance.now();
     let last = start;

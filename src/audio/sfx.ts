@@ -4,7 +4,7 @@
  */
 const KEY = 'rakugaki.sound';
 /** 全体の音量（展示で うるさくならないよう控えめ）。 */
-const MASTER = 0.5;
+const MASTER = 0.3;
 let ctx: AudioContext | null = null;
 let muted = false;
 try {

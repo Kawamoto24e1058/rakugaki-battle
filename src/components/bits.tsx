@@ -2,6 +2,7 @@ import type { CSSProperties } from 'react';
 import { motion } from 'framer-motion';
 import type { Character, Stats } from '../engine/types';
 import { ATTRIBUTE_META } from '../engine/attributes';
+import { useSticker } from './sticker';
 
 export function AttributeBadge({ attribute, size = 1 }: { attribute: Character['attribute']; size?: number }) {
   const meta = ATTRIBUTE_META[attribute];
@@ -126,19 +127,19 @@ export function CharacterSprite({
   flip?: boolean;
 }) {
   const meta = ATTRIBUTE_META[attribute];
+  // ステッカーふう（白い ふち＋かげ）は 1回だけ 画像に 焼きこんで つかう（CSS の かげは 毎フレーム 描きなおしで カクつく）
+  const sticker = useSticker(imageUrl);
   if (imageUrl) {
     return (
       <img
-        src={imageUrl}
+        src={sticker ?? imageUrl}
         alt={name}
+        draggable={false}
         style={{
           width: '100%',
           height: '100%',
           objectFit: 'contain',
           transform: flip ? 'scaleX(-1)' : undefined,
-          // ステッカーふう：白い ふち（4方向）＋ かげ。切り抜きの ガタつきも かくれる
-          filter:
-            'drop-shadow(2px 0 0 #fff) drop-shadow(-2px 0 0 #fff) drop-shadow(0 2px 0 #fff) drop-shadow(0 -2px 0 #fff) drop-shadow(0 0 0.5px rgba(51,48,43,0.5)) drop-shadow(3px 4px 0 rgba(51,48,43,0.22))',
           ...style,
         }}
       />
