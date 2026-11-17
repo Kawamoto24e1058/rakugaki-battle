@@ -24,6 +24,7 @@ import { MinigameScene } from './battle/MinigameScene';
 import { bgm } from '../audio/bgm';
 import { MessageBox } from './battle/MessageBox';
 import { RewardBanner } from './battle/RewardBanner';
+import { BattleFinale, headline, type Outcome } from './battle/Finale';
 import type { Beat, Snap } from './battle/types';
 
 /** reveal＝このターンの技が きまる → mgIntro＝ミニゲームの しょうかい → minigame＝ミニゲーム → animating＝こうげきの演出 → over */
@@ -124,11 +125,8 @@ export function BattleScene() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, beatIdx, beats]);
 
-  useEffect(() => {
-    if (phase !== 'over') return;
-    const t = window.setTimeout(() => finishBattle(state.winner === 0), 400);
-    return () => window.clearTimeout(t);
-  }, [phase, state.winner, finishBattle]);
+  // おわりの 画面は おすまで（または 7びょう）のこす
+  const toResult = useCallback(() => finishBattle(state.winner === 0, state.winner === 'draw'), [finishBattle, state.winner]);
 
   const onMinigameDone = useCallback(
     (o: MinigameOutcome) => {
@@ -221,7 +219,9 @@ export function BattleScene() {
         )}
       </AnimatePresence>
       <AnimatePresence>{curBeat.reward && <RewardBanner key={`rw-${turnKey}`} winner={curBeat.reward.winner} perfect={curBeat.reward.perfect} names={names} chars={chars} images={images} />}</AnimatePresence>
-      {curBeat.win != null && <VictoryOverlay name={names[curBeat.win]} char={chars[curBeat.win]} image={images[curBeat.win]} />}
+      {(curBeat.win != null || phase === 'over') && (
+        <BattleFinale key="finale" winner={curBeat.win ?? (state.winner as Outcome)} cpu={cpu} names={names} chars={chars} images={images} onNext={phase === 'over' ? toResult : undefined} />
+      )}
       {curBeat.koseiAct && (
         <KoseiCutIn
           key={beatIdx}
@@ -246,7 +246,7 @@ export function BattleScene() {
         {/* 実況の まど（ポケモン風）。おすと はやおくり */}
         <MessageBox
           key={phase === 'animating' ? `b-${turnKey}-${beatIdx}` : `p-${phase}`}
-          text={phase === 'animating' ? curBeat.banner : phase === 'over' ? (state.winner === 'draw' ? 'ひきわけ！' : `${names[state.winner as Side]}の かち！`) : ''}
+          text={phase === 'animating' ? curBeat.banner : phase === 'over' ? headline(state.winner as Outcome, cpu) : ''}
           active={phase === 'animating'}
           onNext={advance}
         />
@@ -260,7 +260,7 @@ export function BattleScene() {
           ))}
         </div>
       ) : phase === 'over' ? (
-        <div style={{ fontSize: '0.9rem', opacity: 0.7 }}>けっかへ…</div>
+        <div style={{ fontSize: '0.9rem', opacity: 0.7 }}> </div>
       ) : (
         <div style={{ width: '100%', maxWidth: '52rem', display: 'grid', gap: '0.4rem', justifyItems: 'center' }}>
           {recap && <TurnRecap recap={recap} names={names} />}
@@ -382,107 +382,6 @@ function KoseiCutIn({
           {fullName}
         </div>
         <div style={{ fontSize: 'clamp(0.9rem,3vw,1.1rem)', color: '#fff', fontWeight: 700 }}>「{moveName}」</div>
-      </motion.div>
-    </div>
-  );
-}
-
-/** 勝利演出：紙吹雪 ＋ 大きな「かち！」＋ 勝者スプライトが跳ねる。 */
-function VictoryOverlay({ name, char, image }: { name: string; char: Character; image: string | null }) {
-  const COLORS = ['#e8503a', '#f2b705', '#1f9d63', '#3b82f6', '#7b5cf0', '#ec6a9c'];
-  const bits = useMemo(
-    () =>
-      Array.from({ length: 34 }, (_, i) => ({
-        id: i,
-        x: Math.random() * 100,
-        delay: Math.random() * 0.7,
-        dur: 1.6 + Math.random() * 1.4,
-        rot: Math.random() * 720 - 360,
-        color: COLORS[i % COLORS.length],
-        size: 8 + Math.random() * 8,
-      })),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [],
-  );
-  return (
-    <div
-      style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: 45,
-        pointerEvents: 'none',
-        overflow: 'hidden',
-        display: 'grid',
-        placeItems: 'center',
-        background: 'radial-gradient(circle at 50% 40%, rgba(242,183,5,.28), rgba(0,0,0,.28))',
-      }}
-    >
-      {bits.map((b) => (
-        <motion.div
-          key={b.id}
-          initial={{ y: '-12vh', x: `${b.x}vw`, rotate: 0, opacity: 1 }}
-          animate={{ y: '110vh', rotate: b.rot, opacity: [1, 1, 0.6] }}
-          transition={{ duration: b.dur, delay: b.delay, repeat: Infinity, ease: 'linear' }}
-          style={{
-            position: 'absolute',
-            left: 0,
-            top: 0,
-            width: b.size,
-            height: b.size * 0.6,
-            background: b.color,
-            borderRadius: 2,
-          }}
-        />
-      ))}
-
-      <motion.div
-        initial={{ scale: 0.2, rotate: -12, opacity: 0 }}
-        animate={{ scale: [0.2, 1.25, 1], rotate: [-12, 6, 0], opacity: 1 }}
-        transition={{ type: 'spring', stiffness: 200, damping: 12 }}
-        style={{ display: 'grid', placeItems: 'center', gap: '0.8rem' }}
-      >
-        <motion.div
-          animate={{ y: [0, -16, 0] }}
-          transition={{ repeat: Infinity, duration: 0.7, ease: 'easeInOut' }}
-          style={{
-            width: 'min(40vw, 170px)',
-            aspectRatio: '1',
-            background: '#fff',
-            border: '4px solid var(--ink)',
-            borderRadius: 14,
-            padding: 8,
-            transform: 'rotate(-2deg)',
-            boxShadow: '0 0 0 8px rgba(242,183,5,.85), 0 14px 34px rgba(0,0,0,.35)',
-          }}
-        >
-          <CharacterSprite imageUrl={image} attribute={char.attribute} name={name} />
-        </motion.div>
-        <div
-          style={{
-            fontFamily: 'var(--font-display)',
-            fontWeight: 900,
-            fontSize: 'clamp(2rem, 9vw, 3.4rem)',
-            color: '#fff',
-            WebkitTextStroke: '4px var(--ink)',
-            paintOrder: 'stroke',
-          }}
-        >
-          {name} の かち！
-        </div>
-        <div
-          style={{
-            fontFamily: 'var(--font-display)',
-            fontSize: 'clamp(1rem, 3.6vw, 1.4rem)',
-            color: 'var(--ink)',
-            background: '#fff',
-            border: '3px solid var(--ink)',
-            borderRadius: 10,
-            padding: '0.15em 0.9em',
-            boxShadow: '3px 4px 0 rgba(0,0,0,.2)',
-          }}
-        >
-          おめでとう！
-        </div>
       </motion.div>
     </div>
   );

@@ -53,6 +53,8 @@ export default function App() {
 function Screens() {
   const screen = useGame((s) => s.screen);
   const lastWon = useGame((s) => s.lastWon);
+  const lastDraw = useGame((s) => s.lastDraw);
+  const versus = useGame((s) => s.mode === 'versus');
 
   // NPC の 絵は 先に ステッカー画像に しておく（バトル中に つくると カクつく）
   useEffect(() => {
@@ -63,12 +65,13 @@ function Screens() {
   useEffect(() => {
     if (screen === 'battle') bgm.play('battle');
     else if (screen === 'result') {
-      bgm.jingle(lastWon === false ? 'lose' : 'win');
+      // ふたりで あそぶ ときは だれかが かつので かちの ジングル（ひきわけ だけ まけの ほう）
+      bgm.jingle(lastDraw || (!versus && lastWon === false) ? 'lose' : 'win');
       const t = window.setTimeout(() => bgm.play('home'), 3200);
       return () => window.clearTimeout(t);
     } else if (screen === 'print') bgm.play(null);
     else bgm.play('home');
-  }, [screen, lastWon]);
+  }, [screen, lastWon, lastDraw, versus]);
 
   switch (screen) {
     case 'title':

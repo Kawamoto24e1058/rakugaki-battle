@@ -1,12 +1,11 @@
-import { motion } from 'framer-motion';
 import { useGame } from '../store/gameStore';
-import { CharacterSprite } from '../components/bits';
+import { Headline, ResultCards, type Outcome } from './battle/Finale';
 
 export function ResultScene() {
   const mode = useGame((s) => s.mode);
   const won = useGame((s) => s.lastWon);
   const player = useGame((s) => s.player);
-  const pending = useGame((s) => s.pendingChallenger);
+  const opponent = useGame((s) => s.opponent);
   const runWins = useGame((s) => s.runWins);
   const runBattles = useGame((s) => s.runBattles);
   const nextRound = useGame((s) => s.nextRound);
@@ -18,21 +17,25 @@ export function ResultScene() {
     reset();
   }
 
+  const draw = useGame((s) => s.lastDraw);
+  const winner: Outcome = draw ? 'draw' : won ? 0 : 1;
+  const cards =
+    player && opponent ? (
+      <ResultCards
+        winner={winner}
+        cpu={mode !== 'versus'}
+        names={[player.character.name, opponent.character.name]}
+        chars={[player.character, opponent.character]}
+        images={[player.imageUrl, opponent.imageUrl]}
+      />
+    ) : null;
+
   if (mode === 'versus') {
-    // side 0 = player（ふたりめ）, side 1 = pendingChallenger（ひとりめ）
-    const winnerName = won ? player?.character.name : pending?.character.name;
+    // side 0 = P1, side 1 = P2（バトル画面と おなじ ならび）
     return (
-      <div className="scene" style={{ justifyContent: 'center' }}>
-        <motion.h2
-          initial={{ scale: 0.5, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          style={{ fontSize: '2rem', color: 'var(--crayon-red)' }}
-        >
-          {winnerName ? `${winnerName} の かち！` : 'あいこ！'}
-        </motion.h2>
-        <p style={{ color: 'var(--ink-soft)' }}>
-          {pending?.character.name} vs {player?.character.name}
-        </p>
+      <div className="scene" style={{ justifyContent: 'center', gap: '1.4rem' }}>
+        <Headline winner={winner} cpu={false} />
+        {cards}
         <button className="crayon-btn primary big" onClick={reset}>
           タイトルに もどる
         </button>
@@ -43,32 +46,8 @@ export function ResultScene() {
   // ソロ：強化なし。勝敗のカウントだけ見せて、つぎの相手 or おわる。
   return (
     <div className="scene" style={{ justifyContent: 'center', gap: '1rem' }}>
-      <motion.div
-        initial={{ scale: 0.4, rotate: -8, opacity: 0 }}
-        animate={{ scale: [0.4, 1.15, 1], rotate: [-8, 4, 0], opacity: 1 }}
-        transition={{ type: 'spring', stiffness: 200, damping: 12 }}
-        style={{
-          fontFamily: 'var(--font-display)',
-          fontWeight: 900,
-          fontSize: '2.4rem',
-          color: won ? 'var(--crayon-green)' : 'var(--crayon-blue)',
-        }}
-      >
-        {won ? 'かった！' : 'まけちゃった…'}
-      </motion.div>
-
-      {player && (
-        <div
-          className="sketch-card"
-          style={{ width: 'min(9rem, 34vw)', aspectRatio: '1', padding: 8, background: '#fff' }}
-        >
-          <CharacterSprite
-            imageUrl={player.imageUrl}
-            attribute={player.character.attribute}
-            name={player.character.name}
-          />
-        </div>
-      )}
+      <Headline winner={winner} cpu />
+      {cards}
 
       <div
         className="sketch-card"

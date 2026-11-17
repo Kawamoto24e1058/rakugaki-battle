@@ -43,6 +43,8 @@ interface GameState {
   runWins: number;
   runBattles: number;
   lastWon: boolean | null;
+  /** さいごの バトルが ひきわけ だったか。 */
+  lastDraw: boolean;
 
   zukan: Character[];
   cpuRoster: Character[];
@@ -62,7 +64,7 @@ interface GameState {
   chooseMove: (round: number | null, id?: string) => void;
   confirmReveal: () => void;
   chooseCpu: (character: Character) => void;
-  finishBattle: (won: boolean) => void;
+  finishBattle: (won: boolean, draw?: boolean) => void;
   nextRound: () => void;
   savePlayerToZukan: () => void;
 }
@@ -76,6 +78,7 @@ export const useGame = create<GameState>((set, get) => ({
   runWins: 0,
   runBattles: 0,
   lastWon: null,
+  lastDraw: false,
   zukan: loadZukan(),
   cpuRoster: makeCpuRoster(),
 
@@ -88,6 +91,7 @@ export const useGame = create<GameState>((set, get) => ({
       runWins: 0,
       runBattles: 0,
       lastWon: null,
+      lastDraw: false,
     }),
 
   startSolo: () =>
@@ -166,10 +170,11 @@ export const useGame = create<GameState>((set, get) => ({
   chooseCpu: (character) =>
     set({ opponent: { character, imageUrl: npcImage(character.id), isCpu: true }, screen: 'battle' }),
 
-  finishBattle: (won) => {
+  finishBattle: (won, draw = false) => {
     // キャラは強化しない・記録も変えない。勝敗数はセッション内のカウントだけ。
     set((s) => ({
       lastWon: won,
+      lastDraw: draw,
       runWins: won ? s.runWins + 1 : s.runWins,
       runBattles: s.runBattles + 1,
       screen: 'result',
