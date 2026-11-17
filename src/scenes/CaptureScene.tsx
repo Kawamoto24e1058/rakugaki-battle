@@ -58,7 +58,6 @@ async function analyzeWithAI(
       body: JSON.stringify({
         imageBase64: base64,
         mediaType,
-        hints: { attribute: 'auto', weapon: 'auto' },
       }),
     });
     const j = (await resp.json()) as { ok?: boolean; ai?: unknown };

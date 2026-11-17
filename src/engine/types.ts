@@ -49,7 +49,7 @@ export type StatusKind =
   | 'bond'
   | 'endure';
 
-/** 持ち物（用紙のチェック欄／解析）。 */
+/** 持ち物（絵から 解析）。 */
 export type Weapon = 'sword' | 'wand' | 'shield' | 'wing';
 
 /** 解析の根拠。リビール画面でそのまま表示する。 */

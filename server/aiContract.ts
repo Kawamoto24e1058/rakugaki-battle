@@ -141,8 +141,7 @@ bodyType には体つきの一言（「戦車のようにゴツい」など）�
 - spikiness / symmetry / fillDensity / saturation / brightness / coverage / aspectRatio / colorCount / eyeCount：見たまま素直に。
 - name は毎回ユニークで、そのキャラらしいカタカナ名。
 - flavor と revealNotes は子ども向けのやさしい日本語。revealNotes には「なぜ こうげきが高い/すばやい のか」も具体物つきで入れる。
-- どんな落書き・簡単な絵・抽象的な絵でも必ず推定する。拒否しない。
-- 用紙のチェック欄（ヒント）が渡されたら、それを優先して合わせる。`;
+- どんな落書き・簡単な絵・抽象的な絵でも必ず推定する。拒否しない。`;
 
 /** 出力が最低限の形をしているか（詳細な clamp はクライアント側 coerceAiFeatures）。 */
 export function looksLikeAiFeatures(raw: unknown): boolean {

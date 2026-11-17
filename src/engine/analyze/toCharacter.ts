@@ -7,7 +7,7 @@ import { assignKosei, getKosei, koseiTitle } from '../personalities';
 import { mulberry32, randInt, type Rng } from '../rng';
 import { clamp01, type FeatureVector } from './features';
 
-/** 用紙のチェック欄などから来る手動指定（あれば解析より優先）。 */
+/** 手動指定（テスト用。あれば解析より優先）。 */
 export interface AnalysisOverrides {
   attribute?: Attribute;
   weapon?: Weapon;

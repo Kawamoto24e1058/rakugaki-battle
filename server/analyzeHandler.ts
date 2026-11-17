@@ -18,7 +18,6 @@ import {
 export interface AnalyzeRequest {
   imageBase64: string;
   mediaType: string;
-  hints?: { attribute?: string; weapon?: string };
 }
 export interface AnalyzeResponse {
   ok: boolean;
@@ -28,13 +27,7 @@ export interface AnalyzeResponse {
   via?: 'groq' | 'gemini' | 'mock';
 }
 
-function hintText(hints?: AnalyzeRequest['hints']): string {
-  const parts: string[] = [];
-  if (hints?.attribute && hints.attribute !== 'auto') parts.push(`用紙のチェック欄：属性は「${hints.attribute}」`);
-  if (hints?.weapon && hints.weapon !== 'auto') parts.push(`用紙のチェック欄：持ち物は「${hints.weapon}」`);
-  const base = 'この絵のキャラクターの特徴を報告してください。';
-  return parts.length ? `${base}\n${parts.join('\n')}` : base;
-}
+const ASK_TEXT = 'この絵のキャラクターの特徴を報告してください。';
 
 function stripFences(s: string): string {
   const m = s.match(/```(?:json)?\s*([\s\S]*?)```/);
@@ -51,12 +44,11 @@ function mockFeatures(req: AnalyzeRequest): Record<string, unknown> {
   }
   const r = (n: number) => ((h = Math.imul(h ^ (h >>> 15), 2246822519) >>> 0) % n) / n;
   const attrs = ['fire', 'water', 'wood', 'bolt', 'dark'];
-  const attribute =
-    req.hints?.attribute && req.hints.attribute !== 'auto' ? req.hints.attribute : attrs[Math.floor(r(5) * 5)];
+  const attribute = attrs[Math.floor(r(5) * 5)];
   return {
     attribute,
     attributeReason: '(mock) いろの かんじ から',
-    weapon: req.hints?.weapon && req.hints.weapon !== 'auto' ? req.hints.weapon : 'none',
+    weapon: 'none',
     aspectRatio: 0.6 + r(10) * 0.9,
     coverage: 0.2 + r(10) * 0.6,
     spikiness: r(10),
@@ -108,7 +100,7 @@ async function callGroq(req: AnalyzeRequest, key: string, repair?: string): Prom
         {
           role: 'user',
           content: [
-            { type: 'text', text: hintText(req.hints) + (repair ? `\n\n（前回エラー：${repair}）` : '') },
+            { type: 'text', text: ASK_TEXT + (repair ? `\n\n（前回エラー：${repair}）` : '') },
             { type: 'image_url', image_url: { url: `data:${req.mediaType};base64,${req.imageBase64}` } },
           ],
         },
@@ -139,7 +131,7 @@ async function callGemini(req: AnalyzeRequest, key: string, repair?: string): Pr
           role: 'user',
           parts: [
             { inlineData: { mimeType: req.mediaType, data: req.imageBase64 } },
-            { text: hintText(req.hints) + (repair ? `\n\n（前回エラー：${repair}）` : '') },
+            { text: ASK_TEXT + (repair ? `\n\n（前回エラー：${repair}）` : '') },
           ],
         },
       ],
