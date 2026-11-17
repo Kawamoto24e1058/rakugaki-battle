@@ -24,7 +24,7 @@ import { MinigameScene } from './battle/MinigameScene';
 import { bgm } from '../audio/bgm';
 import { MessageBox } from './battle/MessageBox';
 import { RewardBanner } from './battle/RewardBanner';
-import { BattleFinale, headline, type Outcome } from './battle/Finale';
+import { BattleFinale, KoSequence, headline, type Outcome } from './battle/Finale';
 import type { Beat, Snap } from './battle/types';
 
 /** reveal＝このターンの技が きまる → mgIntro＝ミニゲームの しょうかい → minigame＝ミニゲーム → animating＝こうげきの演出 → over */
@@ -111,8 +111,9 @@ export function BattleScene() {
     else if (b.fx?.kind === 'status') sfx.status();
     else if (b.impact === 'どかん！') sfx.release();
     else if (b.callout && b.acting != null) sfx.callout();
-    if (b.win != null) sfx.win();
-    else if (b.hp.some((h) => h <= 0) && b.fx?.kind === 'hit') window.setTimeout(() => sfx.ko(), 250);
+    if (b.win != null) {
+      /* 決着の 音は KoSequence が 鳴らす */
+    } else if (b.hp.some((h) => h <= 0) && b.fx?.kind === 'hit') window.setTimeout(() => sfx.ko(), 250);
   }, [phase, beatIdx, beats]);
 
   // 演出は各場面を beat.ms だけ見せて、自動で次へ切り替わる。
@@ -219,9 +220,8 @@ export function BattleScene() {
         )}
       </AnimatePresence>
       <AnimatePresence>{curBeat.reward && <RewardBanner key={`rw-${turnKey}`} winner={curBeat.reward.winner} perfect={curBeat.reward.perfect} names={names} chars={chars} images={images} />}</AnimatePresence>
-      {(curBeat.win != null || phase === 'over') && (
-        <BattleFinale key="finale" winner={curBeat.win ?? (state.winner as Outcome)} cpu={cpu} names={names} chars={chars} images={images} onNext={phase === 'over' ? toResult : undefined} />
-      )}
+      {curBeat.win != null && <KoSequence key={`ko-${turnKey}`} winner={curBeat.win} names={names} chars={chars} images={images} />}
+      {phase === 'over' && <BattleFinale key="finale" winner={state.winner as Outcome} cpu={cpu} names={names} chars={chars} images={images} onNext={toResult} />}
       {curBeat.koseiAct && (
         <KoseiCutIn
           key={beatIdx}
@@ -247,7 +247,7 @@ export function BattleScene() {
         <MessageBox
           key={phase === 'animating' ? `b-${turnKey}-${beatIdx}` : `p-${phase}`}
           text={phase === 'animating' ? curBeat.banner : phase === 'over' ? headline(state.winner as Outcome, cpu) : ''}
-          active={phase === 'animating'}
+          active={phase === 'animating' && curBeat.win == null}
           onNext={advance}
         />
       </div>

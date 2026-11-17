@@ -137,6 +137,16 @@ export const sfx = {
     tone(420, 0.12, 'square', 0.05, 280);
     tone(330, 0.14, 'square', 0.05, 220, 0.1);
   },
+  /** 決着！（どーん＋かねの ひびき）。 */
+  finish() {
+    noise(0.7, 0.5, 2500, 60);
+    tone(70, 0.8, 'sine', 0.35, 30);
+    [392, 523, 784].forEach((f) => tone(f, 1.4, 'triangle', 0.05, f * 0.98, 0.12));
+  },
+  /** キラーン（とおくへ とんでいく）。 */
+  twinkle() {
+    [1568, 2093, 2637].forEach((f, i) => tone(f, 0.18, 'triangle', 0.05, undefined, i * 0.06));
+  },
   ko() {
     tone(500, 0.6, 'triangle', 0.1, 70);
   },
