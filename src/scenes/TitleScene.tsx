@@ -6,6 +6,7 @@ export function TitleScene() {
   const openZukan = useGame((s) => s.openZukan);
   const openPrintTemplate = useGame((s) => s.openPrintTemplate);
   const openCards = useGame((s) => s.openCards);
+  const openBadges = useGame((s) => s.openBadges);
   const devQuickBattle = useGame((s) => s.devQuickBattle);
   const zukanCount = useGame((s) => s.zukan.length);
 
@@ -37,6 +38,9 @@ export function TitleScene() {
         </button>
         <button className="crayon-btn" onClick={openPrintTemplate}>
           したがきようしを いんさつ
+        </button>
+        <button className="crayon-btn" onClick={openBadges}>
+          かんバッジを いんさつ
         </button>
         <button
           className="crayon-btn"

@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useGame } from './store/gameStore';
 import { TitleScene } from './scenes/TitleScene';
+import { BadgePrintScene } from './scenes/BadgePrintScene';
 import { PrintTemplateScene } from './scenes/PrintTemplateScene';
 import { CaptureScene } from './scenes/CaptureScene';
 import { RevealScene } from './scenes/RevealScene';
@@ -65,7 +66,7 @@ function Screens() {
       // ジングルは バトルの おわりの 画面で 鳴らしずみ。のこりが おわったら ホームの 曲
       const t = window.setTimeout(() => bgm.play('home'), 1500);
       return () => window.clearTimeout(t);
-    } else if (screen === 'print') bgm.play(null);
+    } else if (screen === 'print' || screen === 'badge') bgm.play(null);
     else bgm.play('home');
   }, [screen]);
 
@@ -74,6 +75,8 @@ function Screens() {
       return <TitleScene />;
     case 'print':
       return <PrintTemplateScene />;
+    case 'badge':
+      return <BadgePrintScene />;
     case 'capture':
       return <CaptureScene />;
     case 'reveal':

@@ -3,11 +3,13 @@ import type { Character } from '../engine/types';
 import type { AnalyzeResult } from '../engine/analyze';
 import { makeCpuRoster } from '../data/cpuRoster';
 import { loadZukan, saveZukan } from './zukan';
+import { saveDrawing } from './drawings';
 import { npcImage } from '../components/art/npcArt';
 
 export type Screen =
   | 'title'
   | 'print'
+  | 'badge'
   | 'capture'
   | 'reveal'
   | 'opponent'
@@ -56,6 +58,7 @@ interface GameState {
   openZukan: () => void;
   openPrintTemplate: () => void;
   openCards: () => void;
+  openBadges: () => void;
   devQuickBattle: (mode: Mode) => void;
   setCaptured: (slot: CapturedSlot) => void;
   /** リビール画面で名前を手直しする。 */
@@ -102,6 +105,7 @@ export const useGame = create<GameState>((set, get) => ({
   openZukan: () => set({ screen: 'zukan', zukan: loadZukan() }),
   openPrintTemplate: () => set({ screen: 'print' }),
   openCards: () => set({ screen: 'cards' }),
+  openBadges: () => set({ screen: 'badge' }),
 
   devQuickBattle: (mode) => {
     const roster = get().cpuRoster;
@@ -147,6 +151,11 @@ export const useGame = create<GameState>((set, get) => ({
 
   confirmReveal: () => {
     const { mode, player, pendingChallenger } = get();
+    // 缶バッジ印刷で えらべるように 絵を のこす（名前が きまった あと）
+    if (player?.imageUrl) {
+      const c = player.character;
+      void saveDrawing({ id: c.id, name: c.name, attribute: c.attribute, image: player.imageUrl, createdAt: Date.now() });
+    }
     if (mode === 'versus') {
       if (!pendingChallenger) {
         // 1人目 → 保持して2人目の撮影へ
