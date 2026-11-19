@@ -58,7 +58,9 @@ interface GameState {
   openZukan: () => void;
   openPrintTemplate: () => void;
   openCards: () => void;
-  openBadges: () => void;
+  /** 缶バッジ印刷へ（ids を わたすと その絵を えらんだ 状態で ひらく）。 */
+  openBadges: (ids?: string[]) => void;
+  badgePreselect: string[];
   devQuickBattle: (mode: Mode) => void;
   setCaptured: (slot: CapturedSlot) => void;
   /** リビール画面で名前を手直しする。 */
@@ -105,7 +107,8 @@ export const useGame = create<GameState>((set, get) => ({
   openZukan: () => set({ screen: 'zukan', zukan: loadZukan() }),
   openPrintTemplate: () => set({ screen: 'print' }),
   openCards: () => set({ screen: 'cards' }),
-  openBadges: () => set({ screen: 'badge' }),
+  openBadges: (ids = []) => set({ screen: 'badge', badgePreselect: ids }),
+  badgePreselect: [],
 
   devQuickBattle: (mode) => {
     const roster = get().cpuRoster;

@@ -150,9 +150,11 @@ const newPick = (): Pick => ({ copies: 1, zoom: 1, dx: 0, dy: 0 });
 
 export function BadgePrintScene() {
   const reset = useGame((s) => s.reset);
+  // タイトル画面で えらんで きた 絵は さいしょから えらんだ 状態に
+  const preselect = useGame((s) => s.badgePreselect);
   const [drawings, setDrawings] = useState<SavedDrawing[] | null>(null);
-  const [order, setOrder] = useState<string[]>([]);
-  const [picks, setPicks] = useState<Record<string, Pick>>({});
+  const [order, setOrder] = useState<string[]>(preselect);
+  const [picks, setPicks] = useState<Record<string, Pick>>(() => Object.fromEntries(preselect.map((id) => [id, newPick()])));
   const [editing, setEditing] = useState<string | null>(null);
   const [s, setS] = useState<Settings>(loadSettings);
   const [stickers, setStickers] = useState<Record<string, string>>({});
